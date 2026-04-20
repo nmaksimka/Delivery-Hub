@@ -1,0 +1,37 @@
+server:
+  port: 3331
+
+spring:
+  application:
+    name: restaurantService
+  datasource:
+    url: jdbc:postgresql://localhost:5331/restaurant_db
+    username: restaurant_user
+    password: restaurant_pass
+  jpa:
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html

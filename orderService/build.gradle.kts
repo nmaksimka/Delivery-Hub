@@ -17,11 +17,21 @@ repositories {
     mavenCentral()
 }
 
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${Versions.springCloud}")
+    }
+}
+
 dependencies {
     implementation(Dependencies.springBootStarterWeb)
     implementation(Dependencies.springBootStarterDataJpa)
     implementation(Dependencies.springBootStarterValidation)
     implementation(Dependencies.springBootStarterActuator)
+
+    implementation(Dependencies.springCloudStarterOpenfeign)
+
+    // implementation(Dependencies.springKafka)  // раскомментируем когда настроим Kafka
 
     implementation(Dependencies.postgresql)
     implementation(Dependencies.flywayCore)

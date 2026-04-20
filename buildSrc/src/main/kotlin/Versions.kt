@@ -1,5 +1,5 @@
 object Versions {
-    const val springBoot = "3.5.0"
+    const val springBoot = "3.4.5"
     const val springCloud = "2024.0.0"
     const val springDependencyManagement = "1.1.7"
     const val kafka = "3.9.0"

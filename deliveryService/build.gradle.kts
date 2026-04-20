@@ -9,7 +9,7 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -17,11 +17,20 @@ repositories {
     mavenCentral()
 }
 
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${Versions.springCloud}")
+    }
+}
+
 dependencies {
     implementation(Dependencies.springBootStarterWeb)
     implementation(Dependencies.springBootStarterDataJpa)
     implementation(Dependencies.springBootStarterValidation)
     implementation(Dependencies.springBootStarterActuator)
+
+    // Kafka — пока закомментирована, включим при настройке событий
+    // implementation(Dependencies.springKafka)
 
     implementation(Dependencies.postgresql)
     implementation(Dependencies.flywayCore)
@@ -36,6 +45,7 @@ dependencies {
     implementation(Dependencies.mapstruct)
     annotationProcessor(Dependencies.mapstructProcessor)
 
+    // Общие контракты (пока пустые, пригодятся для событий)
     implementation(project(":apiContracts"))
 
     testImplementation(Dependencies.springBootStarterTest)

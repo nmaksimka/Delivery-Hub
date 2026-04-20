@@ -22,7 +22,7 @@ public class RestaurantController {
     }
 
     @GetMapping("/{id}")
-    public RestaurantDto getRestaurantById(Long id) {
+    public RestaurantDto getRestaurantById(@PathVariable Long id) {
         return restaurantService.getRestaurantById(id);
     }
 
