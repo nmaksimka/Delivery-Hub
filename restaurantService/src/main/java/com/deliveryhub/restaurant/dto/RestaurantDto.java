@@ -1,5 +1,6 @@
 package com.deliveryhub.restaurant.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,5 +19,5 @@ public class RestaurantDto {
     private String phone;
     private LocalTime openTime;
     private LocalTime closeTime;
-    private boolean isActive;
+    private boolean active;
 }
