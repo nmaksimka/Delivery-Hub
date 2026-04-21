@@ -1,13 +1,13 @@
 server:
-  port: 3333
+  port: 3334
 
 spring:
   application:
-    name: deliveryService
+    name: user-service
   datasource:
-    url: jdbc:postgresql://localhost:5333/delivery_db
-    username: delivery_user
-    password: delivery_pass
+    url: jdbc:postgresql://localhost:5334/user_db
+    username: user_user
+    password: user_pass
   jpa:
     hibernate:
       ddl-auto: update
@@ -16,19 +16,17 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     show-sql: true
-  flyway:
-    enabled: false
-    baseline-on-migrate: true
+
+app:
+  jwt:
+    secret: "this-is-a-very-secret-key-for-jwt-signing-must-be-long-enough-512bits"
+    expiration-ms: 86400000  # 24 hours
 
 management:
   endpoints:
     web:
       exposure:
         include: health,prometheus,metrics
-  metrics:
-    export:
-      prometheus:
-        enabled: true
 
 springdoc:
   api-docs:

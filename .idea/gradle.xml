@@ -24,6 +24,7 @@
             <option value="$PROJECT_DIR$/deliveryService" />
             <option value="$PROJECT_DIR$/orderService" />
             <option value="$PROJECT_DIR$/restaurantService" />
+            <option value="$PROJECT_DIR$/userService" />
           </set>
         </option>
         <option name="myGradleHome" value="" />

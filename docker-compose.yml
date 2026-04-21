@@ -64,6 +64,18 @@ services:
     volumes:
       - pg-delivery-data:/var/lib/postgresql/data
 
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: postgres-user
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: user_user
+      POSTGRES_PASSWORD: user_pass
+    ports:
+      - "5334:5432"
+    volumes:
+      - pg-user-data:/var/lib/postgresql/data
+
 #  # ==================== MONITORING ====================
 #  prometheus:
 #    image: prom/prometheus:v2.51.0
@@ -94,5 +106,6 @@ volumes:
   pg-restaurant-data:
   pg-order-data:
   pg-delivery-data:
+  pg-user-data:
 #  prometheus-data:
 #  grafana-data:
