@@ -4,5 +4,6 @@ include(
     "apiContracts",
     "orderService",
     "restaurantService",
-    "deliveryService"
+    "deliveryService",
+    "userService"
 )
