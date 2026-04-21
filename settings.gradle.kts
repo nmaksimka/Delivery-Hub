@@ -5,5 +5,6 @@ include(
     "orderService",
     "restaurantService",
     "deliveryService",
-    "userService"
+    "userService",
+    "apiGateway"
 )

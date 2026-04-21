@@ -26,6 +26,9 @@ public class OrderController {
         return orderService.getOrdersByUser(userId);
     }
 
+    @GetMapping
+    public List<OrderDto> getOrders() { return orderService.getOrders(); }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrderDto createOrder(@Valid @RequestBody CreateOrderRequest createOrderRequest) {

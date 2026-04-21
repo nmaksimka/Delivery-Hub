@@ -20,6 +20,7 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/apiContracts" />
+            <option value="$PROJECT_DIR$/apiGateway" />
             <option value="$PROJECT_DIR$/buildSrc" />
             <option value="$PROJECT_DIR$/deliveryService" />
             <option value="$PROJECT_DIR$/orderService" />

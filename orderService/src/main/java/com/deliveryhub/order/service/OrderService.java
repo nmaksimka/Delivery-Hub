@@ -41,6 +41,10 @@ public class OrderService {
                 .map(orderMapper::toDto).collect(Collectors.toList());
     }
 
+    public List<OrderDto> getOrders() {
+        return orderRepository.findAll().stream().map(orderMapper::toDto).collect(Collectors.toList());
+    }
+
     @Transactional
     public OrderDto createOrder(CreateOrderRequest createRequest) {
         log.info("Creating order for user {} from restaurant {}", createRequest.getUserId(), createRequest.getRestaurantId());
