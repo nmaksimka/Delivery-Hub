@@ -29,8 +29,7 @@ dependencies {
     implementation(Dependencies.springBootStarterValidation)
     implementation(Dependencies.springBootStarterActuator)
 
-    // Kafka — пока закомментирована, включим при настройке событий
-    // implementation(Dependencies.springKafka)
+    implementation(Dependencies.springKafka)
 
     implementation(Dependencies.postgresql)
     implementation(Dependencies.flywayCore)

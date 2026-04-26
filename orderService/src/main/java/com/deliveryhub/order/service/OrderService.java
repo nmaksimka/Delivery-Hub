@@ -1,5 +1,6 @@
 package com.deliveryhub.order.service;
 
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
+    private final OrderEventPublisher orderEventPublisher;
     private final RestaurantServiceClient restaurantServiceClient;
 
     public OrderDto getOrderById(Long id) {
@@ -94,6 +96,9 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
         log.info("Order created with id: {}", savedOrder.getId());
+
+        OrderCreatedEvent event = orderMapper.toOrderCreatedEvent(savedOrder);
+        orderEventPublisher.publishOrderCreated(event);
 
         return orderMapper.toDto(savedOrder);
     }

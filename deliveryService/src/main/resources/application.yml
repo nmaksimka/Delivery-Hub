@@ -20,6 +20,19 @@ spring:
     enabled: false
     baseline-on-migrate: true
 
+  kafka:
+    bootstrap-servers: localhost:29092
+    consumer:
+      group-id: delivery-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.type.mapping: "orderCreatedEvent:com.deliveryhub.contracts.events.OrderCreatedEvent"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
 management:
   endpoints:
     web:

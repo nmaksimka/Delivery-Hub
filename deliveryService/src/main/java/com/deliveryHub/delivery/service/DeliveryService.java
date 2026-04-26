@@ -6,7 +6,10 @@ import com.deliveryHub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryHub.delivery.entity.Delivery;
 import com.deliveryHub.delivery.mapper.DeliveryMapper;
 import com.deliveryHub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import jakarta.persistence.EntityNotFoundException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,7 @@ import java.util.stream.Collectors;
 public class DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final DeliveryMapper deliveryMapper;
+    private final DeliveryEventPublisher deliveryEventPublisher;
 
     public DeliveryDto getDeliveryById(Long id) {
         Delivery delivery = deliveryRepository.findById(id)
@@ -70,5 +74,29 @@ public class DeliveryService {
 
         log.info("Updated delivery with id:{} status to '{}'", id, updateDeliveryStatusRequest.getStatus());
         return deliveryMapper.toDto(delivery);
+    }
+
+    @Transactional
+    public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
+        if (deliveryRepository.findByOrderId(event.getOrderId()).isPresent()) {
+            log.warn("Delivery already exists for orderId: {}", event.getOrderId());
+            return;
+        }
+        Delivery delivery = Delivery.builder()
+                .orderId(event.getOrderId())
+                .status("ASSIGNED")
+                .build();
+
+        Delivery savedDelivery = deliveryRepository.save(delivery);
+        log.info("Created delivery id: {} for orderId: {}", savedDelivery.getId(), event.getOrderId());
+
+        DeliveryStatusUpdatedEvent statusUpdatedEvent = DeliveryStatusUpdatedEvent.builder()
+                .deliveryId(savedDelivery.getId())
+                .orderId(savedDelivery.getOrderId())
+                .status(savedDelivery.getStatus())
+                .updatedAt(savedDelivery.getUpdatedAt())
+                .build();
+
+        deliveryEventPublisher.publishStatusUpdate(statusUpdatedEvent);
     }
 }

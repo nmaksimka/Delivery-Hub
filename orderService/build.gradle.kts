@@ -31,7 +31,7 @@ dependencies {
 
     implementation(Dependencies.springCloudStarterOpenfeign)
 
-    // implementation(Dependencies.springKafka)  // раскомментируем когда настроим Kafka
+    implementation(Dependencies.springKafka)
 
     implementation(Dependencies.postgresql)
     implementation(Dependencies.flywayCore)

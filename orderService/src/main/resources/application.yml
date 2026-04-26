@@ -17,6 +17,21 @@ spring:
         format_sql: true
     show-sql: true
 
+  kafka:
+    bootstrap-servers: localhost:29092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: "orderCreatedEvent:com.deliveryhub.contracts.events.OrderCreatedEvent"
+    consumer:
+      group-id: order-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.type.mapping: "deliveryStatusUpdatedEvent:com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent"
+
 app:
   restaurantService:
     url: http://localhost:3331
