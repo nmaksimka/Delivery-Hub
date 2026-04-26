@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -27,7 +25,6 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-  # ==================== DATABASES ====================
   postgres-restaurant:
     image: postgres:16-alpine
     container_name: postgres-restaurant
@@ -76,36 +73,80 @@ services:
     volumes:
       - pg-user-data:/var/lib/postgresql/data
 
-#  # ==================== MONITORING ====================
-#  prometheus:
-#    image: prom/prometheus:v2.51.0
-#    container_name: prometheus
-#    volumes:
-#      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-#      - prometheus-data:/prometheus
-#    ports:
-#      - "9090:9090"
-#    command:
-#      - '--config.file=/etc/prometheus/prometheus.yml'
-#      - '--storage.tsdb.path=/prometheus'
-#
-#  grafana:
-#    image: grafana/grafana:10.4.0
-#    container_name: grafana
-#    depends_on:
-#      - prometheus
-#    ports:
-#      - "3000:3000"
-#    volumes:
-#      - grafana-data:/var/lib/grafana
-#    environment:
-#      - GF_SECURITY_ADMIN_USER=admin
-#      - GF_SECURITY_ADMIN_PASSWORD=admin
+  restaurantService:
+    image: deliveryhub-restaurant-service
+    build:
+      context: .
+      dockerfile: ./restaurantService/Dockerfile
+    container_name: restaurantService
+    ports:
+      - "3331:3331"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - postgres-restaurant
+      - kafka
+
+  orderService:
+    image: deliveryhub-order-service
+    build:
+      context: .
+      dockerfile: ./orderService/Dockerfile
+    container_name: orderService
+    ports:
+      - "3332:3332"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - postgres-order
+      - kafka
+      - restaurantService
+
+  deliveryService:
+    image: deliveryhub-delivery-service
+    build:
+      context: .
+      dockerfile: ./deliveryService/Dockerfile
+    container_name: deliveryService
+    ports:
+      - "3333:3333"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - postgres-delivery
+      - kafka
+
+  userService:
+    image: deliveryhub-user-service
+    build:
+      context: .
+      dockerfile: ./userService/Dockerfile
+    container_name: userService
+    ports:
+      - "3334:3334"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - postgres-user
+
+  apiGateway:
+    image: deliveryhub-api-gateway
+    build:
+      context: .
+      dockerfile: ./apiGateway/Dockerfile
+    container_name: apiGateway
+    ports:
+      - "3335:3335"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - restaurantService
+      - orderService
+      - deliveryService
+      - userService
 
 volumes:
   pg-restaurant-data:
   pg-order-data:
   pg-delivery-data:
   pg-user-data:
-#  prometheus-data:
-#  grafana-data:

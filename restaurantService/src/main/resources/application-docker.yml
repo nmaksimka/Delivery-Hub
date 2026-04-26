@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-restaurant:5432/restaurant_db
+    username: restaurant_user
+    password: restaurant_pass
+  kafka:
+    bootstrap-servers: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092

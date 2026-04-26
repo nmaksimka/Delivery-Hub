@@ -1,0 +1,20 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: restaurant-service
+          uri: http://restaurantService:3331
+          predicates:
+            - Path=/api/restaurants/**
+        - id: order-service
+          uri: http://orderService:3332
+          predicates:
+            - Path=/api/orders/**
+        - id: delivery-service
+          uri: http://deliveryService:3333
+          predicates:
+            - Path=/api/deliveries/**
+        - id: user-service
+          uri: http://userService:3334
+          predicates:
+            - Path=/api/auth/**

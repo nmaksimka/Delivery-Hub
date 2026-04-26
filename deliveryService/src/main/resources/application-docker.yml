@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-delivery:5432/delivery_db
+    username: delivery_user
+    password: delivery_pass
+  kafka:
+    bootstrap-servers: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
