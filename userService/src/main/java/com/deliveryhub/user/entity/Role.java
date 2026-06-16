@@ -1,4 +1,4 @@
-package com.deliveryHub.user.entity;
+package com.deliveryhub.user.entity;
 
 public enum Role {
     USER, ADMIN, COURIER

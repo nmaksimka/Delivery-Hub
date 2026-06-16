@@ -1,10 +1,10 @@
-package com.deliveryHub.user.controller;
+package com.deliveryhub.user.controller;
 
-import com.deliveryHub.user.dto.JwtResponse;
-import com.deliveryHub.user.dto.LoginRequest;
-import com.deliveryHub.user.dto.RegisterRequest;
-import com.deliveryHub.user.dto.UserDto;
-import com.deliveryHub.user.service.AuthService;
+import com.deliveryhub.user.dto.JwtResponse;
+import com.deliveryhub.user.dto.LoginRequest;
+import com.deliveryhub.user.dto.RegisterRequest;
+import com.deliveryhub.user.dto.UserDto;
+import com.deliveryhub.user.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

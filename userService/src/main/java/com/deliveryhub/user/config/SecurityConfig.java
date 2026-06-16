@@ -1,6 +1,6 @@
-package com.deliveryHub.user.config;
+package com.deliveryhub.user.config;
 
-import com.deliveryHub.user.service.UserDetailsServiceImpl;
+import com.deliveryhub.user.service.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -1,11 +1,11 @@
-package com.deliveryHub.user.dto;
+package com.deliveryhub.user.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -17,5 +17,5 @@ public class UserDto {
     private String name;
     private String phone;
     private String role;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 }

@@ -1,6 +1,6 @@
-package com.deliveryHub.user.service;
+package com.deliveryhub.user.service;
 
-import com.deliveryHub.user.repository.UserRepository;
+import com.deliveryhub.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

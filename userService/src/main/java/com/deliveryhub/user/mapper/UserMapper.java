@@ -1,8 +1,8 @@
-package com.deliveryHub.user.mapper;
+package com.deliveryhub.user.mapper;
 
-import com.deliveryHub.user.dto.RegisterRequest;
-import com.deliveryHub.user.dto.UserDto;
-import com.deliveryHub.user.entity.User;
+import com.deliveryhub.user.dto.RegisterRequest;
+import com.deliveryhub.user.dto.UserDto;
+import com.deliveryhub.user.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 

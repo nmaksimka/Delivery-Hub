@@ -1,4 +1,4 @@
-package com.deliveryHub.user.dto;
+package com.deliveryhub.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

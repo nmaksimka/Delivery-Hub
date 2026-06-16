@@ -1,6 +1,6 @@
-package com.deliveryHub.user.repository;
+package com.deliveryhub.user.repository;
 
-import com.deliveryHub.user.entity.User;
+import com.deliveryhub.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

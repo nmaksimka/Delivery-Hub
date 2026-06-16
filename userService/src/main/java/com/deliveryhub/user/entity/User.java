@@ -1,4 +1,4 @@
-package com.deliveryHub.user.entity;
+package com.deliveryhub.user.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,7 +6,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 
@@ -31,28 +31,29 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "phone")
+    @Column(name = "phone", length = 32)
     private String phone;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32)
     private Role role;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = Instant.now();
     }
 
     @Override
