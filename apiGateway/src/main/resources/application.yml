@@ -3,53 +3,88 @@ server:
 
 app:
   jwt:
-    secret: "this-is-a-very-secret-key-for-jwt-signing-must-be-long-enough-512bits"
+    # Должен совпадать с секретом userService. В docker/prod задаётся через JWT_SECRET.
+    secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
 
 spring:
   application:
-    name: api-gateway
+    name: apiGateway
   cloud:
+    inetutils:
+      # Обратный DNS-запрос локального адреса на этой машине не отвечает и каждый раз
+      # съедает секунду таймаута (6 секунд старта). Ни gateway, ни Feign здесь host info
+      # не используют, поэтому поиск non-loopback интерфейса отключён целиком.
+      ignored-interfaces:
+        - .*
     gateway:
       routes:
         - id: restaurant-service
-          uri: http://localhost:3331
+          uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
           predicates:
             - Path=/api/restaurants/**
         - id: order-service
-          uri: http://localhost:3332
+          uri: ${ORDER_SERVICE_URL:http://localhost:3332}
           predicates:
             - Path=/api/orders/**
         - id: delivery-service
-          uri: http://localhost:3333
+          uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
           predicates:
             - Path=/api/deliveries/**
         - id: user-service
-          uri: http://localhost:3334
+          uri: ${USER_SERVICE_URL:http://localhost:3334}
           predicates:
             - Path=/api/auth/**
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
+
+        # Отдельные роуты для агрегации Swagger: у сервисов api-docs лежит по /v3/api-docs,
+        # а не по /api/<...>/v3/api-docs, поэтому префикс нужно срезать.
+        - id: restaurant-docs
+          uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
+          predicates:
+            - Path=/docs/restaurants/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: order-docs
+          uri: ${ORDER_SERVICE_URL:http://localhost:3332}
+          predicates:
+            - Path=/docs/orders/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: delivery-docs
+          uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+          predicates:
+            - Path=/docs/deliveries/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: user-docs
+          uri: ${USER_SERVICE_URL:http://localhost:3334}
+          predicates:
+            - Path=/docs/users/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
 management:
+  # Actuator вынесен на отдельный порт, который не публикуется наружу:
+  # метрики шлюза не должны быть доступны с публичного 3335.
+  server:
+    port: 9335
   endpoints:
     web:
       exposure:
         include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 springdoc:
   swagger-ui:
+    path: /swagger-ui.html
     urls:
-      - name: restaurant-service
-        url: /api/restaurants/v3/api-docs
-      - name: order-service
-        url: /api/orders/v3/api-docs
-      - name: delivery-service
-        url: /api/deliveries/v3/api-docs
       - name: user-service
-        url: /api/auth/v3/api-docs
+        url: /docs/users/v3/api-docs
+      - name: restaurant-service
+        url: /docs/restaurants/v3/api-docs
+      - name: order-service
+        url: /docs/orders/v3/api-docs
+      - name: delivery-service
+        url: /docs/deliveries/v3/api-docs
