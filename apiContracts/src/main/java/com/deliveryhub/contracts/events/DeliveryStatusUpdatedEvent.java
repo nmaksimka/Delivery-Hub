@@ -1,10 +1,12 @@
 package com.deliveryhub.contracts.events;
 
+import com.deliveryhub.contracts.enums.DeliveryStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
+
+import java.time.Instant;
 
 @Data
 @Builder
@@ -13,6 +15,6 @@ import java.time.LocalDateTime;
 public class DeliveryStatusUpdatedEvent {
     private Long deliveryId;
     private Long orderId;
-    private String status;
-    private LocalDateTime updatedAt;
+    private DeliveryStatus status;
+    private Instant updatedAt;
 }
