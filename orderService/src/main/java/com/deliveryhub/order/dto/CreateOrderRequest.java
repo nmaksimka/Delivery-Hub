@@ -10,14 +10,15 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * userId сознательно отсутствует: он берётся из JWT (заголовок X-User-Id от гейтвея),
+ * иначе любой авторизованный пользователь мог бы создать заказ от чужого имени.
+ */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class CreateOrderRequest {
-    @NotNull(message = "User ID is required")
-    private Long userId;
-
     @NotNull(message = "Restaurant ID is required")
     private Long restaurantId;
 
