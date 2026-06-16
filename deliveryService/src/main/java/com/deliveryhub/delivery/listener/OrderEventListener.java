@@ -1,6 +1,6 @@
-package com.deliveryHub.delivery.listener;
+package com.deliveryhub.delivery.listener;
 
-import com.deliveryHub.delivery.service.DeliveryService;
+import com.deliveryhub.delivery.service.DeliveryService;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

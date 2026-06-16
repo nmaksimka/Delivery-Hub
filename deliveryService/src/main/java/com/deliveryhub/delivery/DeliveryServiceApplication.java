@@ -1,4 +1,4 @@
-package com.deliveryHub.delivery;
+package com.deliveryhub.delivery;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
