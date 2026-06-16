@@ -9,7 +9,7 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -24,19 +24,28 @@ dependencyManagement {
 }
 
 dependencies {
-    implementation("org.springframework.cloud:spring-cloud-starter-gateway")
+    implementation(Dependencies.springCloudStarterGateway)
     implementation(Dependencies.springBootStarterActuator)
-    implementation(Dependencies.micrometerPrometheus)
+    implementation(Dependencies.springBootStarterSecurity)
+    runtimeOnly(Dependencies.micrometerPrometheus)
 
-    implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:2.8.0")
-    implementation("org.springdoc:springdoc-openapi-starter-webflux-api:2.8.0")
+    implementation(Dependencies.springdocOpenapiWebflux)
 
-    implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
+    implementation(Dependencies.jjwtApi)
+    runtimeOnly(Dependencies.jjwtImpl)
+    runtimeOnly(Dependencies.jjwtJackson)
+
+    compileOnly(Dependencies.lombok)
+    annotationProcessor(Dependencies.lombok)
+
+    testImplementation(Dependencies.springBootStarterTest)
+    testImplementation(Dependencies.mockitoJunitJupiter)
+    testImplementation(Dependencies.springSecurityTest)
+    testRuntimeOnly(Dependencies.jjwtImpl)
+    testRuntimeOnly(Dependencies.jjwtJackson)
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }

@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: deliveryhub-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - restaurantService:3331
+          - orderService:3332
+          - deliveryService:3333
+          - userService:3334
+        labels:
+          system: deliveryhub
+
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - apiGateway:9335
+        labels:
+          system: deliveryhub

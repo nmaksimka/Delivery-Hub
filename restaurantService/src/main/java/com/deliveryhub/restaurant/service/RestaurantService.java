@@ -6,12 +6,13 @@ import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -20,41 +21,37 @@ public class RestaurantService {
     private final RestaurantMapper restaurantMapper;
 
     public List<RestaurantDto> getAllRestaurants(boolean activeOnly) {
-        List<Restaurant> restaurants = activeOnly ? restaurantRepository.findByActiveTrue()
+        List<Restaurant> restaurants = activeOnly
+                ? restaurantRepository.findByActiveTrue()
                 : restaurantRepository.findAll();
 
-        return restaurants.stream().map(restaurantMapper::toDto).collect(Collectors.toList());
+        return restaurants.stream().map(restaurantMapper::toDto).toList();
     }
 
     public RestaurantDto getRestaurantById(Long id) {
-        Restaurant restaurant = restaurantRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Restaurant with id: " + id + " was not found"));
-
-        return restaurantMapper.toDto(restaurant);
+        return restaurantMapper.toDto(findByIdOrThrow(id));
     }
 
     @Transactional
     public RestaurantDto createRestaurant(RestaurantDto restaurantDto) {
         Restaurant restaurant = restaurantMapper.toEntity(restaurantDto);
-        Restaurant saved = restaurantRepository.save(restaurant);
-        return restaurantMapper.toDto(saved);
-    }
-
-    @Transactional
-    public void removeRestaurant(Long id) {
-        if(!restaurantRepository.existsById(id)) {
-            throw new EntityNotFoundException("Restaurant with id: " + id + " was not found");
-        }
-        restaurantRepository.deleteById(id);
+        return restaurantMapper.toDto(restaurantRepository.save(restaurant));
     }
 
     @Transactional
     public RestaurantDto updateRestaurant(Long id, RestaurantDto newRestaurantDto) {
-        Restaurant updatedRestaurantIfExists = restaurantRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Restaurant with Id: " + id + " was not found"));
-        restaurantMapper.updateEntityFromDto(newRestaurantDto, updatedRestaurantIfExists);
-        Restaurant savedUpdatedRestaurant = restaurantRepository.save(updatedRestaurantIfExists);
+        Restaurant restaurant = findByIdOrThrow(id);
+        restaurantMapper.updateEntityFromDto(newRestaurantDto, restaurant);
+        return restaurantMapper.toDto(restaurant);
+    }
 
-        return restaurantMapper.toDto(savedUpdatedRestaurant);
+    @Transactional
+    public void removeRestaurant(Long id) {
+        restaurantRepository.delete(findByIdOrThrow(id));
+    }
+
+    private Restaurant findByIdOrThrow(Long id) {
+        return restaurantRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Restaurant with ID: " + id + " was not found"));
     }
 }
