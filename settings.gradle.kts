@@ -2,19 +2,13 @@ pluginManagement {
     includeBuild("build-logic")
 }
 
-dependencyResolutionManagement {
-    repositories {
-        mavenCentral()
-    }
-}
-
 rootProject.name = "DeliveryHub"
 
-include(
+listOf(
     "apiContracts",
     "apiGateway",
     "orderService",
     "restaurantService",
     "deliveryService",
     "userService"
-)
+).filter { file(it).exists() }.forEach { include(it) }
