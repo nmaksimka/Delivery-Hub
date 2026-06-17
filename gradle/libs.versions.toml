@@ -48,10 +48,8 @@ jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
 jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
-testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
 
 [bundles]
 jjwt-runtime = ["jjwt-impl", "jjwt-jackson"]
-flyway = ["flyway-core", "flyway-postgresql"]
