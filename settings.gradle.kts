@@ -1,6 +1,16 @@
+pluginManagement {
+    includeBuild("build-logic")
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+}
+
 rootProject.name = "DeliveryHub"
 
-val allModules = listOf(
+include(
     "apiContracts",
     "apiGateway",
     "orderService",
@@ -8,9 +18,3 @@ val allModules = listOf(
     "deliveryService",
     "userService"
 )
-
-allModules.forEach { module ->
-    if(file(module).exists()) {
-        include(module)
-    }
-}
