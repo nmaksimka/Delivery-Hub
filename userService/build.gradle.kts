@@ -1,58 +1,27 @@
 plugins {
-    java
-    id("org.springframework.boot") version Versions.springBoot
-    id("io.spring.dependency-management") version Versions.springDependencyManagement
-}
-
-group = "com.deliveryhub"
-version = "1.0.0"
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
-
-repositories {
-    mavenCentral()
+    id("deliveryhub.spring-service")
 }
 
 dependencies {
-    implementation(Dependencies.springBootStarterWeb)
-    implementation(Dependencies.springBootStarterDataJpa)
-    implementation(Dependencies.springBootStarterValidation)
-    implementation(Dependencies.springBootStarterActuator)
-    implementation(Dependencies.springBootStarterSecurity)
+    implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.security)
 
-    implementation(Dependencies.jjwtApi)
-    runtimeOnly(Dependencies.jjwtImpl)
-    runtimeOnly(Dependencies.jjwtJackson)
+    implementation(libs.jjwt.api)
+    runtimeOnly(libs.bundles.jjwt.runtime)
 
-    runtimeOnly(Dependencies.postgresql)
-    implementation(Dependencies.flywayCore)
-    runtimeOnly(Dependencies.flywayPostgresql)
+    runtimeOnly(libs.postgresql)
+    implementation(libs.flyway.core)
+    runtimeOnly(libs.flyway.postgresql)
 
-    implementation(Dependencies.springdocOpenapi)
-    runtimeOnly(Dependencies.micrometerPrometheus)
+    implementation(libs.springdoc.webmvc.ui)
 
-    compileOnly(Dependencies.lombok)
-    annotationProcessor(Dependencies.lombok)
+    implementation(libs.mapstruct)
+    annotationProcessor(libs.mapstruct.processor)
+    annotationProcessor(libs.lombok.mapstruct.binding)
 
-    implementation(Dependencies.mapstruct)
-    annotationProcessor(Dependencies.mapstructProcessor)
-    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
-
-    testImplementation(Dependencies.springBootStarterTest)
-    testImplementation(Dependencies.mockitoJunitJupiter)
-    testImplementation(Dependencies.springSecurityTest)
-    testRuntimeOnly(Dependencies.jjwtImpl)
-    testRuntimeOnly(Dependencies.jjwtJackson)
-    testImplementation(platform(Dependencies.testcontainersBom))
-    testImplementation(Dependencies.testcontainersJunit)
-    testImplementation(Dependencies.testcontainersPostgresql)
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-    jvmArgs("-XX:+EnableDynamicAgentLoading")
+    testImplementation(libs.spring.security.test)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.postgresql)
 }
