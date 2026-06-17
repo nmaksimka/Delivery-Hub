@@ -9,4 +9,4 @@ import org.springframework.boot.autoconfigure.security.reactive.ReactiveUserDeta
 public class ApiGatewayApplication {
     public static void main(String[] args) {
         SpringApplication.run(ApiGatewayApplication.class, args);
-    }
+    }}
