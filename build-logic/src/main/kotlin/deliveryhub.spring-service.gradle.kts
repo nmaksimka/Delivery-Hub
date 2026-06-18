@@ -9,7 +9,6 @@ val libs = the<VersionCatalogsExtension>().named("libs")
 dependencyManagement {
     imports {
         mavenBom("org.springframework.cloud:spring-cloud-dependencies:${libs.findVersion("spring-cloud").get()}")
-        mavenBom("org.testcontainers:testcontainers-bom:${libs.findVersion("testcontainers").get()}")
     }
 }
 
