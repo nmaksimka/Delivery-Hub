@@ -1,16 +1,14 @@
+pluginManagement {
+    includeBuild("build-logic")
+}
+
 rootProject.name = "DeliveryHub"
 
-val allModules = listOf(
+listOf(
     "apiContracts",
     "apiGateway",
     "orderService",
     "restaurantService",
     "deliveryService",
     "userService"
-)
-
-allModules.forEach { module ->
-    if(file(module).exists()) {
-        include(module)
-    }
-}
+).filter { file(it).exists() }.forEach { include(it) }

@@ -1,62 +1,26 @@
 plugins {
-    java
-    id("org.springframework.boot") version Versions.springBoot
-    id("io.spring.dependency-management") version Versions.springDependencyManagement
-}
-
-group = "com.deliveryhub"
-version = "1.0.0"
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
-
-repositories {
-    mavenCentral()
-}
-
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${Versions.springCloud}")
-    }
+    id("deliveryhub.spring-service")
 }
 
 dependencies {
-    implementation(Dependencies.springBootStarterWeb)
-    implementation(Dependencies.springBootStarterDataJpa)
-    implementation(Dependencies.springBootStarterValidation)
-    implementation(Dependencies.springBootStarterActuator)
-
-    implementation(Dependencies.springCloudStarterOpenfeign)
-    implementation(Dependencies.springKafka)
-
-    runtimeOnly(Dependencies.postgresql)
-    implementation(Dependencies.flywayCore)
-    runtimeOnly(Dependencies.flywayPostgresql)
-
-    implementation(Dependencies.springdocOpenapi)
-    runtimeOnly(Dependencies.micrometerPrometheus)
-
-    compileOnly(Dependencies.lombok)
-    annotationProcessor(Dependencies.lombok)
-
-    implementation(Dependencies.mapstruct)
-    annotationProcessor(Dependencies.mapstructProcessor)
-    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
-
     implementation(project(":apiContracts"))
 
-    testImplementation(Dependencies.springBootStarterTest)
-    testImplementation(Dependencies.mockitoJunitJupiter)
-    testImplementation(platform(Dependencies.testcontainersBom))
-    testImplementation(Dependencies.testcontainersJunit)
-    testImplementation(Dependencies.testcontainersPostgresql)
-}
+    implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.cloud.starter.openfeign)
+    implementation(libs.spring.kafka)
 
-tasks.withType<Test> {
-    useJUnitPlatform()
-    // Mockito использует inline mock maker; на Java 21+ без этого сыплются предупреждения агента.
-    jvmArgs("-XX:+EnableDynamicAgentLoading")
+    runtimeOnly(libs.postgresql)
+    implementation(libs.flyway.core)
+    runtimeOnly(libs.flyway.postgresql)
+
+    implementation(libs.springdoc.webmvc.ui)
+
+    implementation(libs.mapstruct)
+    annotationProcessor(libs.mapstruct.processor)
+    annotationProcessor(libs.lombok.mapstruct.binding)
+
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.postgresql)
 }
