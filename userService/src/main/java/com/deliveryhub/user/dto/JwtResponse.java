@@ -1,15 +1,16 @@
 package com.deliveryhub.user.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+public record JwtResponse(
+        String token,
+        String type,
+        Long id,
+        String email,
+        String name,
+        String role) {
 
-@Data
-@AllArgsConstructor
-public class JwtResponse {
-    private String token;
-    private String type = "Bearer";
-    private Long id;
-    private String email;
-    private String name;
-    private String role;
+    private static final String BEARER = "Bearer";
+
+    public static JwtResponse bearer(String token, Long id, String email, String name, String role) {
+        return new JwtResponse(token, BEARER, id, email, name, role);
+    }
 }
