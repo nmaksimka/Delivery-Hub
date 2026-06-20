@@ -1,6 +1,7 @@
 package com.deliveryhub.restaurant.controller;
 
 import com.deliveryhub.restaurant.dto.MenuItemDto;
+import com.deliveryhub.restaurant.dto.MenuItemRequest;
 import com.deliveryhub.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -41,15 +42,15 @@ public class MenuItemController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MenuItemDto addMenuItemToRestaurant(@PathVariable Long restaurantId,
-                                               @Valid @RequestBody MenuItemDto menuItemDto) {
-        return menuItemService.addMenuItemToRestaurant(restaurantId, menuItemDto);
+                                               @Valid @RequestBody MenuItemRequest request) {
+        return menuItemService.addMenuItemToRestaurant(restaurantId, request);
     }
 
     @PutMapping("/{menuItemId}")
     public MenuItemDto updateMenuItem(@PathVariable Long restaurantId,
                                       @PathVariable Long menuItemId,
-                                      @Valid @RequestBody MenuItemDto menuItemDto) {
-        return menuItemService.updateMenuItem(restaurantId, menuItemId, menuItemDto);
+                                      @Valid @RequestBody MenuItemRequest request) {
+        return menuItemService.updateMenuItem(restaurantId, menuItemId, request);
     }
 
     @DeleteMapping("/{menuItemId}")
