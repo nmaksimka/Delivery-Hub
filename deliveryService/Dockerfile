@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM eclipse-temurin:25-jdk-alpine AS builder
 WORKDIR /app
 
 COPY gradlew ./
@@ -12,7 +12,7 @@ COPY deliveryService ./deliveryService
 
 RUN --mount=type=cache,target=/root/.gradle ./gradlew :deliveryService:bootJar --no-daemon
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /app/deliveryService/build/libs/*.jar app.jar

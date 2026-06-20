@@ -2,8 +2,8 @@
 
 <div align="center">
 
-![Java](https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.4.5-6DB33F?style=for-the-badge&logo=spring-boot&logoColor=white)
+![Java](https://img.shields.io/badge/Java_25-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot_4.0.7-6DB33F?style=for-the-badge&logo=spring-boot&logoColor=white)
 ![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-231F20?style=for-the-badge&logo=apache-kafka&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
@@ -82,8 +82,8 @@ graph TB
 
 | Категория            | Технологии                                     |
 |:---------------------|:-----------------------------------------------|
-| **Язык**             | Java 21                                        |
-| **Фреймворк**        | Spring Boot 3.4.5                              |
+| **Язык**             | Java 25                                        |
+| **Фреймворк**        | Spring Boot 4.0.7                              |
 | **Микросервисы**     | Spring Cloud Gateway, OpenFeign                |
 | **Асинхронность**    | Apache Kafka (+ DLT и ограниченные повторы)    |
 | **Базы данных**      | PostgreSQL, по одной на сервис                 |
@@ -92,7 +92,7 @@ graph TB
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
 | **Тесты**            | JUnit 5 + Mockito + AssertJ                    |
 | **Метрики**          | Actuator + Micrometer + Prometheus             |
-| **Сборка**           | Gradle 9.3 (Kotlin DSL), общий каталог версий  |
+| **Сборка**           | Gradle 9.6 (Kotlin DSL), общий каталог версий  |
 
 ## Быстрый старт
 
@@ -245,5 +245,4 @@ DeliveryHub/
 - Transactional outbox вместо публикации `AFTER_COMMIT` — гарантия at-least-once
   при падении между коммитом и отправкой в Kafka.
 - Интеграционные тесты на Testcontainers (зависимости уже подключены).
-- Обновление Spring Boot до ветки с официальной поддержкой Java 25.
 - Kafka в режиме KRaft вместо ZooKeeper.
