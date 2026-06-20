@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +58,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
 
             deliveryService.createDeliveryFromOrderEvent(
-                    OrderCreatedEvent.builder().orderId(ORDER_ID).build());
+                    new OrderCreatedEvent(ORDER_ID, null, null, null, null, List.of()));
 
             ArgumentCaptor<Delivery> captor = ArgumentCaptor.forClass(Delivery.class);
             verify(deliveryRepository).save(captor.capture());
@@ -71,7 +72,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
             deliveryService.createDeliveryFromOrderEvent(
-                    OrderCreatedEvent.builder().orderId(ORDER_ID).build());
+                    new OrderCreatedEvent(ORDER_ID, null, null, null, null, List.of()));
 
             verify(deliveryRepository, never()).save(any());
             verify(applicationEventPublisher, never()).publishEvent(any());
@@ -89,15 +90,15 @@ class DeliveryServiceTest {
             });
 
             deliveryService.createDeliveryFromOrderEvent(
-                    OrderCreatedEvent.builder().orderId(ORDER_ID).build());
+                    new OrderCreatedEvent(ORDER_ID, null, null, null, null, List.of()));
 
             ArgumentCaptor<DeliveryStatusChangedDomainEvent> captor =
                     ArgumentCaptor.forClass(DeliveryStatusChangedDomainEvent.class);
             verify(applicationEventPublisher).publishEvent(captor.capture());
 
-            assertThat(captor.getValue().payload().getOrderId()).isEqualTo(ORDER_ID);
-            assertThat(captor.getValue().payload().getDeliveryId()).isEqualTo(7L);
-            assertThat(captor.getValue().payload().getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(captor.getValue().payload().orderId()).isEqualTo(ORDER_ID);
+            assertThat(captor.getValue().payload().deliveryId()).isEqualTo(7L);
+            assertThat(captor.getValue().payload().status()).isEqualTo(DeliveryStatus.ASSIGNED);
         }
     }
 
@@ -121,7 +122,7 @@ class DeliveryServiceTest {
             ArgumentCaptor<DeliveryStatusChangedDomainEvent> captor =
                     ArgumentCaptor.forClass(DeliveryStatusChangedDomainEvent.class);
             verify(applicationEventPublisher).publishEvent(captor.capture());
-            assertThat(captor.getValue().payload().getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(captor.getValue().payload().status()).isEqualTo(DeliveryStatus.DELIVERED);
         }
 
         @Test

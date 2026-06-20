@@ -90,28 +90,24 @@ public class DeliveryService {
     /** Идемпотентно: повторная доставка того же OrderCreatedEvent не создаёт дубль. */
     @Transactional
     public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
-        if (deliveryRepository.existsByOrderId(event.getOrderId())) {
-            log.warn("Delivery already exists for orderId={}, skipping", event.getOrderId());
+        if (deliveryRepository.existsByOrderId(event.orderId())) {
+            log.warn("Delivery already exists for orderId={}, skipping", event.orderId());
             return;
         }
 
         Delivery delivery = deliveryRepository.save(Delivery.builder()
-                .orderId(event.getOrderId())
+                .orderId(event.orderId())
                 .status(DeliveryStatus.ASSIGNED)
                 .build());
 
-        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
+        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.orderId());
         publishStatusChange(delivery);
     }
 
     private void publishStatusChange(Delivery delivery) {
         applicationEventPublisher.publishEvent(new DeliveryStatusChangedDomainEvent(
-                DeliveryStatusUpdatedEvent.builder()
-                        .deliveryId(delivery.getId())
-                        .orderId(delivery.getOrderId())
-                        .status(delivery.getStatus())
-                        .updatedAt(delivery.getUpdatedAt())
-                        .build()));
+                new DeliveryStatusUpdatedEvent(
+                        delivery.getId(), delivery.getOrderId(), delivery.getStatus(), delivery.getUpdatedAt())));
     }
 
     private Delivery findByIdOrThrow(Long id) {

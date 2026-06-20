@@ -28,13 +28,13 @@ public class DeliveryEventPublisher {
     }
 
     public void publishStatusUpdate(DeliveryStatusUpdatedEvent event) {
-        log.info("Publishing delivery status update: orderId={}, status={}", event.getOrderId(), event.getStatus());
-        kafkaTemplate.send(DELIVERY_STATUS_TOPIC, event.getOrderId().toString(), event)
+        log.info("Publishing delivery status update: orderId={}, status={}", event.orderId(), event.status());
+        kafkaTemplate.send(DELIVERY_STATUS_TOPIC, event.orderId().toString(), event)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
-                        log.error("Failed to publish delivery status for orderId={}", event.getOrderId(), ex);
+                        log.error("Failed to publish delivery status for orderId={}", event.orderId(), ex);
                     } else {
-                        log.debug("Delivery status published for orderId={}", event.getOrderId());
+                        log.debug("Delivery status published for orderId={}", event.orderId());
                     }
                 });
     }

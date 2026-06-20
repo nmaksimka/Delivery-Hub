@@ -32,13 +32,13 @@ public class OrderEventPublisher {
     }
 
     public void publishOrderCreated(OrderCreatedEvent event) {
-        log.info("Publishing order-created event for orderId={}", event.getOrderId());
-        kafkaTemplate.send(ORDER_CREATED_TOPIC, event.getOrderId().toString(), event)
+        log.info("Publishing order-created event for orderId={}", event.orderId());
+        kafkaTemplate.send(ORDER_CREATED_TOPIC, event.orderId().toString(), event)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
-                        log.error("Failed to publish order-created event for orderId={}", event.getOrderId(), ex);
+                        log.error("Failed to publish order-created event for orderId={}", event.orderId(), ex);
                     } else {
-                        log.debug("order-created event published for orderId={}", event.getOrderId());
+                        log.debug("order-created event published for orderId={}", event.orderId());
                     }
                 });
     }

@@ -128,7 +128,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
             when(orderMapper.toDto(any(Order.class))).thenReturn(new OrderDto());
 
-            OrderCreatedEvent event = OrderCreatedEvent.builder().orderId(5L).build();
+            OrderCreatedEvent event = new OrderCreatedEvent(5L, null, null, null, null, List.of());
             when(orderMapper.toOrderCreatedEvent(any(Order.class))).thenReturn(event);
 
             orderService.createOrder(request, USER_ID);
