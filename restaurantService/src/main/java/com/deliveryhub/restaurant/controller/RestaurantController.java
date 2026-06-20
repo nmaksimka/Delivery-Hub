@@ -3,7 +3,6 @@ package com.deliveryhub.restaurant.controller;
 import com.deliveryhub.restaurant.dto.RestaurantDto;
 import com.deliveryhub.restaurant.service.RestaurantService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,9 +19,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/restaurants")
-@RequiredArgsConstructor
 public class RestaurantController {
     private final RestaurantService restaurantService;
+
+    public RestaurantController(RestaurantService restaurantService) {
+        this.restaurantService = restaurantService;
+    }
 
     @GetMapping
     public List<RestaurantDto> getAllRestaurants(

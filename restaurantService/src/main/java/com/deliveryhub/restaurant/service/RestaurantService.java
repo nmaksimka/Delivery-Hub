@@ -1,24 +1,30 @@
 package com.deliveryhub.restaurant.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.deliveryhub.restaurant.dto.RestaurantDto;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RestaurantService {
+
+    private static final Logger log = LoggerFactory.getLogger(RestaurantService.class);
+
     private final RestaurantRepository restaurantRepository;
     private final RestaurantMapper restaurantMapper;
+
+    public RestaurantService(RestaurantRepository restaurantRepository, RestaurantMapper restaurantMapper) {
+        this.restaurantRepository = restaurantRepository;
+        this.restaurantMapper = restaurantMapper;
+    }
 
     public List<RestaurantDto> getAllRestaurants(boolean activeOnly) {
         List<Restaurant> restaurants = activeOnly

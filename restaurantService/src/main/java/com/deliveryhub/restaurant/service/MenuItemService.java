@@ -1,5 +1,7 @@
 package com.deliveryhub.restaurant.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
@@ -7,21 +9,28 @@ import com.deliveryhub.restaurant.mapper.MenuItemMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MenuItemService {
+
+    private static final Logger log = LoggerFactory.getLogger(MenuItemService.class);
+
     private final MenuItemRepository menuItemRepository;
     private final RestaurantRepository restaurantRepository;
     private final MenuItemMapper menuItemMapper;
+
+    public MenuItemService(MenuItemRepository menuItemRepository,
+                           RestaurantRepository restaurantRepository,
+                           MenuItemMapper menuItemMapper) {
+        this.menuItemRepository = menuItemRepository;
+        this.restaurantRepository = restaurantRepository;
+        this.menuItemMapper = menuItemMapper;
+    }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
         List<MenuItem> menuItems = availableOnly

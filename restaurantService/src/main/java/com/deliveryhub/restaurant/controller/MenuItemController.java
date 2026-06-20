@@ -3,7 +3,6 @@ package com.deliveryhub.restaurant.controller;
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,9 +19,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/restaurants/{restaurantId}/menu")
-@RequiredArgsConstructor
 public class MenuItemController {
     private final MenuItemService menuItemService;
+
+    public MenuItemController(MenuItemService menuItemService) {
+        this.menuItemService = menuItemService;
+    }
 
     @GetMapping
     public List<MenuItemDto> getMenuByRestaurant(
