@@ -22,7 +22,6 @@ public class JwtUtils {
 
     private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
-    /** Кладём в токен, чтобы гейтвей мог передать личность сервисам, не ходя в БД. */
     public static final String CLAIM_USER_ID = "uid";
     public static final String CLAIM_ROLE = "role";
 

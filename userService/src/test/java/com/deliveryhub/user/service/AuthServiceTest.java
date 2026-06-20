@@ -1,5 +1,6 @@
 package com.deliveryhub.user.service;
 
+import com.deliveryhub.user.UserFixtures;
 import com.deliveryhub.user.dto.JwtResponse;
 import com.deliveryhub.user.dto.LoginRequest;
 import com.deliveryhub.user.dto.RegisterRequest;
@@ -23,6 +24,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,47 +58,29 @@ class AuthServiceTest {
     @Test
     @DisplayName("хеширует пароль и назначает роль USER при регистрации")
     void hashesPasswordAndAssignsRole() {
-        RegisterRequest request = registerRequest();
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
-        when(userMapper.toEntity(request)).thenReturn(User.builder().email(EMAIL).name("Test").build());
         when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn("$2a$hashed");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userMapper.toDto(any(User.class))).thenReturn(new UserDto());
+        when(userMapper.toDto(any(User.class))).thenReturn(userDto());
 
-        authService.register(request);
+        authService.register(registerRequest());
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
 
-        assertThat(captor.getValue().getPassword()).isEqualTo("$2a$hashed");
-        assertThat(captor.getValue().getPassword()).isNotEqualTo(RAW_PASSWORD);
-        assertThat(captor.getValue().getRole()).isEqualTo(Role.USER);
+        User saved = captor.getValue();
+        assertThat(saved.getEmail()).isEqualTo(EMAIL);
+        assertThat(saved.getPassword()).isEqualTo("$2a$hashed");
+        assertThat(saved.getRole()).isEqualTo(Role.USER);
+        assertThat(saved.getPhone()).isEqualTo("+79990000000");
     }
 
     @Test
-    @DisplayName("роль из запроса нельзя подставить: всегда USER")
-    void alwaysRegistersAsUser() {
-        RegisterRequest request = registerRequest();
-        when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
-        when(userMapper.toEntity(request)).thenReturn(User.builder().email(EMAIL).role(Role.ADMIN).build());
-        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn("$2a$hashed");
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userMapper.toDto(any(User.class))).thenReturn(new UserDto());
-
-        authService.register(request);
-
-        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(captor.capture());
-        assertThat(captor.getValue().getRole()).isEqualTo(Role.USER);
-    }
-
-    @Test
-    @DisplayName("бросает EmailAlreadyUsedException вместо RuntimeException при занятом email")
+    @DisplayName("бросает EmailAlreadyUsedException при занятом email")
     void rejectsDuplicateEmail() {
-        RegisterRequest request = registerRequest();
         when(userRepository.existsByEmail(EMAIL)).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.register(request))
+        assertThatThrownBy(() -> authService.register(registerRequest()))
                 .isInstanceOf(EmailAlreadyUsedException.class)
                 .hasMessageContaining(EMAIL);
 
@@ -106,20 +90,19 @@ class AuthServiceTest {
     @Test
     @DisplayName("возвращает токен и профиль при успешном входе")
     void returnsTokenOnLogin() {
-        User user = User.builder().id(7L).email(EMAIL).name("Test").role(Role.USER).build();
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(user, null, List.of());
+        User user = UserFixtures.persistedUser(7L, EMAIL, Role.USER);
+        Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, List.of());
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
         when(jwtUtils.generateToken(user)).thenReturn("jwt-token");
 
         JwtResponse response = authService.login(loginRequest());
 
-        assertThat(response.getToken()).isEqualTo("jwt-token");
-        assertThat(response.getType()).isEqualTo("Bearer");
-        assertThat(response.getId()).isEqualTo(7L);
-        assertThat(response.getEmail()).isEqualTo(EMAIL);
-        assertThat(response.getRole()).isEqualTo("USER");
+        assertThat(response.token()).isEqualTo("jwt-token");
+        assertThat(response.type()).isEqualTo("Bearer");
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.email()).isEqualTo(EMAIL);
+        assertThat(response.role()).isEqualTo("USER");
     }
 
     @Test
@@ -132,17 +115,14 @@ class AuthServiceTest {
     }
 
     private static RegisterRequest registerRequest() {
-        RegisterRequest request = new RegisterRequest();
-        request.setEmail(EMAIL);
-        request.setPassword(RAW_PASSWORD);
-        request.setName("Test");
-        return request;
+        return new RegisterRequest(EMAIL, RAW_PASSWORD, "Test", "+79990000000");
     }
 
     private static LoginRequest loginRequest() {
-        LoginRequest request = new LoginRequest();
-        request.setEmail(EMAIL);
-        request.setPassword(RAW_PASSWORD);
-        return request;
+        return new LoginRequest(EMAIL, RAW_PASSWORD);
+    }
+
+    private static UserDto userDto() {
+        return new UserDto(1L, EMAIL, "Test", "+79990000000", "USER", Instant.EPOCH);
     }
 }

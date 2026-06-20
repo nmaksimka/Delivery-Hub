@@ -19,7 +19,6 @@ dependencies {
 
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
-    annotationProcessor(libs.lombok.mapstruct.binding)
 
     testImplementation(libs.spring.boot.starter.security.test)
     testImplementation(libs.testcontainers.junit.jupiter)

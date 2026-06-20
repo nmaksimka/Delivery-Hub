@@ -1,5 +1,6 @@
 package com.deliveryhub.user.security;
 
+import com.deliveryhub.user.UserFixtures;
 import com.deliveryhub.user.entity.Role;
 import com.deliveryhub.user.entity.User;
 import io.jsonwebtoken.Claims;
@@ -86,11 +87,7 @@ class JwtUtilsTest {
     }
 
     private static User user(Role role) {
-        return User.builder()
-                .id(7L)
-                .email(role == Role.COURIER ? "courier@example.com" : "user@example.com")
-                .name("Test")
-                .role(role)
-                .build();
+        String email = role == Role.COURIER ? "courier@example.com" : "user@example.com";
+        return UserFixtures.persistedUser(7L, email, role);
     }
 }
