@@ -1,11 +1,12 @@
 package com.deliveryhub.user.security;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.deliveryhub.user.entity.User;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,9 +17,10 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 
-@Slf4j
 @Component
 public class JwtUtils {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
     /** Кладём в токен, чтобы гейтвей мог передать личность сервисам, не ходя в БД. */
     public static final String CLAIM_USER_ID = "uid";
