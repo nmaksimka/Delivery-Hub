@@ -1,5 +1,7 @@
 package com.deliveryhub.delivery.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
@@ -11,22 +13,29 @@ import com.deliveryhub.delivery.event.DeliveryStatusChangedDomainEvent;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DeliveryService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeliveryService.class);
+
     private final DeliveryRepository deliveryRepository;
     private final DeliveryMapper deliveryMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
+
+    public DeliveryService(DeliveryRepository deliveryRepository,
+                           DeliveryMapper deliveryMapper,
+                           ApplicationEventPublisher applicationEventPublisher) {
+        this.deliveryRepository = deliveryRepository;
+        this.deliveryMapper = deliveryMapper;
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
 
     public DeliveryDto getDeliveryById(Long id) {
         return deliveryMapper.toDto(findByIdOrThrow(id));

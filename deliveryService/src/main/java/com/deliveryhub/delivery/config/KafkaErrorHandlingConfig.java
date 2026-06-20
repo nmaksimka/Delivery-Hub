@@ -1,6 +1,7 @@
 package com.deliveryhub.delivery.config;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,9 +13,10 @@ import org.springframework.util.backoff.FixedBackOff;
 /**
  * 3 повтора с паузой, затем сообщение уходит в topic.DLT вместо бесконечного цикла.
  */
-@Slf4j
 @Configuration
 public class KafkaErrorHandlingConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaErrorHandlingConfig.class);
 
     private static final long RETRY_INTERVAL_MS = 2_000L;
     private static final long MAX_RETRIES = 3L;
