@@ -1,7 +1,6 @@
 package com.deliveryhub.gateway.security;
 
 import io.jsonwebtoken.Claims;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,7 +21,6 @@ import java.util.Optional;
  * Входящие X-User-* всегда затираются: иначе клиент мог бы подделать их напрямую.
  */
 @Component
-@RequiredArgsConstructor
 public class JwtAuthenticationFilter implements WebFilter {
 
     public static final String HEADER_USER_ID = "X-User-Id";
@@ -33,6 +31,10 @@ public class JwtAuthenticationFilter implements WebFilter {
     private static final String DEFAULT_ROLE = "USER";
 
     private final JwtUtils jwtUtils;
+
+    public JwtAuthenticationFilter(JwtUtils jwtUtils) {
+        this.jwtUtils = jwtUtils;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
