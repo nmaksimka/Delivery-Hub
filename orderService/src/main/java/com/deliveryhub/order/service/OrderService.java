@@ -1,5 +1,7 @@
 package com.deliveryhub.order.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.client.RestaurantServiceClient;
@@ -18,8 +20,6 @@ import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
 import feign.FeignException;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,15 +28,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final RestaurantServiceClient restaurantServiceClient;
     private final ApplicationEventPublisher applicationEventPublisher;
+
+    public OrderService(OrderRepository orderRepository,
+                        OrderMapper orderMapper,
+                        RestaurantServiceClient restaurantServiceClient,
+                        ApplicationEventPublisher applicationEventPublisher) {
+        this.orderRepository = orderRepository;
+        this.orderMapper = orderMapper;
+        this.restaurantServiceClient = restaurantServiceClient;
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
 
     public OrderDto getOrderById(Long id, CurrentUser currentUser) {
         Order order = orderRepository.findWithItemsById(id)

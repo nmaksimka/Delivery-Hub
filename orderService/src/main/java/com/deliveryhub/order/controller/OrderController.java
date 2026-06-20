@@ -6,7 +6,6 @@ import com.deliveryhub.order.dto.UpdateOrderStatusRequest;
 import com.deliveryhub.order.security.CurrentUser;
 import com.deliveryhub.order.service.OrderService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -23,9 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/orders")
-@RequiredArgsConstructor
 public class OrderController {
     private final OrderService orderService;
+
+    public OrderController(OrderService orderService) {
+        this.orderService = orderService;
+    }
 
     @GetMapping("/{id}")
     public OrderDto getOrderById(@PathVariable Long id,
