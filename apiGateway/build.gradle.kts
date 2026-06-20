@@ -10,5 +10,5 @@ dependencies {
     implementation(libs.jjwt.api)
     runtimeOnly(libs.bundles.jjwt.runtime)
 
-    testImplementation(libs.spring.security.test)
+    testImplementation(libs.spring.boot.starter.security.test)
 }
