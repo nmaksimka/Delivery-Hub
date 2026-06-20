@@ -1,8 +1,7 @@
 package com.deliveryhub.restaurant.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.deliveryhub.restaurant.dto.RestaurantDto;
+import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
@@ -16,8 +15,6 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class RestaurantService {
 
-    private static final Logger log = LoggerFactory.getLogger(RestaurantService.class);
-
     private final RestaurantRepository restaurantRepository;
     private final RestaurantMapper restaurantMapper;
 
@@ -30,7 +27,6 @@ public class RestaurantService {
         List<Restaurant> restaurants = activeOnly
                 ? restaurantRepository.findByActiveTrue()
                 : restaurantRepository.findAll();
-
         return restaurants.stream().map(restaurantMapper::toDto).toList();
     }
 
@@ -39,21 +35,33 @@ public class RestaurantService {
     }
 
     @Transactional
-    public RestaurantDto createRestaurant(RestaurantDto restaurantDto) {
-        Restaurant restaurant = restaurantMapper.toEntity(restaurantDto);
+    public RestaurantDto createRestaurant(RestaurantRequest request) {
+        Restaurant restaurant = new Restaurant(request.name(), request.address(), request.phone());
+        restaurant.changeWorkingHours(request.openTime(), request.closeTime());
+        applyActivity(restaurant, request);
         return restaurantMapper.toDto(restaurantRepository.save(restaurant));
     }
 
     @Transactional
-    public RestaurantDto updateRestaurant(Long id, RestaurantDto newRestaurantDto) {
+    public RestaurantDto updateRestaurant(Long id, RestaurantRequest request) {
         Restaurant restaurant = findByIdOrThrow(id);
-        restaurantMapper.updateEntityFromDto(newRestaurantDto, restaurant);
+        restaurant.changeContacts(request.name(), request.address(), request.phone());
+        restaurant.changeWorkingHours(request.openTime(), request.closeTime());
+        applyActivity(restaurant, request);
         return restaurantMapper.toDto(restaurant);
     }
 
     @Transactional
     public void removeRestaurant(Long id) {
         restaurantRepository.delete(findByIdOrThrow(id));
+    }
+
+    private void applyActivity(Restaurant restaurant, RestaurantRequest request) {
+        if (request.activeOrDefault()) {
+            restaurant.activate();
+        } else {
+            restaurant.deactivate();
+        }
     }
 
     private Restaurant findByIdOrThrow(Long id) {
