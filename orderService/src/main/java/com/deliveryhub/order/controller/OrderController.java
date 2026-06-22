@@ -36,14 +36,12 @@ public class OrderController {
         return orderService.getOrderById(id, new CurrentUser(userId, role));
     }
 
-    /** Заказы текущего пользователя. Чужие заказы через этот эндпоинт недоступны. */
     @GetMapping
     public Page<OrderDto> getMyOrders(@RequestHeader("X-User-Id") Long userId,
                                       @PageableDefault(size = 20) Pageable pageable) {
         return orderService.getOrdersOfUser(userId, pageable);
     }
 
-    /** Только для ADMIN: доступ ограничен на уровне API Gateway. */
     @GetMapping("/all")
     public Page<OrderDto> getAllOrders(@PageableDefault(size = 20) Pageable pageable) {
         return orderService.getAllOrders(pageable);
@@ -59,6 +57,6 @@ public class OrderController {
     @PatchMapping("/{id}/status")
     public OrderDto updateOrderStatus(@PathVariable Long id,
                                       @Valid @RequestBody UpdateOrderStatusRequest request) {
-        return orderService.updateOrderStatus(id, request.getStatus());
+        return orderService.updateOrderStatus(id, request.status());
     }
 }
