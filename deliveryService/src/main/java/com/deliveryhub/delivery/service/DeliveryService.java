@@ -2,7 +2,6 @@ package com.deliveryhub.delivery.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
@@ -54,40 +53,32 @@ public class DeliveryService {
 
     @Transactional
     public DeliveryDto createDelivery(CreateDeliveryRequest request) {
-        if (deliveryRepository.existsByOrderId(request.getOrderId())) {
-            throw new IllegalStateException("Delivery already exists for order ID: " + request.getOrderId());
+        if (deliveryRepository.existsByOrderId(request.orderId())) {
+            throw new IllegalStateException("Delivery already exists for order ID: " + request.orderId());
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.builder()
-                .orderId(request.getOrderId())
-                .courierId(request.getCourierId())
-                .status(DeliveryStatus.ASSIGNED)
-                .estimatedDeliveryTime(request.getEstimatedDeliveryTime())
-                .build());
+        Delivery delivery = deliveryRepository.save(Delivery.forOrder(
+                request.orderId(), request.courierId(), request.estimatedDeliveryTime()));
 
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
         return deliveryMapper.toDto(delivery);
     }
 
-    /**
-     * Раньше ручная смена статуса никуда не публиковалась, и заказ о ней не узнавал.
-     */
     @Transactional
     public DeliveryDto updateDeliveryStatus(Long id, UpdateDeliveryStatusRequest request) {
         Delivery delivery = findByIdOrThrow(id);
 
-        delivery.setStatus(request.getStatus());
-        if (request.getCourierId() != null) {
-            delivery.setCourierId(request.getCourierId());
+        if (request.courierId() != null) {
+            delivery.assignCourier(request.courierId());
         }
+        delivery.changeStatus(request.status());
 
-        log.info("Delivery {} status updated to {}", id, request.getStatus());
+        log.info("Delivery {} status updated to {}", id, request.status());
         publishStatusChange(delivery);
         return deliveryMapper.toDto(delivery);
     }
 
-    /** Идемпотентно: повторная доставка того же OrderCreatedEvent не создаёт дубль. */
     @Transactional
     public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
         if (deliveryRepository.existsByOrderId(event.orderId())) {
@@ -95,10 +86,7 @@ public class DeliveryService {
             return;
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.builder()
-                .orderId(event.orderId())
-                .status(DeliveryStatus.ASSIGNED)
-                .build());
+        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.orderId()));
 
         log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.orderId());
         publishStatusChange(delivery);

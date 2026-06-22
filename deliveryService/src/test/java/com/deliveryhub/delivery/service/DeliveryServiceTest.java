@@ -19,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -84,8 +85,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
             when(deliveryRepository.save(any(Delivery.class))).thenAnswer(inv -> {
                 Delivery delivery = inv.getArgument(0);
-                delivery.setId(7L);
-                delivery.setUpdatedAt(Instant.now());
+                ReflectionTestUtils.setField(delivery, "id", 7L);
                 return delivery;
             });
 
@@ -111,11 +111,9 @@ class DeliveryServiceTest {
         void publishesEventOnManualUpdate() {
             Delivery delivery = existingDelivery();
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
-            when(deliveryMapper.toDto(delivery)).thenReturn(new DeliveryDto());
+            when(deliveryMapper.toDto(delivery)).thenReturn(dto());
 
-            deliveryService.updateDeliveryStatus(1L, UpdateDeliveryStatusRequest.builder()
-                    .status(DeliveryStatus.DELIVERED)
-                    .build());
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null));
 
             assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
 
@@ -130,12 +128,9 @@ class DeliveryServiceTest {
         void updatesCourierWhenProvided() {
             Delivery delivery = existingDelivery();
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
-            when(deliveryMapper.toDto(delivery)).thenReturn(new DeliveryDto());
+            when(deliveryMapper.toDto(delivery)).thenReturn(dto());
 
-            deliveryService.updateDeliveryStatus(1L, UpdateDeliveryStatusRequest.builder()
-                    .status(DeliveryStatus.PICKED_UP)
-                    .courierId(55L)
-                    .build());
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, 55L));
 
             assertThat(delivery.getCourierId()).isEqualTo(55L);
         }
@@ -146,7 +141,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findById(404L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(404L,
-                    UpdateDeliveryStatusRequest.builder().status(DeliveryStatus.DELIVERED).build()))
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null)))
                     .isInstanceOf(EntityNotFoundException.class);
         }
     }
@@ -161,19 +156,19 @@ class DeliveryServiceTest {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
             assertThatThrownBy(() -> deliveryService.createDelivery(
-                    CreateDeliveryRequest.builder().orderId(ORDER_ID).build()))
+                    new CreateDeliveryRequest(ORDER_ID, null, null)))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("already exists");
         }
     }
 
     private static Delivery existingDelivery() {
-        return Delivery.builder()
-                .id(1L)
-                .orderId(ORDER_ID)
-                .status(DeliveryStatus.ASSIGNED)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
+        Delivery delivery = Delivery.forOrder(ORDER_ID);
+        ReflectionTestUtils.setField(delivery, "id", 1L);
+        return delivery;
+    }
+
+    private static DeliveryDto dto() {
+        return new DeliveryDto(1L, ORDER_ID, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
     }
 }
