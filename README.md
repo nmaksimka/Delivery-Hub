@@ -235,6 +235,7 @@ DeliveryHub/
 ├── orderService/        # заказы (Feign + Kafka)
 ├── deliveryService/     # доставки (Kafka)
 ├── prometheus/          # конфигурация сбора метрик
+├── docs/adr/            # архитектурные решения
 ├── build-logic/         # convention-плагины Gradle
 ├── gradle/              # wrapper и каталог версий libs.versions.toml
 └── docker-compose.yml
