@@ -11,7 +11,6 @@ import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
-import com.deliveryhub.order.entity.OrderItem;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.event.OrderCreatedDomainEvent;
 import com.deliveryhub.order.exception.ForbiddenException;
@@ -26,7 +25,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 
 @Service
 @Transactional(readOnly = true)
@@ -53,7 +51,7 @@ public class OrderService {
         Order order = orderRepository.findWithItemsById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
 
-        if (!currentUser.isAdmin() && !order.getUserId().equals(currentUser.id())) {
+        if (!currentUser.isAdmin() && !order.belongsTo(currentUser.id())) {
             throw new ForbiddenException("Order " + id + " does not belong to the current user");
         }
         return orderMapper.toDto(order);
@@ -69,41 +67,27 @@ public class OrderService {
 
     @Transactional
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
-        log.info("Creating order for user {} from restaurant {}", userId, createRequest.getRestaurantId());
+        log.info("Creating order for user {} from restaurant {}", userId, createRequest.restaurantId());
 
-        RestaurantDto restaurant = fetchRestaurant(createRequest.getRestaurantId());
-        if (!restaurant.isActive()) {
-            throw new IllegalStateException("Restaurant " + restaurant.getId() + " is not active");
+        RestaurantDto restaurant = fetchRestaurant(createRequest.restaurantId());
+        if (!restaurant.active()) {
+            throw new IllegalStateException("Restaurant " + restaurant.id() + " is not active");
         }
 
-        Order order = Order.builder()
-                .userId(userId)
-                .restaurantId(createRequest.getRestaurantId())
-                .status(OrderStatus.CREATED)
-                .totalAmount(BigDecimal.ZERO)
-                .build();
+        Order order = Order.place(userId, createRequest.restaurantId());
 
-        BigDecimal total = BigDecimal.ZERO;
-        for (OrderItemRequest itemRequest : createRequest.getOrderItemsRequest()) {
-            MenuItemDto menuItem = fetchMenuItem(createRequest.getRestaurantId(), itemRequest.getMenuItemId());
+        for (OrderItemRequest itemRequest : createRequest.orderItemsRequest()) {
+            MenuItemDto menuItem = fetchMenuItem(createRequest.restaurantId(), itemRequest.menuItemId());
 
-            if (!menuItem.isAvailable()) {
-                throw new IllegalStateException("Menu item " + menuItem.getId() + " is not available");
+            if (!menuItem.available()) {
+                throw new IllegalStateException("Menu item " + menuItem.id() + " is not available");
             }
 
-            order.addOrderItem(OrderItem.builder()
-                    .menuItemId(menuItem.getId())
-                    .itemName(menuItem.getName())
-                    .quantity(itemRequest.getQuantity())
-                    .pricePerUnit(menuItem.getPrice())
-                    .build());
-
-            total = total.add(menuItem.getPrice().multiply(BigDecimal.valueOf(itemRequest.getQuantity())));
+            order.addItem(menuItem.id(), menuItem.name(), itemRequest.quantity(), menuItem.price());
         }
 
-        order.setTotalAmount(total);
         Order savedOrder = orderRepository.save(order);
-        log.info("Order created with id={}, total={}", savedOrder.getId(), total);
+        log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
 
         OrderCreatedEvent event = orderMapper.toOrderCreatedEvent(savedOrder);
         applicationEventPublisher.publishEvent(new OrderCreatedDomainEvent(event));
@@ -116,7 +100,7 @@ public class OrderService {
         Order order = orderRepository.findWithItemsById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
 
-        order.setStatus(newStatus);
+        order.applyStatus(newStatus);
         log.info("Order {} status updated to {}", id, newStatus);
         return orderMapper.toDto(order);
     }

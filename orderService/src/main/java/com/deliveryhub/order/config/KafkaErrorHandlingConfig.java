@@ -11,10 +11,6 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
-/**
- * Без явного обработчика падение в @KafkaListener приводило к бесконечным повторам
- * одного и того же сообщения. Теперь: 3 повтора с паузой, затем запись в topic.DLT.
- */
 @Configuration
 public class KafkaErrorHandlingConfig {
 
@@ -29,15 +25,13 @@ public class KafkaErrorHandlingConfig {
                 kafkaTemplate,
                 (record, exception) -> {
                     log.error("Routing record from topic {} to DLT", record.topic(), exception);
-                    // -1: партицию выбирает брокер, DLT-топик может иметь другое число партиций
                     return new TopicPartition(record.topic() + ".DLT", -1);
                 });
 
         DefaultErrorHandler errorHandler =
                 new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
 
-        // Повторять такое бессмысленно: заказа нет и не появится.
-        errorHandler.addNotRetryableExceptions(EntityNotFoundException.class);
+        errorHandler.addNotRetryableExceptions(EntityNotFoundException.class, IllegalStateException.class);
         return errorHandler;
     }
 }

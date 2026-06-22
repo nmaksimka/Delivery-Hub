@@ -13,10 +13,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Единая точка преобразования исключений в HTTP-ответы.
- * Без неё любая доменная ошибка уходила клиенту как 500.
- */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

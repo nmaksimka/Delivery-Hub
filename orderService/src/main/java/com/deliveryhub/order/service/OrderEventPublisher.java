@@ -22,10 +22,6 @@ public class OrderEventPublisher {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    /**
-     * AFTER_COMMIT закрывает dual-write: раньше событие улетало до коммита,
-     * и при откате транзакции доставка создавалась под несуществующий заказ.
-     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderCreated(OrderCreatedDomainEvent domainEvent) {
         publishOrderCreated(domainEvent.payload());
