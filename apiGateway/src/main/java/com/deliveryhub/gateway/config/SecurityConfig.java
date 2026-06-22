@@ -39,8 +39,6 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health/**").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
 
-                        // Каталог: читать может кто угодно, менять — только ADMIN.
-                        // Раньше под permitAll попадали и POST/PUT/DELETE.
                         .pathMatchers(HttpMethod.GET, "/api/restaurants/**").permitAll()
                         .pathMatchers("/api/restaurants/**").hasRole("ADMIN")
 

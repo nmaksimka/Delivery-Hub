@@ -16,10 +16,6 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Проверяет JWT и пробрасывает личность вниз заголовками X-User-*.
- * Входящие X-User-* всегда затираются: иначе клиент мог бы подделать их напрямую.
- */
 @Component
 public class JwtAuthenticationFilter implements WebFilter {
 

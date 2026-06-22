@@ -10,9 +10,6 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
-/**
- * 3 повтора с паузой, затем сообщение уходит в topic.DLT вместо бесконечного цикла.
- */
 @Configuration
 public class KafkaErrorHandlingConfig {
 

@@ -31,10 +31,6 @@ public class JwtUtils {
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * Единая точка разбора: либо валидные claims, либо пусто.
-     * Отдельные validate/parse приводили к двойному разбору одного токена.
-     */
     public Optional<Claims> parseClaims(String token) {
         try {
             return Optional.of(Jwts.parser()
