@@ -6,9 +6,6 @@ spring:
     name: orderService
   cloud:
     inetutils:
-      # Обратный DNS-запрос локального адреса на этой машине не отвечает и каждый раз
-      # съедает секунду таймаута (6 секунд старта). Ни gateway, ни Feign здесь host info
-      # не используют, поэтому поиск non-loopback интерфейса отключён целиком.
       ignored-interfaces:
         - .*
   datasource:
@@ -16,7 +13,6 @@ spring:
     username: ${DB_USER:order_user}
     password: ${DB_PASSWORD:order_pass}
   jpa:
-    # Схемой управляет Flyway. Hibernate только сверяет с ней маппинг.
     hibernate:
       ddl-auto: validate
     open-in-view: false
@@ -43,7 +39,6 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
-        # Доверяем только пакету общих контрактов, а не "*"
         spring.json.trusted.packages: com.deliveryhub.contracts.events
         spring.json.value.default.type: com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent
         spring.json.use.type.headers: false

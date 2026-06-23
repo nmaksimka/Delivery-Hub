@@ -22,7 +22,6 @@ spring:
 
 app:
   jwt:
-    # Значение по умолчанию только для локального запуска. В docker/prod задаётся через JWT_SECRET.
     secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
