@@ -37,7 +37,7 @@ services:
       retries: 15
 
   postgres-restaurant:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-restaurant
     environment:
       POSTGRES_DB: restaurant_db
@@ -50,7 +50,7 @@ services:
     healthcheck: *pg-healthcheck
 
   postgres-order:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-order
     environment:
       POSTGRES_DB: order_db
@@ -63,7 +63,7 @@ services:
     healthcheck: *pg-healthcheck
 
   postgres-delivery:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-delivery
     environment:
       POSTGRES_DB: delivery_db
@@ -76,7 +76,7 @@ services:
     healthcheck: *pg-healthcheck
 
   postgres-user:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-user
     environment:
       POSTGRES_DB: user_db
@@ -189,7 +189,7 @@ services:
         condition: service_healthy
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.12.0
     container_name: prometheus
     ports:
       - "9090:9090"
