@@ -3,7 +3,6 @@ server:
 
 app:
   jwt:
-    # Должен совпадать с секретом userService. В docker/prod задаётся через JWT_SECRET.
     secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
 
 spring:
@@ -11,9 +10,6 @@ spring:
     name: apiGateway
   cloud:
     inetutils:
-      # Обратный DNS-запрос локального адреса на этой машине не отвечает и каждый раз
-      # съедает секунду таймаута (6 секунд старта). Ни gateway, ни Feign здесь host info
-      # не используют, поэтому поиск non-loopback интерфейса отключён целиком.
       ignored-interfaces:
         - .*
     gateway:
@@ -37,8 +33,6 @@ spring:
               predicates:
                 - Path=/api/auth/**
 
-            # Отдельные роуты для агрегации Swagger: у сервисов api-docs лежит по /v3/api-docs,
-            # а не по /api/<...>/v3/api-docs, поэтому префикс нужно срезать.
             - id: restaurant-docs
               uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
               predicates:
@@ -65,8 +59,6 @@ spring:
                 - SetPath=/v3/api-docs
 
 management:
-  # Actuator вынесен на отдельный порт, который не публикуется наружу:
-  # метрики шлюза не должны быть доступны с публичного 3335.
   server:
     port: 9335
   endpoints:

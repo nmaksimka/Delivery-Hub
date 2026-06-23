@@ -85,8 +85,8 @@ graph TB
 | **Язык**             | Java 25                                        |
 | **Фреймворк**        | Spring Boot 4.0.7                              |
 | **Микросервисы**     | Spring Cloud Gateway, OpenFeign                |
-| **Асинхронность**    | Apache Kafka (+ DLT и ограниченные повторы)    |
-| **Базы данных**      | PostgreSQL, по одной на сервис                 |
+| **Асинхронность**    | Apache Kafka 4.1 в KRaft (+ DLT и повторы)     |
+| **Базы данных**      | PostgreSQL 17, по одной на сервис              |
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
 | **Безопасность**     | Spring Security + JWT (jjwt 0.13.0)            |
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
@@ -109,6 +109,9 @@ docker compose up --build
 ```bash
 openssl rand -base64 48
 ```
+
+Kafka работает в режиме KRaft одним узлом, ZooKeeper не нужен. Если остались тома от прошлой версии
+с PostgreSQL 16, их нужно пересоздать: `docker compose down -v`.
 
 ### Доступные адреса
 
@@ -246,4 +249,3 @@ DeliveryHub/
 - Transactional outbox вместо публикации `AFTER_COMMIT` — гарантия at-least-once
   при падении между коммитом и отправкой в Kafka.
 - Интеграционные тесты на Testcontainers (зависимости уже подключены).
-- Kafka в режиме KRaft вместо ZooKeeper.
