@@ -6,7 +6,6 @@ import com.deliveryhub.order.dto.UpdateOrderStatusRequest;
 import com.deliveryhub.order.security.CurrentUser;
 import com.deliveryhub.order.service.OrderService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -23,9 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/orders")
-@RequiredArgsConstructor
 public class OrderController {
     private final OrderService orderService;
+
+    public OrderController(OrderService orderService) {
+        this.orderService = orderService;
+    }
 
     @GetMapping("/{id}")
     public OrderDto getOrderById(@PathVariable Long id,
@@ -34,14 +36,12 @@ public class OrderController {
         return orderService.getOrderById(id, new CurrentUser(userId, role));
     }
 
-    /** Заказы текущего пользователя. Чужие заказы через этот эндпоинт недоступны. */
     @GetMapping
     public Page<OrderDto> getMyOrders(@RequestHeader("X-User-Id") Long userId,
                                       @PageableDefault(size = 20) Pageable pageable) {
         return orderService.getOrdersOfUser(userId, pageable);
     }
 
-    /** Только для ADMIN: доступ ограничен на уровне API Gateway. */
     @GetMapping("/all")
     public Page<OrderDto> getAllOrders(@PageableDefault(size = 20) Pageable pageable) {
         return orderService.getAllOrders(pageable);
@@ -57,6 +57,6 @@ public class OrderController {
     @PatchMapping("/{id}/status")
     public OrderDto updateOrderStatus(@PathVariable Long id,
                                       @Valid @RequestBody UpdateOrderStatusRequest request) {
-        return orderService.updateOrderStatus(id, request.getStatus());
+        return orderService.updateOrderStatus(id, request.status());
     }
 }

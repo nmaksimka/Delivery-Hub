@@ -15,7 +15,6 @@ dependencies {
 
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
-    annotationProcessor(libs.lombok.mapstruct.binding)
 
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)

@@ -14,6 +14,5 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, Long> {
 
     List<MenuItem> findByRestaurantIdAndAvailableTrue(Long restaurantId);
 
-    /** Блюдо всегда ищем в контексте ресторана, иначе можно достать чужую позицию по её id. */
     Optional<MenuItem> findByIdAndRestaurantId(Long id, Long restaurantId);
 }

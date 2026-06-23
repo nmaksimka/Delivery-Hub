@@ -1,7 +1,6 @@
 package com.deliveryhub.user.config;
 
-import com.deliveryhub.user.service.UserDetailsServiceImpl;
-import lombok.RequiredArgsConstructor;
+import com.deliveryhub.user.service.DatabaseUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -17,9 +16,12 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
-    private final UserDetailsServiceImpl userDetailsService;
+    private final DatabaseUserDetailsService userDetailsService;
+
+    public SecurityConfig(DatabaseUserDetailsService userDetailsService) {
+        this.userDetailsService = userDetailsService;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {

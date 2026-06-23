@@ -1,6 +1,7 @@
 package com.deliveryhub.restaurant.service;
 
 import com.deliveryhub.restaurant.dto.RestaurantDto;
+import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
@@ -8,10 +9,12 @@ import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,7 +41,7 @@ class RestaurantServiceTest {
     @DisplayName("activeOnly=true отдаёт только активные рестораны")
     void filtersInactiveByDefault() {
         when(restaurantRepository.findByActiveTrue()).thenReturn(List.of(restaurant()));
-        when(restaurantMapper.toDto(any())).thenReturn(new RestaurantDto());
+        when(restaurantMapper.toDto(any())).thenReturn(dto());
 
         assertThat(restaurantService.getAllRestaurants(true)).hasSize(1);
         verify(restaurantRepository, never()).findAll();
@@ -48,7 +51,7 @@ class RestaurantServiceTest {
     @DisplayName("activeOnly=false отдаёт все рестораны")
     void returnsAllWhenRequested() {
         when(restaurantRepository.findAll()).thenReturn(List.of(restaurant(), restaurant()));
-        when(restaurantMapper.toDto(any())).thenReturn(new RestaurantDto());
+        when(restaurantMapper.toDto(any())).thenReturn(dto());
 
         assertThat(restaurantService.getAllRestaurants(false)).hasSize(2);
         verify(restaurantRepository, never()).findByActiveTrue();
@@ -71,25 +74,42 @@ class RestaurantServiceTest {
 
         assertThatThrownBy(() -> restaurantService.removeRestaurant(404L))
                 .isInstanceOf(EntityNotFoundException.class);
-
         verify(restaurantRepository, never()).delete(any());
     }
 
     @Test
-    @DisplayName("обновление не подменяет id существующего ресторана")
-    void updateKeepsEntityIdentity() {
+    @DisplayName("новый ресторан активен, если флаг не передан")
+    void createsActiveRestaurantByDefault() {
+        when(restaurantRepository.save(any(Restaurant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        restaurantService.createRestaurant(new RestaurantRequest(
+                "Pizzeria", "Lenina 1", null, LocalTime.of(10, 0), LocalTime.of(22, 0), null));
+
+        ArgumentCaptor<Restaurant> captor = ArgumentCaptor.forClass(Restaurant.class);
+        verify(restaurantRepository).save(captor.capture());
+        assertThat(captor.getValue().isActive()).isTrue();
+        assertThat(captor.getValue().getOpenTime()).isEqualTo(LocalTime.of(10, 0));
+    }
+
+    @Test
+    @DisplayName("обновление меняет контакты и может выключить ресторан")
+    void updateChangesContactsAndActivity() {
         Restaurant existing = restaurant();
         when(restaurantRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(restaurantMapper.toDto(existing)).thenReturn(new RestaurantDto());
 
-        RestaurantDto incoming = RestaurantDto.builder().id(999L).name("Hacked").build();
-        restaurantService.updateRestaurant(1L, incoming);
+        restaurantService.updateRestaurant(1L, new RestaurantRequest(
+                "Trattoria", "Mira 5", "+79991112233", null, null, false));
 
-        verify(restaurantMapper).updateEntityFromDto(incoming, existing);
-        assertThat(existing.getId()).isEqualTo(1L);
+        assertThat(existing.getName()).isEqualTo("Trattoria");
+        assertThat(existing.getAddress()).isEqualTo("Mira 5");
+        assertThat(existing.isActive()).isFalse();
     }
 
     private static Restaurant restaurant() {
-        return Restaurant.builder().id(1L).name("Pizzeria").active(true).build();
+        return new Restaurant("Pizzeria", "Lenina 1", null);
+    }
+
+    private static RestaurantDto dto() {
+        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, true);
     }
 }

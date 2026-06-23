@@ -1,6 +1,7 @@
 package com.deliveryhub.restaurant.service;
 
 import com.deliveryhub.restaurant.dto.MenuItemDto;
+import com.deliveryhub.restaurant.dto.MenuItemRequest;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
@@ -20,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,7 +49,7 @@ class MenuItemServiceTest {
         MenuItem item = menuItem();
         when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID))
                 .thenReturn(Optional.of(item));
-        MenuItemDto dto = new MenuItemDto();
+        MenuItemDto dto = dto();
         when(menuItemMapper.toDto(item)).thenReturn(dto);
 
         assertThat(menuItemService.getMenuItemById(RESTAURANT_ID, MENU_ITEM_ID)).isSameAs(dto);
@@ -56,8 +58,7 @@ class MenuItemServiceTest {
     @Test
     @DisplayName("не отдаёт блюдо чужого ресторана")
     void rejectsItemFromAnotherRestaurant() {
-        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L))
-                .thenReturn(Optional.empty());
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuItemService.getMenuItemById(999L, MENU_ITEM_ID))
                 .isInstanceOf(EntityNotFoundException.class)
@@ -67,21 +68,18 @@ class MenuItemServiceTest {
     @Test
     @DisplayName("не удаляет блюдо через чужой ресторан")
     void doesNotDeleteAcrossRestaurants() {
-        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L))
-                .thenReturn(Optional.empty());
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuItemService.removeMenuItem(999L, MENU_ITEM_ID))
                 .isInstanceOf(EntityNotFoundException.class);
-
-        verify(menuItemRepository, never()).delete(org.mockito.ArgumentMatchers.any());
+        verify(menuItemRepository, never()).delete(any());
     }
 
     @Test
     @DisplayName("по умолчанию отдаёт только доступные позиции меню")
     void returnsOnlyAvailableByDefault() {
-        when(menuItemRepository.findByRestaurantIdAndAvailableTrue(RESTAURANT_ID))
-                .thenReturn(List.of(menuItem()));
-        when(menuItemMapper.toDto(org.mockito.ArgumentMatchers.any())).thenReturn(new MenuItemDto());
+        when(menuItemRepository.findByRestaurantIdAndAvailableTrue(RESTAURANT_ID)).thenReturn(List.of(menuItem()));
+        when(menuItemMapper.toDto(any())).thenReturn(dto());
 
         assertThat(menuItemService.getMenuItemsByRestaurant(RESTAURANT_ID, true)).hasSize(1);
         verify(menuItemRepository, never()).findByRestaurantId(RESTAURANT_ID);
@@ -90,18 +88,29 @@ class MenuItemServiceTest {
     @Test
     @DisplayName("привязывает новое блюдо к ресторану")
     void attachesNewItemToRestaurant() {
-        Restaurant restaurant = Restaurant.builder().id(RESTAURANT_ID).name("Pizzeria").active(true).build();
+        Restaurant restaurant = new Restaurant("Pizzeria", null, null);
         when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant));
+        when(menuItemRepository.save(any(MenuItem.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MenuItem newItem = MenuItem.builder().name("Pizza").price(BigDecimal.TEN).build();
-        when(menuItemMapper.toEntity(org.mockito.ArgumentMatchers.any())).thenReturn(newItem);
-        when(menuItemRepository.save(newItem)).thenReturn(newItem);
-        when(menuItemMapper.toDto(newItem)).thenReturn(new MenuItemDto());
+        menuItemService.addMenuItemToRestaurant(RESTAURANT_ID, request(true));
 
-        menuItemService.addMenuItemToRestaurant(RESTAURANT_ID, new MenuItemDto());
+        assertThat(restaurant.getMenuItems()).singleElement().satisfies(item -> {
+            assertThat(item.getName()).isEqualTo("Pizza");
+            assertThat(item.getRestaurant()).isSameAs(restaurant);
+            assertThat(item.isAvailable()).isTrue();
+        });
+    }
 
-        assertThat(newItem.getRestaurant()).isSameAs(restaurant);
-        assertThat(restaurant.getMenuItems()).containsExactly(newItem);
+    @Test
+    @DisplayName("обновление может снять блюдо с продажи")
+    void updateWithdrawsItemFromSale() {
+        MenuItem item = menuItem();
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID))
+                .thenReturn(Optional.of(item));
+
+        menuItemService.updateMenuItem(RESTAURANT_ID, MENU_ITEM_ID, request(false));
+
+        assertThat(item.isAvailable()).isFalse();
     }
 
     @Test
@@ -109,16 +118,20 @@ class MenuItemServiceTest {
     void failsWhenRestaurantMissing() {
         when(restaurantRepository.findById(404L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> menuItemService.addMenuItemToRestaurant(404L, new MenuItemDto()))
+        assertThatThrownBy(() -> menuItemService.addMenuItemToRestaurant(404L, request(true)))
                 .isInstanceOf(EntityNotFoundException.class);
     }
 
     private static MenuItem menuItem() {
-        return MenuItem.builder()
-                .id(MENU_ITEM_ID)
-                .name("Pizza")
-                .price(new BigDecimal("12.50"))
-                .available(true)
-                .build();
+        return new Restaurant("Pizzeria", null, null)
+                .addMenuItem("Pizza", null, new BigDecimal("12.50"), "pizza");
+    }
+
+    private static MenuItemRequest request(boolean available) {
+        return new MenuItemRequest("Pizza", null, new BigDecimal("12.50"), "pizza", available);
+    }
+
+    private static MenuItemDto dto() {
+        return new MenuItemDto(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, RESTAURANT_ID);
     }
 }

@@ -1,9 +1,9 @@
 package com.deliveryhub.restaurant.controller;
 
 import com.deliveryhub.restaurant.dto.RestaurantDto;
+import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.service.RestaurantService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,9 +20,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/restaurants")
-@RequiredArgsConstructor
 public class RestaurantController {
     private final RestaurantService restaurantService;
+
+    public RestaurantController(RestaurantService restaurantService) {
+        this.restaurantService = restaurantService;
+    }
 
     @GetMapping
     public List<RestaurantDto> getAllRestaurants(
@@ -37,14 +40,14 @@ public class RestaurantController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public RestaurantDto createRestaurant(@Valid @RequestBody RestaurantDto restaurantDto) {
-        return restaurantService.createRestaurant(restaurantDto);
+    public RestaurantDto createRestaurant(@Valid @RequestBody RestaurantRequest request) {
+        return restaurantService.createRestaurant(request);
     }
 
     @PutMapping("/{id}")
     public RestaurantDto updateRestaurant(@PathVariable Long id,
-                                          @Valid @RequestBody RestaurantDto restaurantDto) {
-        return restaurantService.updateRestaurant(id, restaurantDto);
+                                          @Valid @RequestBody RestaurantRequest request) {
+        return restaurantService.updateRestaurant(id, request);
     }
 
     @DeleteMapping("/{id}")

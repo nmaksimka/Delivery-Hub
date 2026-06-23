@@ -9,7 +9,6 @@ import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
-import com.deliveryhub.order.entity.OrderItem;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.event.OrderCreatedDomainEvent;
 import com.deliveryhub.order.exception.ForbiddenException;
@@ -31,8 +30,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -71,12 +72,9 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        request = CreateOrderRequest.builder()
-                .restaurantId(RESTAURANT_ID)
-                .orderItemsRequest(List.of(
-                        OrderItemRequest.builder().menuItemId(10L).quantity(2).build(),
-                        OrderItemRequest.builder().menuItemId(11L).quantity(3).build()))
-                .build();
+        request = new CreateOrderRequest(RESTAURANT_ID, List.of(
+                new OrderItemRequest(10L, 2),
+                new OrderItemRequest(11L, 3)));
     }
 
     @Nested
@@ -90,14 +88,13 @@ class OrderServiceTest {
             givenMenuItem(10L, "Pizza", "12.50", true);
             givenMenuItem(11L, "Cola", "3.00", true);
             when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
-            when(orderMapper.toDto(any(Order.class))).thenReturn(new OrderDto());
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
             orderService.createOrder(request, USER_ID);
 
             verify(orderRepository).save(orderCaptor.capture());
             Order saved = orderCaptor.getValue();
 
-            // 12.50 * 2 + 3.00 * 3 = 34.00
             assertThat(saved.getTotalAmount()).isEqualByComparingTo("34.00");
             assertThat(saved.getUserId()).isEqualTo(USER_ID);
             assertThat(saved.getStatus()).isEqualTo(OrderStatus.CREATED);
@@ -111,7 +108,7 @@ class OrderServiceTest {
             givenMenuItem(10L, "Pizza", "10.00", true);
             givenMenuItem(11L, "Cola", "5.00", true);
             when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
-            when(orderMapper.toDto(any(Order.class))).thenReturn(new OrderDto());
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
             orderService.createOrder(request, 777L);
 
@@ -126,9 +123,9 @@ class OrderServiceTest {
             givenMenuItem(10L, "Pizza", "10.00", true);
             givenMenuItem(11L, "Cola", "5.00", true);
             when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
-            when(orderMapper.toDto(any(Order.class))).thenReturn(new OrderDto());
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            OrderCreatedEvent event = OrderCreatedEvent.builder().orderId(5L).build();
+            OrderCreatedEvent event = new OrderCreatedEvent(5L, null, null, null, null, List.of());
             when(orderMapper.toOrderCreatedEvent(any(Order.class))).thenReturn(event);
 
             orderService.createOrder(request, USER_ID);
@@ -155,9 +152,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("бросает IllegalStateException, если ресторан неактивен")
         void failsWhenRestaurantInactive() {
-            RestaurantDto restaurant = new RestaurantDto();
-            restaurant.setId(RESTAURANT_ID);
-            restaurant.setActive(false);
+            RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
@@ -201,7 +196,7 @@ class OrderServiceTest {
         void returnsOwnOrder() {
             Order order = orderOf(USER_ID);
             when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
-            OrderDto dto = new OrderDto();
+            OrderDto dto = dto();
             when(orderMapper.toDto(order)).thenReturn(dto);
 
             assertThat(orderService.getOrderById(1L, new CurrentUser(USER_ID, "USER"))).isSameAs(dto);
@@ -221,7 +216,7 @@ class OrderServiceTest {
         void allowsAdmin() {
             Order order = orderOf(USER_ID);
             when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
-            when(orderMapper.toDto(order)).thenReturn(new OrderDto());
+            when(orderMapper.toDto(order)).thenReturn(dto());
 
             assertThat(orderService.getOrderById(1L, new CurrentUser(999L, "ADMIN"))).isNotNull();
         }
@@ -245,7 +240,7 @@ class OrderServiceTest {
         void mapsDeliveryStatusToOrderStatus() {
             Order order = orderOf(USER_ID);
             when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
-            when(orderMapper.toDto(order)).thenReturn(new OrderDto());
+            when(orderMapper.toDto(order)).thenReturn(dto());
 
             orderService.applyDeliveryStatus(1L, DeliveryStatus.IN_TRANSIT);
 
@@ -253,33 +248,27 @@ class OrderServiceTest {
         }
     }
 
-    // --- helpers -----------------------------------------------------------
 
     private void givenActiveRestaurant() {
-        RestaurantDto restaurant = new RestaurantDto();
-        restaurant.setId(RESTAURANT_ID);
-        restaurant.setActive(true);
+        RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", true);
         when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
     }
 
     private void givenMenuItem(long id, String name, String price, boolean available) {
-        MenuItemDto item = new MenuItemDto();
-        item.setId(id);
-        item.setName(name);
-        item.setPrice(new BigDecimal(price));
-        item.setAvailable(available);
+        MenuItemDto item = new MenuItemDto(id, name, new BigDecimal(price), available);
         when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, id)).thenReturn(item);
     }
 
     private static Order orderOf(long userId) {
-        return Order.builder()
-                .id(1L)
-                .userId(userId)
-                .restaurantId(RESTAURANT_ID)
-                .status(OrderStatus.CREATED)
-                .totalAmount(BigDecimal.TEN)
-                .orderItems(List.of(OrderItem.builder().id(1L).build()))
-                .build();
+        Order order = Order.place(userId, RESTAURANT_ID);
+        order.addItem(10L, "Pizza", 1, BigDecimal.TEN);
+        ReflectionTestUtils.setField(order, "id", 1L);
+        return order;
+    }
+
+    private static OrderDto dto() {
+        return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, BigDecimal.TEN,
+                Instant.EPOCH, Instant.EPOCH, List.of());
     }
 
     private static FeignException.NotFound notFound() {

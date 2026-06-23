@@ -1,7 +1,6 @@
 package com.deliveryhub.gateway.config;
 
 import com.deliveryhub.gateway.security.JwtAuthenticationFilter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,10 +17,13 @@ import java.util.List;
 
 @Configuration
 @EnableWebFluxSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
@@ -37,8 +39,6 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health/**").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
 
-                        // Каталог: читать может кто угодно, менять — только ADMIN.
-                        // Раньше под permitAll попадали и POST/PUT/DELETE.
                         .pathMatchers(HttpMethod.GET, "/api/restaurants/**").permitAll()
                         .pathMatchers("/api/restaurants/**").hasRole("ADMIN")
 
