@@ -1,0 +1,74 @@
+package com.deliveryhub.delivery;
+
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MvcTestResult;
+
+import java.io.UnsupportedEncodingException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+class DeliveryApiIT {
+
+    @Autowired
+    private MockMvcTester mvc;
+
+    @Test
+    void createsDeliveryAndMovesItThroughStatuses() {
+        MvcTestResult created = postJson("/api/deliveries", """
+                {"orderId": 8001, "courierId": 5}
+                """);
+        assertThat(created).hasStatus(201).bodyJson().extractingPath("$.status").isEqualTo("ASSIGNED");
+        Integer deliveryId = JsonPath.read(bodyOf(created), "$.id");
+
+        assertThat(patchStatus(deliveryId, "PICKED_UP")).hasStatusOk();
+        assertThat(patchStatus(deliveryId, "DELIVERED")).hasStatusOk();
+        assertThat(patchStatus(deliveryId, "IN_TRANSIT")).hasStatus(409);
+        assertThat(mvc.get().uri("/api/deliveries/order/8001")).hasStatusOk()
+                .bodyJson().extractingPath("$.status").isEqualTo("DELIVERED");
+    }
+
+    @Test
+    void refusesSecondDeliveryForSameOrder() {
+        String body = """
+                {"orderId": 8002}
+                """;
+        postJson("/api/deliveries", body);
+
+        assertThat(postJson("/api/deliveries", body)).hasStatus(409);
+    }
+
+    @Test
+    void requiresOrderId() {
+        assertThat(postJson("/api/deliveries", "{}")).hasStatus(400)
+                .bodyJson().extractingPath("$.errors.orderId").isEqualTo("Order ID is required");
+    }
+
+    private MvcTestResult patchStatus(Integer deliveryId, String status) {
+        return mvc.patch().uri("/api/deliveries/" + deliveryId + "/status")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\": \"" + status + "\"}")
+                .exchange();
+    }
+
+    private MvcTestResult postJson(String uri, String json) {
+        return mvc.post().uri(uri).contentType(MediaType.APPLICATION_JSON).content(json).exchange();
+    }
+
+    private static String bodyOf(MvcTestResult result) {
+        try {
+            return result.getResponse().getContentAsString();
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}
