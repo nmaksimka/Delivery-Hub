@@ -1,5 +1,6 @@
 plugins {
     id("deliveryhub.spring-service")
+    id("deliveryhub.integration-test")
 }
 
 dependencies {
@@ -19,6 +20,5 @@ dependencies {
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
 
-    testImplementation(libs.testcontainers.junit.jupiter)
-    testImplementation(libs.testcontainers.postgresql)
+    integrationTestImplementation(libs.testcontainers.kafka)
 }
