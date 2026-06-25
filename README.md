@@ -90,7 +90,7 @@ graph TB
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
 | **Безопасность**     | Spring Security + JWT (jjwt 0.13.0)            |
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
-| **Тесты**            | JUnit 5 + Mockito + AssertJ                    |
+| **Тесты**            | JUnit + Mockito + AssertJ, Testcontainers      |
 | **Метрики**          | Actuator + Micrometer + Prometheus             |
 | **Сборка**           | Gradle 9.6 (Kotlin DSL), общий каталог версий  |
 
@@ -220,12 +220,18 @@ Authorization: Bearer <token>
 
 ```bash
 ./gradlew test
+./gradlew integrationTest
+./gradlew build
 ```
 
 Юнит-тесты на JUnit 5 + Mockito покрывают бизнес-логику каждого сервиса:
 расчёт суммы заказа, проверку владельца заказа, идемпотентность обработки
 событий, изоляцию меню по ресторану, выпуск и валидацию JWT, а также защиту
 гейтвея от подделки заголовков `X-User-*`.
+
+Интеграционные тесты (`*IT`, каталог `src/integrationTest`) поднимают PostgreSQL и Kafka в Testcontainers
+и проверяют миграции Flyway, репозитории, REST API и обмен событиями между заказами и доставкой.
+Для них нужен запущенный Docker; задача `integrationTest` входит в `check`, поэтому `build` запускает и их.
 
 ## Структура проекта
 
@@ -248,4 +254,3 @@ DeliveryHub/
 
 - Transactional outbox вместо публикации `AFTER_COMMIT` — гарантия at-least-once
   при падении между коммитом и отправкой в Kafka.
-- Интеграционные тесты на Testcontainers (зависимости уже подключены).
