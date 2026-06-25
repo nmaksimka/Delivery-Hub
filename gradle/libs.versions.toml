@@ -38,7 +38,10 @@ jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
 jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
-testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
+spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
+spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
+spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
+testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 
 [bundles]
