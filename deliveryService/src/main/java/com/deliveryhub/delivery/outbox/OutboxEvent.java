@@ -7,8 +7,6 @@ import jakarta.persistence.PostLoad;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import org.springframework.data.domain.Persistable;
 
 import java.time.Instant;
@@ -31,9 +29,8 @@ public class OutboxEvent implements Persistable<UUID> {
     @Column(name = "event_type", nullable = false, length = 128)
     private String eventType;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
-    private String payload;
+    @Column(nullable = false)
+    private byte[] payload;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -48,12 +45,12 @@ public class OutboxEvent implements Persistable<UUID> {
     }
 
     public OutboxEvent(UUID id, String aggregateType, String aggregateId, String eventType,
-                       String payload, Instant createdAt) {
+                       byte[] payload, Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.aggregateType = Objects.requireNonNull(aggregateType, "aggregateType");
         this.aggregateId = Objects.requireNonNull(aggregateId, "aggregateId");
         this.eventType = Objects.requireNonNull(eventType, "eventType");
-        this.payload = Objects.requireNonNull(payload, "payload");
+        this.payload = Objects.requireNonNull(payload, "payload").clone();
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
     }
 
@@ -96,8 +93,8 @@ public class OutboxEvent implements Persistable<UUID> {
         return eventType;
     }
 
-    public String getPayload() {
-        return payload;
+    public byte[] getPayload() {
+        return payload.clone();
     }
 
     public Instant getCreatedAt() {
