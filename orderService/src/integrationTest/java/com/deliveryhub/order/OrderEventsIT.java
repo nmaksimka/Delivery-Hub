@@ -3,6 +3,7 @@ package com.deliveryhub.order;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -13,8 +14,6 @@ import com.deliveryhub.order.outbox.OutboxEvent;
 import com.deliveryhub.order.outbox.OutboxEventRepository;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.service.OrderService;
-import com.jayway.jsonpath.JsonPath;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,12 +74,12 @@ class OrderEventsIT {
         await().atMost(TIMEOUT).untilAsserted(() ->
                 assertThat(outboxEventRepository.findById(stored.getId()).orElseThrow().isPublished()).isTrue());
 
-        Optional<ConsumerRecord<String, String>> published = new KafkaTopicReader(kafka.getBootstrapServers())
-                .findFirst(Topics.ORDER_CREATED, record -> record.key().equals(orderId.toString()));
+        Optional<OrderCreatedEvent> published = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.ORDER_CREATED, OrderCreatedEvent.class, event -> event.getOrderId() == orderId);
 
         assertThat(published).isPresent();
-        assertThat((String) JsonPath.read(published.get().value(), "$.eventId")).isEqualTo(stored.getId().toString());
-        assertThat((Integer) JsonPath.read(published.get().value(), "$.orderId")).isEqualTo(orderId.intValue());
+        assertThat(published.get().getEventId()).isEqualTo(stored.getId());
+        assertThat(published.get().getTotalAmount()).isEqualByComparingTo("25.00");
     }
 
     @Test

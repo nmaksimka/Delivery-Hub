@@ -1,5 +1,8 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
+import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -7,7 +10,6 @@ import com.jayway.jsonpath.JsonPath;
 import feign.FeignException;
 import feign.Request;
 import feign.RequestTemplate;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,14 +66,14 @@ class OrderApiIT {
         assertThat(created).hasStatus(201).bodyJson().extractingPath("$.totalAmount").isEqualTo(34.0);
         Integer orderId = JsonPath.read(bodyOf(created), "$.id");
 
-        Optional<ConsumerRecord<String, String>> published = new KafkaTopicReader(kafka.getBootstrapServers())
-                .findFirst("order-created", record -> record.key().equals(orderId.toString()));
+        Optional<OrderCreatedEvent> published = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.ORDER_CREATED, OrderCreatedEvent.class, event -> event.getOrderId() == orderId);
 
         assertThat(published).isPresent();
-        String event = published.get().value();
-        assertThat((Integer) JsonPath.read(event, "$.orderId")).isEqualTo(orderId);
-        assertThat((Integer) JsonPath.read(event, "$.userId")).isEqualTo(42);
-        assertThat((Integer) JsonPath.read(event, "$.items.length()")).isEqualTo(2);
+        OrderCreatedEvent event = published.get();
+        assertThat(event.getUserId()).isEqualTo(42L);
+        assertThat(event.getTotalAmount()).isEqualByComparingTo("34.00");
+        assertThat(event.getItems()).extracting(OrderItemPayload::getItemName).containsExactly("Pizza", "Cola");
     }
 
     @Test
