@@ -1,8 +1,7 @@
 package com.deliveryhub.order.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
@@ -12,39 +11,47 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
-import com.deliveryhub.order.event.OrderCreatedDomainEvent;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
+import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
 import feign.FeignException;
 import jakarta.persistence.EntityNotFoundException;
-import org.springframework.context.ApplicationEventPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
 public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+    private static final String AGGREGATE_TYPE = "Order";
 
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final RestaurantServiceClient restaurantServiceClient;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final Outbox outbox;
+    private final ProcessedEvents processedEvents;
 
     public OrderService(OrderRepository orderRepository,
                         OrderMapper orderMapper,
                         RestaurantServiceClient restaurantServiceClient,
-                        ApplicationEventPublisher applicationEventPublisher) {
+                        Outbox outbox,
+                        ProcessedEvents processedEvents) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.restaurantServiceClient = restaurantServiceClient;
-        this.applicationEventPublisher = applicationEventPublisher;
+        this.outbox = outbox;
+        this.processedEvents = processedEvents;
     }
 
     public OrderDto getOrderById(Long id, CurrentUser currentUser) {
@@ -89,8 +96,7 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
 
-        OrderCreatedEvent event = orderMapper.toOrderCreatedEvent(savedOrder);
-        applicationEventPublisher.publishEvent(new OrderCreatedDomainEvent(event));
+        outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, orderCreatedEvent(savedOrder));
 
         return orderMapper.toDto(savedOrder);
     }
@@ -106,8 +112,21 @@ public class OrderService {
     }
 
     @Transactional
-    public void applyDeliveryStatus(Long orderId, DeliveryStatus deliveryStatus) {
-        updateOrderStatus(orderId, OrderStatusResolver.fromDeliveryStatus(deliveryStatus));
+    public void applyDeliveryStatus(DeliveryStatusUpdatedEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.eventId(), Topics.DELIVERY_STATUS_UPDATED)) {
+            log.info("Event {} is already processed, skipping", event.eventId());
+            return;
+        }
+        updateOrderStatus(event.orderId(), OrderStatusResolver.fromDeliveryStatus(event.status()));
+    }
+
+    private OrderCreatedEvent orderCreatedEvent(Order order) {
+        List<OrderCreatedEvent.OrderItemPayload> items = order.getOrderItems().stream()
+                .map(item -> new OrderCreatedEvent.OrderItemPayload(
+                        item.getMenuItemId(), item.getItemName(), item.getQuantity(), item.getPricePerUnit()))
+                .toList();
+        return new OrderCreatedEvent(UUID.randomUUID(), order.getId(), order.getUserId(), order.getRestaurantId(),
+                order.getTotalAmount(), order.getCreatedAt(), items);
     }
 
     private RestaurantDto fetchRestaurant(Long restaurantId) {

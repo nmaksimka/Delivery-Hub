@@ -67,9 +67,9 @@ graph TB
     Gateway -->|"/api/deliveries/**"| Delivery
 
     Order -->|Feign: проверка ресторана и блюд| Restaurant
-    Order -->|после коммита| Topic1
+    Order -->|outbox relay| Topic1
     Topic1 --> Delivery
-    Delivery --> Topic2
+    Delivery -->|outbox relay| Topic2
     Topic2 --> Order
 
     Restaurant --- DB1
@@ -85,7 +85,7 @@ graph TB
 | **Язык**             | Java 25                                        |
 | **Фреймворк**        | Spring Boot 4.0.7                              |
 | **Микросервисы**     | Spring Cloud Gateway, OpenFeign                |
-| **Асинхронность**    | Apache Kafka 4.1 в KRaft (+ DLT и повторы)     |
+| **Асинхронность**    | Kafka 4.1 (KRaft), outbox + inbox, DLT         |
 | **Базы данных**      | PostgreSQL 17, по одной на сервис              |
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
 | **Безопасность**     | Spring Security + JWT (jjwt 0.13.0)            |
@@ -216,6 +216,14 @@ Authorization: Bearer <token>
 Это разные словари: статус доставки не записывается в заказ напрямую,
 а транслируется через `OrderStatusResolver`.
 
+## Надёжная доставка событий
+
+События не отправляются в Kafka напрямую из бизнес-кода. Сервис в одной транзакции сохраняет изменение
+и строку в `outbox_events`, а `OutboxRelay` по расписанию забирает неотправленные строки
+(`FOR UPDATE SKIP LOCKED`), публикует их и проставляет `published_at`. Потребитель запоминает `eventId`
+в `processed_events` и повторно пришедшее событие пропускает. Подробности и компромиссы —
+в [ADR 0002](docs/adr/0002-transactional-outbox.md).
+
 ## Тесты
 
 ```bash
@@ -252,5 +260,4 @@ DeliveryHub/
 
 ## Что можно доработать
 
-- Transactional outbox вместо публикации `AFTER_COMMIT` — гарантия at-least-once
-  при падении между коммитом и отправкой в Kafka.
+- Очистка старых строк в `outbox_events` и `processed_events` по расписанию.

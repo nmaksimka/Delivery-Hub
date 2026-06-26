@@ -1,6 +1,8 @@
 package com.deliveryhub.order.service;
 
+import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
@@ -10,9 +12,10 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
-import com.deliveryhub.order.event.OrderCreatedDomainEvent;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
+import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
 import feign.Request;
@@ -29,7 +32,6 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -38,12 +40,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,7 +65,9 @@ class OrderServiceTest {
     @Mock
     private RestaurantServiceClient restaurantServiceClient;
     @Mock
-    private ApplicationEventPublisher applicationEventPublisher;
+    private Outbox outbox;
+    @Mock
+    private ProcessedEvents processedEvents;
 
     @InjectMocks
     private OrderService orderService;
@@ -117,23 +124,24 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("публикует OrderCreatedDomainEvent после сохранения")
-        void publishesDomainEvent() {
+        @DisplayName("кладёт событие order-created в outbox вместе с заказом")
+        void appendsOrderCreatedEventToOutbox() {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "10.00", true);
             givenMenuItem(11L, "Cola", "5.00", true);
             when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            OrderCreatedEvent event = new OrderCreatedEvent(5L, null, null, null, null, List.of());
-            when(orderMapper.toOrderCreatedEvent(any(Order.class))).thenReturn(event);
-
             orderService.createOrder(request, USER_ID);
 
-            ArgumentCaptor<OrderCreatedDomainEvent> captor =
-                    ArgumentCaptor.forClass(OrderCreatedDomainEvent.class);
-            verify(applicationEventPublisher).publishEvent(captor.capture());
-            assertThat(captor.getValue().payload()).isSameAs(event);
+            ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), captor.capture());
+            OrderCreatedEvent event = captor.getValue();
+            assertThat(event.eventId()).isNotNull();
+            assertThat(event.userId()).isEqualTo(USER_ID);
+            assertThat(event.totalAmount()).isEqualByComparingTo("35.00");
+            assertThat(event.items()).extracting(OrderCreatedEvent.OrderItemPayload::itemName)
+                    .containsExactly("Pizza", "Cola");
         }
 
         @Test
@@ -146,7 +154,7 @@ class OrderServiceTest {
                     .hasMessageContaining("Restaurant with ID: 1");
 
             verify(orderRepository, never()).save(any());
-            verify(applicationEventPublisher, never()).publishEvent(any());
+            verifyNoInteractions(outbox);
         }
 
         @Test
@@ -242,9 +250,29 @@ class OrderServiceTest {
             when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
             when(orderMapper.toDto(order)).thenReturn(dto());
 
-            orderService.applyDeliveryStatus(1L, DeliveryStatus.IN_TRANSIT);
+            DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);
+            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.DELIVERY_STATUS_UPDATED))
+                    .thenReturn(true);
+
+            orderService.applyDeliveryStatus(event);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.IN_DELIVERY);
+        }
+
+        @Test
+        @DisplayName("повторно доставленное событие не трогает заказ")
+        void skipsAlreadyProcessedEvent() {
+            DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.DELIVERED);
+            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.DELIVERY_STATUS_UPDATED))
+                    .thenReturn(false);
+
+            orderService.applyDeliveryStatus(event);
+
+            verifyNoInteractions(orderRepository);
+        }
+
+        private DeliveryStatusUpdatedEvent statusUpdate(DeliveryStatus status) {
+            return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 1L, status, Instant.EPOCH);
         }
     }
 

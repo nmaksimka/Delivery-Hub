@@ -3,6 +3,7 @@ package com.deliveryhub.delivery.listener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.deliveryhub.delivery.service.DeliveryService;
+import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -18,9 +19,9 @@ public class OrderEventListener {
         this.deliveryService = deliveryService;
     }
 
-    @KafkaListener(topics = "order-created", groupId = "delivery-service-group")
+    @KafkaListener(topics = Topics.ORDER_CREATED, groupId = "delivery-service-group")
     public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("Received OrderCreatedEvent for orderId: {}", event.orderId());
+        log.info("Received order-created event: eventId={}, orderId={}", event.eventId(), event.orderId());
         deliveryService.createDeliveryFromOrderEvent(event);
     }
 }
