@@ -1,39 +1,50 @@
 package com.deliveryhub.delivery.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
-import com.deliveryhub.delivery.event.DeliveryStatusChangedDomainEvent;
+import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
+import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import jakarta.persistence.EntityNotFoundException;
-import org.springframework.context.ApplicationEventPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
 public class DeliveryService {
 
     private static final Logger log = LoggerFactory.getLogger(DeliveryService.class);
+    private static final String AGGREGATE_TYPE = "Delivery";
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryMapper deliveryMapper;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final Outbox outbox;
+    private final ProcessedEvents processedEvents;
+    private final Clock clock;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
-                           ApplicationEventPublisher applicationEventPublisher) {
+                           Outbox outbox,
+                           ProcessedEvents processedEvents,
+                           Clock clock) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
-        this.applicationEventPublisher = applicationEventPublisher;
+        this.outbox = outbox;
+        this.processedEvents = processedEvents;
+        this.clock = clock;
     }
 
     public DeliveryDto getDeliveryById(Long id) {
@@ -81,6 +92,10 @@ public class DeliveryService {
 
     @Transactional
     public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.eventId(), Topics.ORDER_CREATED)) {
+            log.info("Event {} is already processed, skipping", event.eventId());
+            return;
+        }
         if (deliveryRepository.existsByOrderId(event.orderId())) {
             log.warn("Delivery already exists for orderId={}, skipping", event.orderId());
             return;
@@ -93,9 +108,9 @@ public class DeliveryService {
     }
 
     private void publishStatusChange(Delivery delivery) {
-        applicationEventPublisher.publishEvent(new DeliveryStatusChangedDomainEvent(
-                new DeliveryStatusUpdatedEvent(
-                        delivery.getId(), delivery.getOrderId(), delivery.getStatus(), delivery.getUpdatedAt())));
+        outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED,
+                new DeliveryStatusUpdatedEvent(UUID.randomUUID(), delivery.getId(), delivery.getOrderId(),
+                        delivery.getStatus(), clock.instant()));
     }
 
     private Delivery findByIdOrThrow(Long id) {
