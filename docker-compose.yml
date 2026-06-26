@@ -1,77 +1,92 @@
-services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
+name: deliveryhub
 
+x-postgres-healthcheck: &pg-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  interval: 5s
+  timeout: 5s
+  retries: 10
+
+services:
   kafka:
-    image: confluentinc/cp-kafka:7.6.0
+    image: apache/kafka:4.1.2
     container_name: kafka
-    depends_on:
-      - zookeeper
     ports:
-      - "9092:9092"
       - "29092:29092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
 
   postgres-restaurant:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-restaurant
     environment:
       POSTGRES_DB: restaurant_db
       POSTGRES_USER: restaurant_user
-      POSTGRES_PASSWORD: restaurant_pass
+      POSTGRES_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     ports:
       - "5331:5432"
     volumes:
       - pg-restaurant-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
 
   postgres-order:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-order
     environment:
       POSTGRES_DB: order_db
       POSTGRES_USER: order_user
-      POSTGRES_PASSWORD: order_pass
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     ports:
       - "5332:5432"
     volumes:
       - pg-order-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
 
   postgres-delivery:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-delivery
     environment:
       POSTGRES_DB: delivery_db
       POSTGRES_USER: delivery_user
-      POSTGRES_PASSWORD: delivery_pass
+      POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     ports:
       - "5333:5432"
     volumes:
       - pg-delivery-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
 
   postgres-user:
-    image: postgres:16-alpine
+    image: postgres:17.9-alpine
     container_name: postgres-user
     environment:
       POSTGRES_DB: user_db
       POSTGRES_USER: user_user
-      POSTGRES_PASSWORD: user_pass
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
     ports:
       - "5334:5432"
     volumes:
       - pg-user-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
 
   restaurantService:
     image: deliveryhub-restaurant-service
@@ -79,13 +94,17 @@ services:
       context: .
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
-    ports:
-      - "3331:3331"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
-      - postgres-restaurant
-      - kafka
+      postgres-restaurant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3331/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   orderService:
     image: deliveryhub-order-service
@@ -93,14 +112,21 @@ services:
       context: .
       dockerfile: ./orderService/Dockerfile
     container_name: orderService
-    ports:
-      - "3332:3332"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
-      - postgres-order
-      - kafka
-      - restaurantService
+      postgres-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      restaurantService:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3332/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   deliveryService:
     image: deliveryhub-delivery-service
@@ -108,13 +134,19 @@ services:
       context: .
       dockerfile: ./deliveryService/Dockerfile
     container_name: deliveryService
-    ports:
-      - "3333:3333"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     depends_on:
-      - postgres-delivery
-      - kafka
+      postgres-delivery:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3333/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   userService:
     image: deliveryhub-user-service
@@ -122,12 +154,18 @@ services:
       context: .
       dockerfile: ./userService/Dockerfile
     container_name: userService
-    ports:
-      - "3334:3334"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
-      - postgres-user
+      postgres-user:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3334/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   apiGateway:
     image: deliveryhub-api-gateway
@@ -138,14 +176,30 @@ services:
     ports:
       - "3335:3335"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
-      - restaurantService
-      - orderService
-      - deliveryService
-      - userService
+      restaurantService:
+        condition: service_healthy
+      orderService:
+        condition: service_healthy
+      deliveryService:
+        condition: service_healthy
+      userService:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - apiGateway
 
 volumes:
+  kafka-data:
   pg-restaurant-data:
   pg-order-data:
   pg-delivery-data:

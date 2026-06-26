@@ -5,33 +5,33 @@ spring:
   application:
     name: restaurantService
   datasource:
-    url: jdbc:postgresql://localhost:5331/restaurant_db
-    username: restaurant_user
-    password: restaurant_pass
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5331}/${DB_NAME:restaurant_db}
+    username: ${DB_USER:restaurant_user}
+    password: ${DB_PASSWORD:restaurant_pass}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
+    open-in-view: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: true
+    show-sql: false
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    locations: classpath:db/migration
 
 management:
   endpoints:
     web:
       exposure:
         include: health,prometheus,metrics
-  metrics:
-    export:
-      prometheus:
+  endpoint:
+    health:
+      probes:
         enabled: true
 
 springdoc:
   api-docs:
-    path: /api-docs
+    path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html

@@ -1,18 +1,14 @@
 package com.deliveryhub.contracts.events;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
+import com.deliveryhub.contracts.enums.DeliveryStatus;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class DeliveryStatusUpdatedEvent {
-    private Long deliveryId;
-    private Long orderId;
-    private String status;
-    private LocalDateTime updatedAt;
+import java.time.Instant;
+import java.util.UUID;
+
+public record DeliveryStatusUpdatedEvent(
+        UUID eventId,
+        Long deliveryId,
+        Long orderId,
+        DeliveryStatus status,
+        Instant updatedAt) implements IntegrationEvent {
 }

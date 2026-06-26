@@ -1,34 +1,23 @@
 package com.deliveryhub.contracts.events;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class OrderCreatedEvent {
-    private Long orderId;
-    private Long userId;
-    private Long restaurantId;
-    private BigDecimal totalAmount;
-    private LocalDateTime createdAt;
-    private List<OrderItemPayload> items;
+public record OrderCreatedEvent(
+        UUID eventId,
+        Long orderId,
+        Long userId,
+        Long restaurantId,
+        BigDecimal totalAmount,
+        Instant createdAt,
+        List<OrderItemPayload> items) implements IntegrationEvent {
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class OrderItemPayload {
-        private Long menuItemId;
-        private String itemName;
-        private Integer quantity;
-        private BigDecimal pricePerUnit;
+    public record OrderItemPayload(
+            Long menuItemId,
+            String itemName,
+            Integer quantity,
+            BigDecimal pricePerUnit) {
     }
 }

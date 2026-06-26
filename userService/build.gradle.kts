@@ -1,52 +1,25 @@
 plugins {
-    java
-    id("org.springframework.boot") version Versions.springBoot
-    id("io.spring.dependency-management") version Versions.springDependencyManagement
-}
-
-group = "com.deliveryhub"
-version = "1.0.0"
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    }
-}
-
-repositories {
-    mavenCentral()
+    id("deliveryhub.spring-service")
+    id("deliveryhub.integration-test")
 }
 
 dependencies {
-    implementation(Dependencies.springBootStarterWeb)
-    implementation(Dependencies.springBootStarterDataJpa)
-    implementation(Dependencies.springBootStarterValidation)
-    implementation(Dependencies.springBootStarterActuator)
+    implementation(libs.spring.boot.starter.webmvc)
+    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.security)
 
-    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation(libs.jjwt.api)
+    runtimeOnly(libs.bundles.jjwt.runtime)
 
-    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
+    runtimeOnly(libs.postgresql)
+    implementation(libs.spring.boot.starter.flyway)
+    runtimeOnly(libs.flyway.postgresql)
 
-    implementation(Dependencies.postgresql)
-    implementation(Dependencies.flywayCore)
-    implementation(Dependencies.flywayPostgresql)
+    implementation(libs.springdoc.webmvc.ui)
 
-    implementation(Dependencies.springdocOpenapi)
-    implementation(Dependencies.micrometerPrometheus)
+    implementation(libs.mapstruct)
+    annotationProcessor(libs.mapstruct.processor)
 
-    compileOnly(Dependencies.lombok)
-    annotationProcessor(Dependencies.lombok)
-
-    implementation(Dependencies.mapstruct)
-    annotationProcessor(Dependencies.mapstructProcessor)
-
-    implementation(project(":apiContracts"))
-
-    testImplementation(Dependencies.springBootStarterTest)
-    testImplementation("org.springframework.security:spring-security-test")
-    testImplementation(platform(Dependencies.testcontainersBom))
-    testImplementation(Dependencies.testcontainersJunit)
-    testImplementation(Dependencies.testcontainersPostgresql)
+    testImplementation(libs.spring.boot.starter.security.test)
 }
