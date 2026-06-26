@@ -8,8 +8,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -45,23 +43,26 @@ public class Delivery {
     protected Delivery() {
     }
 
-    private Delivery(Long orderId, Long courierId, Instant estimatedDeliveryTime) {
+    private Delivery(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.courierId = courierId;
         this.estimatedDeliveryTime = estimatedDeliveryTime;
         this.status = DeliveryStatus.ASSIGNED;
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.updatedAt = createdAt;
     }
 
-    public static Delivery forOrder(Long orderId) {
-        return new Delivery(orderId, null, null);
+    public static Delivery forOrder(Long orderId, Instant createdAt) {
+        return new Delivery(orderId, null, null, createdAt);
     }
 
-    public static Delivery forOrder(Long orderId, Long courierId, Instant estimatedDeliveryTime) {
-        return new Delivery(orderId, courierId, estimatedDeliveryTime);
+    public static Delivery forOrder(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
+        return new Delivery(orderId, courierId, estimatedDeliveryTime, createdAt);
     }
 
-    public void changeStatus(DeliveryStatus next) {
+    public void changeStatus(DeliveryStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
+        Objects.requireNonNull(at, "at");
         if (next == status) {
             return;
         }
@@ -70,13 +71,15 @@ public class Delivery {
                     "Delivery " + id + " cannot change status from " + status + " to " + next);
         }
         status = next;
+        updatedAt = at;
     }
 
-    public void assignCourier(Long courierId) {
+    public void assignCourier(Long courierId, Instant at) {
         if (isFinished()) {
             throw new IllegalStateException("Delivery " + id + " is already " + status);
         }
         this.courierId = Objects.requireNonNull(courierId, "courierId");
+        this.updatedAt = Objects.requireNonNull(at, "at");
     }
 
     public boolean isFinished() {
@@ -85,18 +88,6 @@ public class Delivery {
 
     private boolean isForward(DeliveryStatus next) {
         return next == DeliveryStatus.CANCELLED || next.ordinal() > status.ordinal();
-    }
-
-    @PrePersist
-    protected void onCreate() {
-        Instant now = Instant.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = Instant.now();
     }
 
     public Long getId() {
