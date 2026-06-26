@@ -15,6 +15,12 @@ java {
 
 repositories {
     mavenCentral()
+    maven("https://packages.confluent.io/maven/") {
+        content {
+            includeGroup("io.confluent")
+            includeGroup("org.apache.kafka")
+        }
+    }
 }
 
 tasks.withType<JavaCompile>().configureEach {

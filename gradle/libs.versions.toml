@@ -6,9 +6,13 @@ spring-dependency-management = "1.1.7"
 mapstruct = "1.6.3"
 springdoc = "3.0.3"
 jjwt = "0.13.0"
+avro = "1.12.1"
+avro-plugin = "1.9.1"
+confluent = "8.1.4"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-dependency-management-plugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "spring-dependency-management" }
 
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
@@ -37,6 +41,9 @@ jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
 jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
 jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+assertj-core = { module = "org.assertj:assertj-core" }
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
@@ -44,5 +51,11 @@ spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-bo
 testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 
+avro = { module = "org.apache.avro:avro", version.ref = "avro" }
+kafka-avro-serializer = { module = "io.confluent:kafka-avro-serializer", version.ref = "confluent" }
+
 [bundles]
 jjwt-runtime = ["jjwt-impl", "jjwt-jackson"]
+
+[plugins]
+avro = { id = "com.github.davidmc24.gradle.plugin.avro", version.ref = "avro-plugin" }
