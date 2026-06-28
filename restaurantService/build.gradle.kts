@@ -1,5 +1,5 @@
 plugins {
-    id("deliveryhub.spring-service")
+    id("deliveryhub.platform-client")
     id("deliveryhub.integration-test")
 }
 
