@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "OrderCreatedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "orderId", "type": "long"},
+    {"name": "userId", "type": "long"},
+    {"name": "restaurantId", "type": "long"},
+    {"name": "totalAmount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
+    {"name": "createdAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "items", "type": {"type": "array", "items": "com.deliveryhub.contracts.events.OrderItemPayload"}}
+  ]
+}

@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.cloud.starter.openfeign)
     implementation(libs.spring.boot.starter.kafka)
+    implementation(libs.kafka.avro.serializer)
 
     runtimeOnly(libs.postgresql)
     implementation(libs.spring.boot.starter.flyway)

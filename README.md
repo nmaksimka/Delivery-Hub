@@ -26,7 +26,7 @@
 4. **Order Service** создаёт заказ. `userId` берётся из токена, а не из тела запроса.
    Ресторан и каждая позиция меню проверяются по HTTP (Feign) — в том числе то,
    что блюдо принадлежит именно этому ресторану.
-5. После **коммита транзакции** заказа публикуется `OrderCreatedEvent`.
+5. Вместе с заказом в той же транзакции сохраняется `OrderCreatedEvent` (outbox), relay публикует его в Kafka.
 6. **Delivery Service** читает событие, идемпотентно создаёт доставку и публикует
    `DeliveryStatusUpdatedEvent` — как при автосоздании, так и при ручной смене статуса.
 7. **Order Service** переводит заказ в свой статус (`ASSIGNED` доставки → `CONFIRMED` заказа).
@@ -86,6 +86,7 @@ graph TB
 | **Фреймворк**        | Spring Boot 4.0.7                              |
 | **Микросервисы**     | Spring Cloud Gateway, OpenFeign                |
 | **Асинхронность**    | Kafka 4.1 (KRaft), outbox + inbox, DLT         |
+| **Контракты событий**| Avro 1.12, Confluent Schema Registry 8.1       |
 | **Базы данных**      | PostgreSQL 17, по одной на сервис              |
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
 | **Безопасность**     | Spring Security + JWT (jjwt 0.13.0)            |
@@ -120,6 +121,8 @@ Kafka работает в режиме KRaft одним узлом, ZooKeeper н
 | API Gateway              | http://localhost:3335                  |
 | Swagger UI (все сервисы) | http://localhost:3335/swagger-ui.html  |
 | Prometheus               | http://localhost:9090                  |
+| Kafka UI                 | http://localhost:8086                  |
+| Schema Registry          | http://localhost:8085                  |
 | PostgreSQL (order)       | localhost:5332                         |
 
 Порты 3331–3334 наружу не публикуются: обращаться к сервисам напрямую в обход
@@ -224,6 +227,15 @@ Authorization: Bearer <token>
 в `processed_events` и повторно пришедшее событие пропускает. Подробности и компромиссы —
 в [ADR 0002](docs/adr/0002-transactional-outbox.md).
 
+## Контракты событий
+
+События описаны схемами Avro в `apiContracts/src/main/avro`, Java-классы генерируются при сборке.
+В Kafka сообщения сериализует `KafkaAvroSerializer`: схема регистрируется в Schema Registry, а в сообщении
+едет только её идентификатор. Реестр не даст зарегистрировать версию схемы, несовместимую с предыдущей.
+В outbox событие лежит в двоичном Avro (`bytea`), поэтому создание заказа от реестра не зависит.
+Топики, сообщения и схемы удобно смотреть в Kafka UI. Подробности —
+в [ADR 0003](docs/adr/0003-avro-schema-registry.md).
+
 ## Тесты
 
 ```bash
@@ -238,6 +250,7 @@ Authorization: Bearer <token>
 гейтвея от подделки заголовков `X-User-*`.
 
 Интеграционные тесты (`*IT`, каталог `src/integrationTest`) поднимают PostgreSQL и Kafka в Testcontainers
+(реестр схем в тестах — встроенный `mock://`)
 и проверяют миграции Flyway, репозитории, REST API и обмен событиями между заказами и доставкой.
 Для них нужен запущенный Docker; задача `integrationTest` входит в `check`, поэтому `build` запускает и их.
 
@@ -245,7 +258,7 @@ Authorization: Bearer <token>
 
 ```text
 DeliveryHub/
-├── apiContracts/        # общие события и enum-ы для Kafka
+├── apiContracts/        # avro-схемы событий и имена топиков
 ├── apiGateway/          # маршрутизация, проверка JWT, роли
 ├── userService/         # регистрация, логин, выпуск JWT
 ├── restaurantService/   # каталог ресторанов и меню

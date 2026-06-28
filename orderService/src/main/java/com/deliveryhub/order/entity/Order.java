@@ -9,8 +9,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
@@ -53,15 +51,17 @@ public class Order {
     protected Order() {
     }
 
-    private Order(Long userId, Long restaurantId) {
+    private Order(Long userId, Long restaurantId, Instant placedAt) {
         this.userId = Objects.requireNonNull(userId, "userId");
         this.restaurantId = Objects.requireNonNull(restaurantId, "restaurantId");
         this.status = OrderStatus.CREATED;
         this.totalAmount = BigDecimal.ZERO;
+        this.createdAt = Objects.requireNonNull(placedAt, "placedAt");
+        this.updatedAt = placedAt;
     }
 
-    public static Order place(Long userId, Long restaurantId) {
-        return new Order(userId, restaurantId);
+    public static Order place(Long userId, Long restaurantId, Instant placedAt) {
+        return new Order(userId, restaurantId, placedAt);
     }
 
     public void addItem(Long menuItemId, String itemName, int quantity, BigDecimal pricePerUnit) {
@@ -73,8 +73,9 @@ public class Order {
         totalAmount = totalAmount.add(item.lineTotal());
     }
 
-    public void applyStatus(OrderStatus next) {
+    public void applyStatus(OrderStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
+        Objects.requireNonNull(at, "at");
         if (next == status) {
             return;
         }
@@ -82,22 +83,11 @@ public class Order {
             throw new IllegalStateException("Order " + id + " cannot change status from " + status + " to " + next);
         }
         status = next;
+        updatedAt = at;
     }
 
     public boolean belongsTo(Long userId) {
         return this.userId.equals(userId);
-    }
-
-    @PrePersist
-    protected void onCreate() {
-        Instant now = Instant.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = Instant.now();
     }
 
     public Long getId() {

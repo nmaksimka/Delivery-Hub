@@ -1,5 +1,7 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.contracts.EventPayloads;
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.order.outbox.OutboxEvent;
 import com.deliveryhub.order.outbox.OutboxEventRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +15,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -41,14 +44,15 @@ class OutboxEventRepositoryIT {
     }
 
     @Test
-    void storesPayloadAsJsonbAndReturnsPendingEventsOldestFirst() {
+    void storesAvroPayloadAndReturnsPendingEventsOldestFirst() {
         OutboxEvent newer = outboxEventRepository.save(event("2", BASE.plusSeconds(10)));
         OutboxEvent older = outboxEventRepository.save(event("1", BASE));
 
         List<OutboxEvent> batch = newTransaction.execute(status -> outboxEventRepository.lockNextBatch(10));
 
         assertThat(batch).extracting(OutboxEvent::getId).containsExactly(older.getId(), newer.getId());
-        assertThat(batch.getFirst().getPayload()).contains("\"orderId\"");
+        assertThat(EventPayloads.decode("order-created", batch.getFirst().getPayload()))
+                .isInstanceOfSatisfying(OrderCreatedEvent.class, event -> assertThat(event.getOrderId()).isEqualTo(1L));
     }
 
     @Test
@@ -84,6 +88,18 @@ class OutboxEventRepositoryIT {
 
     private static OutboxEvent event(String orderId, Instant createdAt) {
         return new OutboxEvent(UUID.randomUUID(), "Order", orderId, "order-created",
-                "{\"orderId\": " + orderId + "}", createdAt);
+                orderCreatedPayload(orderId), createdAt);
+    }
+
+    private static byte[] orderCreatedPayload(String orderId) {
+        return EventPayloads.encode(OrderCreatedEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setOrderId(Long.parseLong(orderId))
+                .setUserId(42L)
+                .setRestaurantId(1L)
+                .setTotalAmount(new BigDecimal("34.00"))
+                .setCreatedAt(BASE)
+                .setItems(List.of())
+                .build());
     }
 }

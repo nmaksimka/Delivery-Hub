@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "OrderItemPayload",
+  "fields": [
+    {"name": "menuItemId", "type": "long"},
+    {"name": "itemName", "type": "string"},
+    {"name": "quantity", "type": "int"},
+    {"name": "pricePerUnit", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}}
+  ]
+}

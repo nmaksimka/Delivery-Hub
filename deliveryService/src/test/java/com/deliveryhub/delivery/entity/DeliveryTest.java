@@ -5,14 +5,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DeliveryTest {
 
+    private static final Instant NOW = Instant.parse("2026-07-09T10:15:30Z");
+
     @Test
     void newDeliveryIsAssigned() {
-        assertThat(Delivery.forOrder(100L).getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+        assertThat(Delivery.forOrder(100L, NOW).getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
     }
 
     @ParameterizedTest
@@ -26,7 +30,7 @@ class DeliveryTest {
     void movesForward(DeliveryStatus from, DeliveryStatus to) {
         Delivery delivery = deliveryIn(from);
 
-        delivery.changeStatus(to);
+        delivery.changeStatus(to, NOW);
 
         assertThat(delivery.getStatus()).isEqualTo(to);
     }
@@ -42,7 +46,7 @@ class DeliveryTest {
     void rejectsBackwardAndPostFinalTransitions(DeliveryStatus from, DeliveryStatus to) {
         Delivery delivery = deliveryIn(from);
 
-        assertThatThrownBy(() -> delivery.changeStatus(to))
+        assertThatThrownBy(() -> delivery.changeStatus(to, NOW))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(from.name())
                 .hasMessageContaining(to.name());
@@ -52,7 +56,7 @@ class DeliveryTest {
     void sameStatusIsIgnored() {
         Delivery delivery = deliveryIn(DeliveryStatus.DELIVERED);
 
-        delivery.changeStatus(DeliveryStatus.DELIVERED);
+        delivery.changeStatus(DeliveryStatus.DELIVERED, NOW);
 
         assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
     }
@@ -61,14 +65,14 @@ class DeliveryTest {
     void courierCannotBeAssignedToFinishedDelivery() {
         Delivery delivery = deliveryIn(DeliveryStatus.CANCELLED);
 
-        assertThatThrownBy(() -> delivery.assignCourier(5L))
+        assertThatThrownBy(() -> delivery.assignCourier(5L, NOW))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     private static Delivery deliveryIn(DeliveryStatus status) {
-        Delivery delivery = Delivery.forOrder(100L);
+        Delivery delivery = Delivery.forOrder(100L, NOW);
         if (status != DeliveryStatus.ASSIGNED) {
-            delivery.changeStatus(status);
+            delivery.changeStatus(status, NOW);
         }
         return delivery;
     }

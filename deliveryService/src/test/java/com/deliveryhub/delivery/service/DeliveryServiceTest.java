@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -71,7 +72,7 @@ class DeliveryServiceTest {
         @DisplayName("создаёт доставку в статусе ASSIGNED и кладёт событие в outbox")
         void createsAssignedDeliveryAndAppendsEvent() {
             OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.ORDER_CREATED)).thenReturn(true);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(true);
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
             when(deliveryRepository.save(any(Delivery.class))).thenAnswer(inv -> {
                 Delivery delivery = inv.getArgument(0);
@@ -82,18 +83,18 @@ class DeliveryServiceTest {
             deliveryService.createDeliveryFromOrderEvent(event);
 
             DeliveryStatusUpdatedEvent published = appendedEvent(7L);
-            assertThat(published.eventId()).isNotNull().isNotEqualTo(event.eventId());
-            assertThat(published.orderId()).isEqualTo(ORDER_ID);
-            assertThat(published.deliveryId()).isEqualTo(7L);
-            assertThat(published.status()).isEqualTo(DeliveryStatus.ASSIGNED);
-            assertThat(published.updatedAt()).isEqualTo(NOW);
+            assertThat(published.getEventId()).isNotNull().isNotEqualTo(event.getEventId());
+            assertThat(published.getOrderId()).isEqualTo(ORDER_ID);
+            assertThat(published.getDeliveryId()).isEqualTo(7L);
+            assertThat(published.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(published.getUpdatedAt()).isEqualTo(NOW);
         }
 
         @Test
         @DisplayName("событие с уже обработанным eventId пропускается целиком")
         void skipsAlreadyProcessedEvent() {
             OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.ORDER_CREATED)).thenReturn(false);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(false);
 
             deliveryService.createDeliveryFromOrderEvent(event);
 
@@ -104,7 +105,7 @@ class DeliveryServiceTest {
         @DisplayName("новое событие по заказу с существующей доставкой не создаёт дубль")
         void doesNotDuplicateDeliveryForSameOrder() {
             OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.ORDER_CREATED)).thenReturn(true);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(true);
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
             deliveryService.createDeliveryFromOrderEvent(event);
@@ -128,7 +129,7 @@ class DeliveryServiceTest {
             deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null));
 
             assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
-            assertThat(appendedEvent(1L).status()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
         }
 
         @Test
@@ -147,7 +148,7 @@ class DeliveryServiceTest {
         @DisplayName("недопустимый переход не оставляет события в outbox")
         void rejectedTransitionAppendsNothing() {
             Delivery delivery = existingDelivery();
-            delivery.changeStatus(DeliveryStatus.DELIVERED);
+            delivery.changeStatus(DeliveryStatus.DELIVERED, NOW);
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
 
             assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(1L,
@@ -184,16 +185,17 @@ class DeliveryServiceTest {
 
     private DeliveryStatusUpdatedEvent appendedEvent(long deliveryId) {
         ArgumentCaptor<DeliveryStatusUpdatedEvent> captor = ArgumentCaptor.forClass(DeliveryStatusUpdatedEvent.class);
-        verify(outbox).append(eq("Delivery"), eq(deliveryId), eq(Topics.DELIVERY_STATUS_UPDATED), captor.capture());
+        verify(outbox).append(eq("Delivery"), eq(deliveryId), eq(Topics.DELIVERY_STATUS_UPDATED), any(),
+                captor.capture());
         return captor.getValue();
     }
 
     private static OrderCreatedEvent orderCreated() {
-        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, null, null, null, null, List.of());
+        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of());
     }
 
     private static Delivery existingDelivery() {
-        Delivery delivery = Delivery.forOrder(ORDER_ID);
+        Delivery delivery = Delivery.forOrder(ORDER_ID, NOW);
         ReflectionTestUtils.setField(delivery, "id", 1L);
         return delivery;
     }

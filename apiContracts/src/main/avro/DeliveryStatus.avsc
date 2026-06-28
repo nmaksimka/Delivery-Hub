@@ -1,0 +1,6 @@
+{
+  "type": "enum",
+  "namespace": "com.deliveryhub.contracts.enums",
+  "name": "DeliveryStatus",
+  "symbols": ["ASSIGNED", "PICKED_UP", "IN_TRANSIT", "DELIVERED", "CANCELLED"]
+}
