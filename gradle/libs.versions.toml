@@ -25,6 +25,10 @@ spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-sta
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-starter-security-test = { module = "org.springframework.boot:spring-boot-starter-security-test" }
 spring-cloud-starter-openfeign = { module = "org.springframework.cloud:spring-cloud-starter-openfeign" }
+spring-cloud-starter-eureka-server = { module = "org.springframework.cloud:spring-cloud-starter-netflix-eureka-server" }
+spring-cloud-starter-eureka-client = { module = "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client" }
+spring-cloud-config-server = { module = "org.springframework.cloud:spring-cloud-config-server" }
+spring-cloud-starter-config = { module = "org.springframework.cloud:spring-cloud-starter-config" }
 spring-cloud-starter-gateway = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webflux" }
 
 postgresql = { module = "org.postgresql:postgresql" }
