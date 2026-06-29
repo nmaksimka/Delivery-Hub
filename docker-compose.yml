@@ -121,6 +121,40 @@ services:
       - pg-user-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
 
+  discoveryServer:
+    image: deliveryhub-discovery-server
+    build:
+      context: .
+      dockerfile: ./discoveryServer/Dockerfile
+    container_name: discoveryServer
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_HOSTNAME: discoveryServer
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  configServer:
+    image: deliveryhub-config-server
+    build:
+      context: .
+      dockerfile: ./configServer/Dockerfile
+    container_name: configServer
+    ports:
+      - "8888:8888"
+    environment:
+      CONFIG_REPO_LOCATION: file:/config-repo
+    volumes:
+      - ./config-repo:/config-repo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   restaurantService:
     image: deliveryhub-restaurant-service
     build:
@@ -129,8 +163,13 @@ services:
     container_name: restaurantService
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-restaurant:
         condition: service_healthy
     healthcheck:
@@ -147,8 +186,13 @@ services:
     container_name: orderService
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-order:
         condition: service_healthy
       kafka:
@@ -171,8 +215,13 @@ services:
     container_name: deliveryService
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-delivery:
         condition: service_healthy
       kafka:
@@ -193,9 +242,14 @@ services:
     container_name: userService
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-user:
         condition: service_healthy
     healthcheck:
@@ -214,8 +268,13 @@ services:
       - "3335:3335"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://configServer:8888
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       restaurantService:
         condition: service_healthy
       orderService:
