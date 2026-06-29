@@ -8,51 +8,64 @@ app:
 spring:
   application:
     name: apiGateway
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
   cloud:
     inetutils:
       ignored-interfaces:
         - .*
+    discovery:
+      client:
+        simple:
+          instances:
+            restaurantService:
+              - uri: http://localhost:3331
+            orderService:
+              - uri: http://localhost:3332
+            deliveryService:
+              - uri: http://localhost:3333
+            userService:
+              - uri: http://localhost:3334
     gateway:
       server:
         webflux:
           routes:
             - id: restaurant-service
-              uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
+              uri: lb://restaurantService
               predicates:
                 - Path=/api/restaurants/**
             - id: order-service
-              uri: ${ORDER_SERVICE_URL:http://localhost:3332}
+              uri: lb://orderService
               predicates:
                 - Path=/api/orders/**
             - id: delivery-service
-              uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+              uri: lb://deliveryService
               predicates:
                 - Path=/api/deliveries/**
             - id: user-service
-              uri: ${USER_SERVICE_URL:http://localhost:3334}
+              uri: lb://userService
               predicates:
                 - Path=/api/auth/**
-
             - id: restaurant-docs
-              uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
+              uri: lb://restaurantService
               predicates:
                 - Path=/docs/restaurants/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: order-docs
-              uri: ${ORDER_SERVICE_URL:http://localhost:3332}
+              uri: lb://orderService
               predicates:
                 - Path=/docs/orders/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: delivery-docs
-              uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+              uri: lb://deliveryService
               predicates:
                 - Path=/docs/deliveries/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: user-docs
-              uri: ${USER_SERVICE_URL:http://localhost:3334}
+              uri: lb://userService
               predicates:
                 - Path=/docs/users/v3/api-docs
               filters:
