@@ -1,0 +1,18 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /docs/users/v3/api-docs
+      - name: restaurant-service
+        url: /docs/restaurants/v3/api-docs
+      - name: order-service
+        url: /docs/orders/v3/api-docs
+      - name: delivery-service
+        url: /docs/deliveries/v3/api-docs

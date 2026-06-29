@@ -6,6 +6,8 @@ rootProject.name = "DeliveryHub"
 
 listOf(
     "apiContracts",
+    "discoveryServer",
+    "configServer",
     "apiGateway",
     "orderService",
     "restaurantService",

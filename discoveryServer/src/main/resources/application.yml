@@ -1,0 +1,33 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: discoveryServer
+  security:
+    user:
+      name: ${EUREKA_USER:eureka}
+      password: ${EUREKA_PASSWORD:local-dev-eureka-password}
+
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:localhost}
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${spring.security.user.name}:${spring.security.user.password}@${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 10000
+    response-cache-update-interval-ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

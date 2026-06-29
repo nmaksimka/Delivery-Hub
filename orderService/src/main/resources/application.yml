@@ -4,10 +4,21 @@ server:
 spring:
   application:
     name: orderService
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
   cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
     inetutils:
       ignored-interfaces:
         - .*
+    discovery:
+      client:
+        simple:
+          instances:
+            restaurantService:
+              - uri: http://localhost:3331
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5332}/${DB_NAME:order_db}
     username: ${DB_USER:order_user}
@@ -43,12 +54,15 @@ spring:
       avro.use.logical.type.converters: true
 
 app:
-  restaurant-service:
-    url: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
   outbox:
     poll-interval: 1s
     batch-size: 50
     send-timeout: 5s
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
 
 management:
   endpoints:

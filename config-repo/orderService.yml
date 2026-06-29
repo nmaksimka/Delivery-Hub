@@ -1,0 +1,17 @@
+app:
+  outbox:
+    poll-interval: 1s
+    batch-size: 50
+    send-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

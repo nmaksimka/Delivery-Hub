@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: userService
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5334}/${DB_NAME:user_db}
     username: ${DB_USER:user_user}
@@ -24,6 +30,11 @@ app:
   jwt:
     secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
 
 management:
   endpoints:
