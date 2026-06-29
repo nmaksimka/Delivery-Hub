@@ -7,6 +7,9 @@ spring:
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
   cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
     inetutils:
       ignored-interfaces:
         - .*
@@ -55,6 +58,11 @@ app:
     poll-interval: 1s
     batch-size: 50
     send-timeout: 5s
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
 
 management:
   endpoints:
