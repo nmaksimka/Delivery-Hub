@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
+    implementation(libs.spring.boot.starter.security)
     implementation(libs.spring.cloud.config.server)
 }
 

@@ -6,15 +6,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.cloud.config.server.native.search-locations=file:../config-repo")
+        properties = {
+                "spring.cloud.config.server.native.search-locations=file:../config-repo",
+                "spring.security.user.password=test-config-password"})
 class ConfigServerTest {
 
     @Value("${local.server.port}")
@@ -43,7 +47,9 @@ class ConfigServerTest {
 
         List<String> eurekaZones = JsonPath.read(config,
                 "$.propertySources[?(@.name =~ /.*application-docker.yml/)].source['eureka.client.service-url.defaultZone']");
-        assertThat(eurekaZones).containsExactly("http://discoveryServer:8761/eureka/");
+        assertThat(eurekaZones).singleElement().asString()
+                .endsWith("@discoveryServer:8761/eureka/")
+                .contains("${EUREKA_PASSWORD:");
     }
 
     @Test
@@ -54,8 +60,22 @@ class ConfigServerTest {
         assertThat(batchSize).isEqualTo(50);
     }
 
+    @Test
+    void refusesToServeSettingsWithoutCredentials() {
+        RestClient anonymous = RestClient.create("http://localhost:" + port);
+
+        assertThatThrownBy(() -> anonymous.get().uri("/orderService/docker").retrieve().body(String.class))
+                .isInstanceOf(HttpClientErrorException.Unauthorized.class);
+        assertThat(anonymous.get().uri("/actuator/health/readiness").retrieve().toBodilessEntity()
+                .getStatusCode().value()).isEqualTo(200);
+    }
+
     private String config(String service, String profile) {
-        return RestClient.create("http://localhost:" + port).get()
+        return RestClient.builder()
+                .baseUrl("http://localhost:" + port)
+                .defaultHeaders(headers -> headers.setBasicAuth("config", "test-config-password"))
+                .build()
+                .get()
                 .uri("/{service}/{profile}", service, profile)
                 .retrieve()
                 .body(String.class);
