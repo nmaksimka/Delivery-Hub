@@ -21,3 +21,12 @@ scrape_configs:
           - apiGateway:9335
         labels:
           system: deliveryhub
+
+  - job_name: platform
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - discoveryServer:8761
+          - configServer:8888
+        labels:
+          system: deliveryhub
