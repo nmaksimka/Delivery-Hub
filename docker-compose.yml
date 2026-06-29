@@ -6,6 +6,13 @@ x-postgres-healthcheck: &pg-healthcheck
   timeout: 5s
   retries: 10
 
+x-platform-credentials: &platform-credentials
+  CONFIG_SERVER_URL: http://configServer:8888
+  CONFIG_USER: ${CONFIG_USER:-config}
+  CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
+  EUREKA_USER: ${EUREKA_USER:-eureka}
+  EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
+
 services:
   kafka:
     image: apache/kafka:4.1.2
@@ -128,9 +135,11 @@ services:
       dockerfile: ./discoveryServer/Dockerfile
     container_name: discoveryServer
     ports:
-      - "8761:8761"
+      - "127.0.0.1:8761:8761"
     environment:
       EUREKA_HOSTNAME: discoveryServer
+      EUREKA_USER: ${EUREKA_USER:-eureka}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health/readiness || exit 1"]
       interval: 10s
@@ -144,9 +153,11 @@ services:
       dockerfile: ./configServer/Dockerfile
     container_name: configServer
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     environment:
       CONFIG_REPO_LOCATION: file:/config-repo
+      CONFIG_USER: ${CONFIG_USER:-config}
+      CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
     volumes:
       - ./config-repo:/config-repo:ro
     healthcheck:
@@ -162,8 +173,8 @@ services:
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
     environment:
+      <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
       configServer:
@@ -185,8 +196,8 @@ services:
       dockerfile: ./orderService/Dockerfile
     container_name: orderService
     environment:
+      <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
       configServer:
@@ -214,8 +225,8 @@ services:
       dockerfile: ./deliveryService/Dockerfile
     container_name: deliveryService
     environment:
+      <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     depends_on:
       configServer:
@@ -241,8 +252,8 @@ services:
       dockerfile: ./userService/Dockerfile
     container_name: userService
     environment:
+      <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      CONFIG_SERVER_URL: http://configServer:8888
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
@@ -267,8 +278,8 @@ services:
     ports:
       - "3335:3335"
     environment:
+      <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      CONFIG_SERVER_URL: http://configServer:8888
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
       configServer:
