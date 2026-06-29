@@ -13,6 +13,7 @@
 
 Пять сервисов, у каждого своя БД. Синхронное взаимодействие — через Feign,
 асинхронное — через Kafka. Единственная публичная точка входа — API Gateway.
+Сервисы находят друг друга через Eureka, а настройки окружения получают из Config Server.
 
 ## Как это работает
 
@@ -84,7 +85,7 @@ graph TB
 |:---------------------|:-----------------------------------------------|
 | **Язык**             | Java 25                                        |
 | **Фреймворк**        | Spring Boot 4.0.7                              |
-| **Микросервисы**     | Spring Cloud Gateway, OpenFeign                |
+| **Микросервисы**     | Spring Cloud Gateway, OpenFeign, Eureka, Config|
 | **Асинхронность**    | Kafka 4.1 (KRaft), outbox + inbox, DLT         |
 | **Контракты событий**| Avro 1.12, Confluent Schema Registry 8.1       |
 | **Базы данных**      | PostgreSQL 17, по одной на сервис              |
@@ -121,6 +122,8 @@ Kafka работает в режиме KRaft одним узлом, ZooKeeper н
 | API Gateway              | http://localhost:3335                  |
 | Swagger UI (все сервисы) | http://localhost:3335/swagger-ui.html  |
 | Prometheus               | http://localhost:9090                  |
+| Eureka (список сервисов) | http://localhost:8761                  |
+| Config Server            | http://localhost:8888/orderService/docker |
 | Kafka UI                 | http://localhost:8086                  |
 | Schema Registry          | http://localhost:8085                  |
 | PostgreSQL (order)       | localhost:5332                         |
@@ -227,6 +230,34 @@ Authorization: Bearer <token>
 в `processed_events` и повторно пришедшее событие пропускает. Подробности и компромиссы —
 в [ADR 0002](docs/adr/0002-transactional-outbox.md).
 
+## Обнаружение сервисов и конфигурация
+
+`discoveryServer` — Eureka: каждый сервис при старте регистрируется под своим `spring.application.name`.
+Гейтвей описывает маршруты как `lb://orderService`, а Feign-клиент заказов обращается к `restaurantService`
+по имени; конкретный экземпляр выбирает Spring Cloud LoadBalancer. Адресов сервисов в настройках больше нет.
+
+`configServer` — Spring Cloud Config в режиме `native`: раздаёт файлы из каталога `config-repo/`.
+
+| Файл в `config-repo/`          | Кому достаётся                               |
+|:-------------------------------|:---------------------------------------------|
+| `application.yml`              | всем сервисам                                |
+| `application-docker.yml`       | всем сервисам в профиле `docker`             |
+| `orderService.yml`             | только сервису заказов                       |
+| `orderService-docker.yml`      | сервису заказов в профиле `docker`           |
+
+В `application.yml` внутри сервиса остались только значения по умолчанию для локального запуска.
+Импорт объявлен как `optional:configserver:`, поэтому сервис стартует и без Config Server, а если недоступна
+Eureka, запросы идут на `localhost` (запасной список в `spring.cloud.discovery.client.simple`).
+В тестах оба клиента выключены convention-плагином `deliveryhub.platform-client`.
+
+Локальный запуск всей платформы без Docker:
+
+```bash
+./gradlew :discoveryServer:bootRun
+./gradlew :configServer:bootRun
+./gradlew :orderService:bootRun
+```
+
 ## Контракты событий
 
 События описаны схемами Avro в `apiContracts/src/main/avro`, Java-классы генерируются при сборке.
@@ -259,6 +290,9 @@ Authorization: Bearer <token>
 ```text
 DeliveryHub/
 ├── apiContracts/        # avro-схемы событий и имена топиков
+├── discoveryServer/     # Eureka: реестр сервисов
+├── configServer/        # Spring Cloud Config, раздаёт config-repo
+├── config-repo/         # настройки сервисов по окружениям
 ├── apiGateway/          # маршрутизация, проверка JWT, роли
 ├── userService/         # регистрация, логин, выпуск JWT
 ├── restaurantService/   # каталог ресторанов и меню
