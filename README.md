@@ -101,7 +101,7 @@ graph TB
 ```bash
 git clone https://github.com/nmaksimka/Delivery-Hub.git
 cd Delivery-Hub
-cp .env.example .env      # обязательно: задайте JWT_SECRET
+cp .env.example .env      # обязательно: задайте JWT_SECRET и пароли eureka / config
 docker compose up --build
 ```
 
@@ -249,6 +249,12 @@ Authorization: Bearer <token>
 Импорт объявлен как `optional:configserver:`, поэтому сервис стартует и без Config Server, а если недоступна
 Eureka, запросы идут на `localhost` (запасной список в `spring.cloud.discovery.client.simple`).
 В тестах оба клиента выключены convention-плагином `deliveryhub.platform-client`.
+
+Оба сервера закрыты basic auth: без логина и пароля нельзя ни зарегистрироваться в реестре, ни прочитать
+настройки. Учётные данные задаются в `.env` (`EUREKA_USER` / `EUREKA_PASSWORD`, `CONFIG_USER` / `CONFIG_PASSWORD`),
+без них compose не стартует. Пароль Eureka попадает в URL, поэтому в нём допустимы только буквы, цифры,
+`-`, `_` и `.`. Порты 8761 и 8888 опубликованы только на `127.0.0.1`; открытыми остаются лишь
+`/actuator/health` и `/actuator/prometheus`.
 
 Локальный запуск всей платформы без Docker:
 
