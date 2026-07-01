@@ -19,6 +19,16 @@ spring:
           instances:
             restaurantService:
               - uri: http://localhost:3331
+    openfeign:
+      circuitbreaker:
+        enabled: true
+        group:
+          enabled: true
+      client:
+        config:
+          restaurantService:
+            connect-timeout: 1000
+            read-timeout: 2000
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5332}/${DB_NAME:order_db}
     username: ${DB_USER:order_user}
@@ -52,6 +62,36 @@ spring:
     properties:
       schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8085}
       avro.use.logical.type.converters: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      restaurantService:
+        sliding-window-type: count_based
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        ignore-exceptions:
+          - feign.FeignException$FeignClientException
+  timelimiter:
+    configs:
+      restaurantService:
+        timeout-duration: 3s
+        cancel-running-future: true
+  retry:
+    instances:
+      restaurantService:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.deliveryhub.order.client.RestaurantServiceUnavailableException
+        ignore-exceptions:
+          - com.deliveryhub.order.client.RestaurantCircuitOpenException
 
 app:
   outbox:
