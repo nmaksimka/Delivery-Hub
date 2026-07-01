@@ -4,7 +4,7 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
-import com.deliveryhub.order.client.RestaurantServiceClient;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -18,7 +18,6 @@ import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
-import feign.FeignException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,20 +39,20 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
-    private final RestaurantServiceClient restaurantServiceClient;
+    private final RestaurantCatalog restaurantCatalog;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final Clock clock;
 
     public OrderService(OrderRepository orderRepository,
                         OrderMapper orderMapper,
-                        RestaurantServiceClient restaurantServiceClient,
+                        RestaurantCatalog restaurantCatalog,
                         Outbox outbox,
                         ProcessedEvents processedEvents,
                         Clock clock) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
-        this.restaurantServiceClient = restaurantServiceClient;
+        this.restaurantCatalog = restaurantCatalog;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.clock = clock;
@@ -81,7 +80,7 @@ public class OrderService {
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
         log.info("Creating order for user {} from restaurant {}", userId, createRequest.restaurantId());
 
-        RestaurantDto restaurant = fetchRestaurant(createRequest.restaurantId());
+        RestaurantDto restaurant = restaurantCatalog.restaurant(createRequest.restaurantId());
         if (!restaurant.active()) {
             throw new IllegalStateException("Restaurant " + restaurant.id() + " is not active");
         }
@@ -89,7 +88,7 @@ public class OrderService {
         Order order = Order.place(userId, createRequest.restaurantId(), clock.instant());
 
         for (OrderItemRequest itemRequest : createRequest.orderItemsRequest()) {
-            MenuItemDto menuItem = fetchMenuItem(createRequest.restaurantId(), itemRequest.menuItemId());
+            MenuItemDto menuItem = restaurantCatalog.menuItem(createRequest.restaurantId(), itemRequest.menuItemId());
 
             if (!menuItem.available()) {
                 throw new IllegalStateException("Menu item " + menuItem.id() + " is not available");
@@ -144,22 +143,5 @@ public class OrderService {
                 .setCreatedAt(order.getCreatedAt())
                 .setItems(items)
                 .build();
-    }
-
-    private RestaurantDto fetchRestaurant(Long restaurantId) {
-        try {
-            return restaurantServiceClient.getRestaurantById(restaurantId);
-        } catch (FeignException.NotFound err) {
-            throw new EntityNotFoundException("Restaurant with ID: " + restaurantId + " was not found");
-        }
-    }
-
-    private MenuItemDto fetchMenuItem(Long restaurantId, Long menuItemId) {
-        try {
-            return restaurantServiceClient.getMenuItemById(restaurantId, menuItemId);
-        } catch (FeignException.NotFound err) {
-            throw new EntityNotFoundException(
-                    "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId);
-        }
     }
 }

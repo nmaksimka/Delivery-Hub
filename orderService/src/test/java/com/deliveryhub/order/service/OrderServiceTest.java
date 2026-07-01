@@ -5,6 +5,7 @@ import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -22,6 +23,8 @@ import com.deliveryhub.order.security.CurrentUser;
 import feign.Request;
 import feign.RequestTemplate;
 import feign.FeignException;
+import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.retry.RetryRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -82,7 +85,8 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orderRepository, orderMapper, restaurantServiceClient, outbox,
+        orderService = new OrderService(orderRepository, orderMapper,
+                new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
                 processedEvents, Clock.fixed(NOW, ZoneOffset.UTC));
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
