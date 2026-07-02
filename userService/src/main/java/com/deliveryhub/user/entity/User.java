@@ -7,8 +7,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -52,28 +50,19 @@ public class User implements UserDetails {
     protected User() {
     }
 
-    private User(String email, String passwordHash, String name, String phone, Role role) {
+    private User(String email, String passwordHash, String name, String phone, Role role, Instant registeredAt) {
         this.email = Objects.requireNonNull(email, "email");
         this.password = Objects.requireNonNull(passwordHash, "passwordHash");
         this.name = Objects.requireNonNull(name, "name");
         this.phone = phone;
         this.role = Objects.requireNonNull(role, "role");
+        this.createdAt = Objects.requireNonNull(registeredAt, "registeredAt");
+        this.updatedAt = registeredAt;
     }
 
-    public static User register(String email, String passwordHash, String name, String phone) {
-        return new User(email, passwordHash, name, phone, Role.USER);
-    }
-
-    @PrePersist
-    protected void onCreate() {
-        Instant now = Instant.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = Instant.now();
+    public static User register(String email, String passwordHash, String name, String phone,
+                                Instant registeredAt) {
+        return new User(email, passwordHash, name, phone, Role.USER, registeredAt);
     }
 
     public Long getId() {
