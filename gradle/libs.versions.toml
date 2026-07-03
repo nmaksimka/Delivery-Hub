@@ -5,7 +5,6 @@ spring-cloud = "2025.1.2"
 spring-dependency-management = "1.1.7"
 mapstruct = "1.6.3"
 springdoc = "3.0.3"
-jjwt = "0.13.0"
 wiremock = "3.13.2"
 avro = "1.12.1"
 avro-plugin = "1.9.1"
@@ -45,10 +44,6 @@ mapstruct-processor = { module = "org.mapstruct:mapstruct-processor", version.re
 springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 springdoc-webflux-ui = { module = "org.springdoc:springdoc-openapi-starter-webflux-ui", version.ref = "springdoc" }
 
-jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
-jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
-jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
-
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 assertj-core = { module = "org.assertj:assertj-core" }
@@ -64,7 +59,6 @@ avro = { module = "org.apache.avro:avro", version.ref = "avro" }
 kafka-avro-serializer = { module = "io.confluent:kafka-avro-serializer", version.ref = "confluent" }
 
 [bundles]
-jjwt-runtime = ["jjwt-impl", "jjwt-jackson"]
 
 [plugins]
 avro = { id = "com.github.davidmc24.gradle.plugin.avro", version.ref = "avro-plugin" }
