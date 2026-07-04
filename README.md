@@ -94,6 +94,7 @@ graph TB
 | **Базы данных**      | PostgreSQL 17, по одной на сервис              |
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
 | **Безопасность**     | Spring Security, JWT RS256 + JWKS, refresh-токены |
+| **Rate limiting**    | Redis 8 + RequestRateLimiter на гейтвее        |
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
 | **Тесты**            | JUnit + Mockito + AssertJ, Testcontainers      |
 | **Метрики**          | Actuator + Micrometer + Prometheus             |
@@ -247,6 +248,19 @@ Authorization: Bearer <accessToken>
 - На `/api/auth/**` гейтвей не смотрит на заголовок `Authorization`: просроченный access-токен
   не мешает обновить пару.
 
+## Ограничение частоты запросов
+
+Гейтвей считает запросы в Redis (`RequestRateLimiter`, алгоритм token bucket):
+
+| Что ограничивается       | Ключ                                   | Лимит по умолчанию            |
+|:-------------------------|:---------------------------------------|:------------------------------|
+| любой маршрут            | `uid` из токена, для анонимов — IP     | 20 запросов/с, всплеск до 40  |
+| `POST /api/auth/login`   | IP                                     | 1 попытка/с, всплеск до 5     |
+
+Сверх лимита гейтвей отвечает `429` в формате `ProblemDetail` с заголовком `Retry-After`; до сервисов
+такой запрос не доходит. Лимиты задаются в `app.rate-limit.*` (`config-repo/apiGateway.yml`).
+Если Redis недоступен, запросы пропускаются: лимит — защита от перебора и шума, а не причина лечь всем API.
+
 ## Статусы
 
 - **Заказ**: `CREATED` → `CONFIRMED` → `IN_DELIVERY` → `DELIVERED` / `CANCELLED`
@@ -333,7 +347,7 @@ Eureka, запросы идут на `localhost` (запасной список 
 событий, изоляцию меню по ресторану, выпуск JWT и ротацию refresh-токенов, а также защиту
 гейтвея: проверку подписи по JWKS и затирание заголовков `X-User-*`.
 
-Интеграционные тесты (`*IT`, каталог `src/integrationTest`) поднимают PostgreSQL и Kafka в Testcontainers
+Интеграционные тесты (`*IT`, каталог `src/integrationTest`) поднимают PostgreSQL, Kafka и Redis в Testcontainers
 (реестр схем в тестах — встроенный `mock://`)
 и проверяют миграции Flyway, репозитории, REST API и обмен событиями между заказами и доставкой.
 Для них нужен запущенный Docker; задача `integrationTest` входит в `check`, поэтому `build` запускает и их.

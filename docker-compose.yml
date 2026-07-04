@@ -76,6 +76,16 @@ services:
       schema-registry:
         condition: service_healthy
 
+  redis:
+    image: redis:8.6.3-alpine
+    container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   postgres-restaurant:
     image: postgres:17.9-alpine
     container_name: postgres-restaurant
@@ -281,6 +291,8 @@ services:
       <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
     depends_on:
+      redis:
+        condition: service_healthy
       configServer:
         condition: service_healthy
       discoveryServer:
