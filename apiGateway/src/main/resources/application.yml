@@ -5,12 +5,24 @@ app:
   jwt:
     jwk-set-uri: ${JWT_JWK_SET_URI:http://userService/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:deliveryhub}
+  rate-limit:
+    common:
+      replenish-rate: 20
+      burst-capacity: 40
+    login:
+      replenish-rate: 1
+      burst-capacity: 5
+      requested-tokens: 1
 
 spring:
   application:
     name: apiGateway
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   cloud:
     config:
       username: ${CONFIG_USER:config}
@@ -33,7 +45,24 @@ spring:
     gateway:
       server:
         webflux:
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: ${app.rate-limit.common.replenish-rate}
+                redis-rate-limiter.burstCapacity: ${app.rate-limit.common.burst-capacity}
+                key-resolver: "#{@userOrIpKeyResolver}"
           routes:
+            - id: auth-login
+              uri: lb://userService
+              predicates:
+                - Path=/api/auth/login
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: ${app.rate-limit.login.replenish-rate}
+                    redis-rate-limiter.burstCapacity: ${app.rate-limit.login.burst-capacity}
+                    redis-rate-limiter.requestedTokens: ${app.rate-limit.login.requested-tokens}
+                    key-resolver: "#{@loginAttemptKeyResolver}"
             - id: restaurant-service
               uri: lb://restaurantService
               predicates:
