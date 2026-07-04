@@ -17,10 +17,12 @@
 
 ## Как это работает
 
-1. Пользователь регистрируется и логинится в **User Service**, получает JWT.
-   В токене лежат `sub` (email), `uid` (id пользователя) и `role`.
-2. **API Gateway** проверяет подпись токена и пробрасывает личность вниз
-   заголовками `X-User-Id` / `X-User-Email` / `X-User-Role`. Входящие заголовки
+1. Пользователь регистрируется и логинится в **User Service**, получает пару токенов: короткий
+   access-токен (JWT, RS256, 15 минут) и непрозрачный refresh-токен (30 дней).
+   В access-токене лежат `sub` (email), `uid` (id пользователя) и `role`.
+2. **API Gateway** проверяет подпись токена публичным ключом, который берёт у User Service
+   (`/.well-known/jwks.json`), и пробрасывает личность вниз заголовками
+   `X-User-Id` / `X-User-Email` / `X-User-Role`. Входящие заголовки
    `X-User-*` от клиента всегда затираются — подделать их нельзя.
 3. Каталог ресторанов и меню читается из **Restaurant Service** без токена;
    изменять каталог может только `ADMIN`.
@@ -91,7 +93,7 @@ graph TB
 | **Контракты событий**| Avro 1.12, Confluent Schema Registry 8.1       |
 | **Базы данных**      | PostgreSQL 17, по одной на сервис              |
 | **Миграции**         | Flyway (`ddl-auto: validate`)                  |
-| **Безопасность**     | Spring Security + JWT (jjwt 0.13.0)            |
+| **Безопасность**     | Spring Security, JWT RS256 + JWKS, refresh-токены |
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
 | **Тесты**            | JUnit + Mockito + AssertJ, Testcontainers      |
 | **Метрики**          | Actuator + Micrometer + Prometheus             |
@@ -102,15 +104,15 @@ graph TB
 ```bash
 git clone https://github.com/nmaksimka/Delivery-Hub.git
 cd Delivery-Hub
-cp .env.example .env      # обязательно: задайте JWT_SECRET и пароли eureka / config
+cp .env.example .env      # обязательно: задайте пароли eureka / config
 docker compose up --build
 ```
 
-`JWT_SECRET` обязателен — без него compose не стартует. Секрет должен быть
-не короче 32 байт и одинаковым для `userService` и `apiGateway`:
+`JWT_PRIVATE_KEY` можно не задавать: тогда User Service при старте сгенерирует временный RSA-ключ,
+и после перезапуска все выданные токены перестанут приниматься. Постоянный ключ (PKCS#8, одной строкой):
 
 ```bash
-openssl rand -base64 48
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 -w0
 ```
 
 Kafka работает в режиме KRaft одним узлом, ZooKeeper не нужен. Если остались тома от прошлой версии
@@ -164,14 +166,26 @@ Content-Type: application/json
 }
 ```
 
-Ответ содержит `token` — его подставляем в заголовок `Authorization`.
+Ответ содержит `accessToken` — его подставляем в заголовок `Authorization` — и `refreshToken`.
+
+### 2.1. Обновление токенов и выход
+
+```http
+POST http://localhost:3335/api/auth/refresh
+Content-Type: application/json
+
+{ "refreshToken": "<refreshToken>" }
+```
+
+В ответ приходит новая пара, старый refresh-токен больше не действует.
+`POST /api/auth/logout` с тем же телом отзывает refresh-токен (ответ `204`).
 
 ### 3. Создание заказа
 
 ```http
 POST http://localhost:3335/api/orders
 Content-Type: application/json
-Authorization: Bearer <token>
+Authorization: Bearer <accessToken>
 
 {
   "restaurantId": 1,
@@ -187,7 +201,7 @@ Authorization: Bearer <token>
 
 ```http
 GET http://localhost:3335/api/orders?page=0&size=20
-Authorization: Bearer <token>
+Authorization: Bearer <accessToken>
 ```
 
 ### 5. Смена статуса доставки (ADMIN / COURIER)
@@ -195,7 +209,7 @@ Authorization: Bearer <token>
 ```http
 PATCH http://localhost:3335/api/deliveries/1/status
 Content-Type: application/json
-Authorization: Bearer <token>
+Authorization: Bearer <accessToken>
 
 { "status": "IN_TRANSIT" }
 ```
@@ -207,6 +221,7 @@ Authorization: Bearer <token>
 | Эндпоинт                        | Кто может                |
 |:--------------------------------|:-------------------------|
 | `POST /api/auth/**`             | все                      |
+| `GET /.well-known/jwks.json`    | только внутри сети (гейтвей) |
 | `GET /api/restaurants/**`       | все                      |
 | `POST/PUT/DELETE /api/restaurants/**` | `ADMIN`            |
 | `POST /api/orders`              | любой авторизованный     |
@@ -214,6 +229,23 @@ Authorization: Bearer <token>
 | `GET /api/orders/{id}`          | владелец или `ADMIN`     |
 | `GET /api/orders/all`           | `ADMIN`                  |
 | `PATCH /api/deliveries/*/status`| `ADMIN`, `COURIER`       |
+
+## Аутентификация
+
+- **Access-токен** — JWT, подписанный закрытым RSA-ключом User Service (RS256), живёт 15 минут.
+  Общего секрета между сервисами больше нет: гейтвей — обычный OAuth2 resource server, он скачивает
+  публичный ключ по JWKS и кеширует его; закрытый ключ не покидает User Service.
+  Проверяются подпись, срок действия, издатель (`iss`) и алгоритм — токен с `HS256` не пройдёт.
+- **Refresh-токен** — 32 случайных байта. В таблице `refresh_tokens` хранится только SHA-256 от него,
+  так что утечка базы не даёт готовых токенов.
+- **Ротация**: `/api/auth/refresh` отзывает предъявленный токен и выдаёт новый, старый запоминает
+  преемника (`replaced_by`).
+- **Повторное использование**: если предъявлен уже отозванный токен, значит, его копия у кого-то ещё.
+  Сервис отзывает всю цепочку преемников, и обоим — и владельцу, и вору — придётся логиниться заново.
+  Сессии на других устройствах (другие цепочки) не затрагиваются.
+- `/api/auth/logout` отзывает refresh-токен; access-токен доживает свои минуты, поэтому он короткий.
+- На `/api/auth/**` гейтвей не смотрит на заголовок `Authorization`: просроченный access-токен
+  не мешает обновить пару.
 
 ## Статусы
 
@@ -298,8 +330,8 @@ Eureka, запросы идут на `localhost` (запасной список 
 
 Юнит-тесты на JUnit 5 + Mockito покрывают бизнес-логику каждого сервиса:
 расчёт суммы заказа, проверку владельца заказа, идемпотентность обработки
-событий, изоляцию меню по ресторану, выпуск и валидацию JWT, а также защиту
-гейтвея от подделки заголовков `X-User-*`.
+событий, изоляцию меню по ресторану, выпуск JWT и ротацию refresh-токенов, а также защиту
+гейтвея: проверку подписи по JWKS и затирание заголовков `X-User-*`.
 
 Интеграционные тесты (`*IT`, каталог `src/integrationTest`) поднимают PostgreSQL и Kafka в Testcontainers
 (реестр схем в тестах — встроенный `mock://`)
@@ -315,7 +347,7 @@ DeliveryHub/
 ├── configServer/        # Spring Cloud Config, раздаёт config-repo
 ├── config-repo/         # настройки сервисов по окружениям
 ├── apiGateway/          # маршрутизация, проверка JWT, роли
-├── userService/         # регистрация, логин, выпуск JWT
+├── userService/         # регистрация, логин, выпуск JWT и refresh-токенов, JWKS
 ├── restaurantService/   # каталог ресторанов и меню
 ├── orderService/        # заказы (Feign + Kafka)
 ├── deliveryService/     # доставки (Kafka)
@@ -328,4 +360,4 @@ DeliveryHub/
 
 ## Что можно доработать
 
-- Очистка старых строк в `outbox_events` и `processed_events` по расписанию.
+- Очистка старых строк в `outbox_events`, `processed_events` и `refresh_tokens` по расписанию.
