@@ -9,7 +9,7 @@ COPY settings.gradle.kts ./
 COPY build-logic ./build-logic
 COPY discoveryServer ./discoveryServer
 
-RUN --mount=type=cache,target=/root/.gradle ./gradlew :discoveryServer:bootJar --no-daemon
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked ./gradlew :discoveryServer:bootJar --no-daemon
 
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app

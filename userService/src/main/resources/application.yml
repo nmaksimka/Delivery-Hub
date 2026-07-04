@@ -28,8 +28,10 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    issuer: ${JWT_ISSUER:deliveryhub}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
+    private-key: ${JWT_PRIVATE_KEY:}
 
 eureka:
   client:

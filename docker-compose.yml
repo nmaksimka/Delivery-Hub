@@ -255,7 +255,7 @@ services:
       <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
     depends_on:
       configServer:
         condition: service_healthy
@@ -280,7 +280,6 @@ services:
     environment:
       <<: *platform-credentials
       SPRING_PROFILES_ACTIVE: docker
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
       configServer:
         condition: service_healthy
