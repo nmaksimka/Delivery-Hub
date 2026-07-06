@@ -12,8 +12,10 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.outbox.OutboxEvent;
 import com.deliveryhub.order.outbox.OutboxEventRepository;
+import com.deliveryhub.order.outbox.OutboxMetrics;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.service.OrderService;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +52,8 @@ class OrderEventsIT {
     private KafkaTemplate<String, Object> kafkaTemplate;
     @Autowired
     private KafkaContainer kafka;
+    @Autowired
+    private MeterRegistry meterRegistry;
     @MockitoBean
     private RestaurantServiceClient restaurantServiceClient;
 
@@ -101,6 +105,18 @@ class OrderEventsIT {
                 assertThat(statusOf(markerOrderId)).isEqualTo(OrderStatus.CANCELLED));
 
         assertThat(statusOf(orderId)).isEqualTo(OrderStatus.IN_DELIVERY);
+    }
+
+    @Test
+    void exposesBusinessAndOutboxMetrics() {
+        double before = meterRegistry.get(OrderService.ORDERS_CREATED).counter().count();
+
+        Long orderId = placeOrder();
+
+        assertThat(meterRegistry.get(OrderService.ORDERS_CREATED).counter().count()).isEqualTo(before + 1);
+        await().atMost(TIMEOUT).untilAsserted(() ->
+                assertThat(meterRegistry.get(OutboxMetrics.PENDING).gauge().value()).isZero());
+        assertThat(orderRepository.existsById(orderId)).isTrue();
     }
 
     private Long placeOrder() {
