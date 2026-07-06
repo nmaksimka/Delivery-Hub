@@ -5,6 +5,10 @@ global:
 scrape_configs:
   - job_name: deliveryhub-services
     metrics_path: /actuator/prometheus
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "([^:]+):\\d+"
+        target_label: service
     static_configs:
       - targets:
           - restaurantService:3331
@@ -16,6 +20,10 @@ scrape_configs:
 
   - job_name: api-gateway
     metrics_path: /actuator/prometheus
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "([^:]+):\\d+"
+        target_label: service
     static_configs:
       - targets:
           - apiGateway:9335
@@ -24,6 +32,10 @@ scrape_configs:
 
   - job_name: platform
     metrics_path: /actuator/prometheus
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "([^:]+):\\d+"
+        target_label: service
     static_configs:
       - targets:
           - discoveryServer:8761
