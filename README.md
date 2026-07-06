@@ -97,7 +97,7 @@ graph TB
 | **Rate limiting**    | Redis 8 + RequestRateLimiter на гейтвее        |
 | **Документация**     | SpringDoc OpenAPI, агрегация на гейтвее        |
 | **Тесты**            | JUnit + Mockito + AssertJ, Testcontainers      |
-| **Метрики**          | Actuator + Micrometer + Prometheus             |
+| **Наблюдаемость**    | Micrometer + Prometheus, JSON-логи, Loki + Alloy, Grafana |
 | **Сборка**           | Gradle 9.6 (Kotlin DSL), общий каталог версий  |
 
 ## Быстрый старт
@@ -105,7 +105,7 @@ graph TB
 ```bash
 git clone https://github.com/nmaksimka/Delivery-Hub.git
 cd Delivery-Hub
-cp .env.example .env      # обязательно: задайте пароли eureka / config
+cp .env.example .env      # обязательно: задайте пароли eureka / config / grafana
 docker compose up --build
 ```
 
@@ -126,6 +126,7 @@ Kafka работает в режиме KRaft одним узлом, ZooKeeper н
 | API Gateway              | http://localhost:3335                  |
 | Swagger UI (все сервисы) | http://localhost:3335/swagger-ui.html  |
 | Prometheus               | http://localhost:9090                  |
+| Grafana                  | http://localhost:3000                  |
 | Eureka (список сервисов) | http://localhost:8761                  |
 | Config Server            | http://localhost:8888/orderService/docker |
 | Kafka UI                 | http://localhost:8086                  |
@@ -334,6 +335,31 @@ Eureka, запросы идут на `localhost` (запасной список 
 Топики, сообщения и схемы удобно смотреть в Kafka UI. Подробности —
 в [ADR 0003](docs/adr/0003-avro-schema-registry.md).
 
+## Наблюдаемость
+
+**Логи.** В Docker сервисы пишут в stdout структурированный JSON в формате ECS
+(`logging.structured.format.console=ecs`): в каждой записи есть `service.name`, уровень, логгер и поток.
+Локально формат остаётся обычным текстовым. Alloy читает логи контейнеров проекта через Docker API,
+выносит `service` и `level` в метки и отправляет в Loki.
+
+**Метрики.** Prometheus собирает `/actuator/prometheus` со всех сервисов; метка `service` берётся из адреса цели.
+Кроме стандартных (JVM, HTTP, Hikari, Kafka-клиенты, Resilience4j) есть свои:
+
+| Метрика                                | Тип     | Что показывает                                   |
+|:---------------------------------------|:--------|:-------------------------------------------------|
+| `orders_created_total`                 | counter | принятые заказы                                  |
+| `outbox_pending`                       | gauge   | события в outbox, ещё не ушедшие в Kafka         |
+| `deliveries_status_changed_total{status}` | counter | смены статуса доставки, `CANCELLED` — сорванные |
+
+**Grafana** (http://localhost:3000, логин и пароль из `.env`) поднимается с готовыми источниками данных
+и тремя дашбордами в папке DeliveryHub:
+
+- «Сервисы: JVM и HTTP» — RPS, 5xx, p95, heap, GC, потоки, пул соединений, логи WARN/ERROR;
+- «Kafka и outbox» — очередь outbox, отставание потребителей, скорость чтения и отправки, ошибки, DLT;
+- «Заказы и доставки» — заказы в минуту, сорванные доставки, состояние circuit breaker, отказы по лимиту.
+
+Трассировки пока нет.
+
 ## Тесты
 
 ```bash
@@ -366,6 +392,7 @@ DeliveryHub/
 ├── orderService/        # заказы (Feign + Kafka)
 ├── deliveryService/     # доставки (Kafka)
 ├── prometheus/          # конфигурация сбора метрик
+├── observability/       # Loki, Alloy, дашборды и источники данных Grafana
 ├── docs/adr/            # архитектурные решения
 ├── build-logic/         # convention-плагины Gradle
 ├── gradle/              # wrapper и каталог версий libs.versions.toml
