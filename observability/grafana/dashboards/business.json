@@ -41,7 +41,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(orders_created_total[1m]))",
+          "expr": "sum(increase(orders_placed_total[1m]))",
           "legendFormat": "заказы"
         }
       ],
@@ -73,7 +73,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(orders_created_total[24h]))"
+          "expr": "sum(increase(orders_placed_total[24h]))"
         }
       ],
       "fieldConfig": {

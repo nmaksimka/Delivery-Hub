@@ -347,7 +347,7 @@ Eureka, запросы идут на `localhost` (запасной список 
 
 | Метрика                                | Тип     | Что показывает                                   |
 |:---------------------------------------|:--------|:-------------------------------------------------|
-| `orders_created_total`                 | counter | принятые заказы                                  |
+| `orders_placed_total`                 | counter | принятые заказы                                  |
 | `outbox_pending`                       | gauge   | события в outbox, ещё не ушедшие в Kafka         |
 | `deliveries_status_changed_total{status}` | counter | смены статуса доставки, `CANCELLED` — сорванные |
 

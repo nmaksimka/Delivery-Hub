@@ -157,7 +157,7 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("считает созданные заказы в метрике orders.created")
+        @DisplayName("считает созданные заказы в метрике orders.placed")
         void countsCreatedOrders() {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "10.00", true);
@@ -168,7 +168,7 @@ class OrderServiceTest {
             orderService.createOrder(request, USER_ID);
             orderService.createOrder(request, USER_ID);
 
-            assertThat(meterRegistry.get(OrderService.ORDERS_CREATED).counter().count()).isEqualTo(2.0);
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isEqualTo(2.0);
         }
 
         @Test
@@ -180,7 +180,7 @@ class OrderServiceTest {
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(IllegalStateException.class);
 
-            assertThat(meterRegistry.get(OrderService.ORDERS_CREATED).counter().count()).isZero();
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
         }
 
         @Test

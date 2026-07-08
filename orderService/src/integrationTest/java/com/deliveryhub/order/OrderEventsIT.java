@@ -109,11 +109,11 @@ class OrderEventsIT {
 
     @Test
     void exposesBusinessAndOutboxMetrics() {
-        double before = meterRegistry.get(OrderService.ORDERS_CREATED).counter().count();
+        double before = meterRegistry.get(OrderService.ORDERS_PLACED).counter().count();
 
         Long orderId = placeOrder();
 
-        assertThat(meterRegistry.get(OrderService.ORDERS_CREATED).counter().count()).isEqualTo(before + 1);
+        assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isEqualTo(before + 1);
         await().atMost(TIMEOUT).untilAsserted(() ->
                 assertThat(meterRegistry.get(OutboxMetrics.PENDING).gauge().value()).isZero());
         assertThat(orderRepository.existsById(orderId)).isTrue();
