@@ -11,6 +11,7 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,23 +30,28 @@ public class DeliveryService {
 
     private static final Logger log = LoggerFactory.getLogger(DeliveryService.class);
     private static final String AGGREGATE_TYPE = "Delivery";
+    public static final String STATUS_CHANGED = "deliveries.status.changed";
+    public static final String STATUS_TAG = "status";
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryMapper deliveryMapper;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
                            Outbox outbox,
                            ProcessedEvents processedEvents,
-                           Clock clock) {
+                           Clock clock,
+                           MeterRegistry meterRegistry) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     public DeliveryDto getDeliveryById(Long id) {
@@ -118,6 +124,7 @@ public class DeliveryService {
                 .setUpdatedAt(delivery.getUpdatedAt())
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
+        meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();
     }
 
     private Delivery findByIdOrThrow(Long id) {

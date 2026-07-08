@@ -18,6 +18,8 @@ import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +38,7 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
     private static final String AGGREGATE_TYPE = "Order";
+    public static final String ORDERS_PLACED = "orders.placed";
 
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
@@ -43,19 +46,24 @@ public class OrderService {
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final Clock clock;
+    private final Counter ordersCreated;
 
     public OrderService(OrderRepository orderRepository,
                         OrderMapper orderMapper,
                         RestaurantCatalog restaurantCatalog,
                         Outbox outbox,
                         ProcessedEvents processedEvents,
-                        Clock clock) {
+                        Clock clock,
+                        MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.restaurantCatalog = restaurantCatalog;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.clock = clock;
+        this.ordersCreated = Counter.builder(ORDERS_PLACED)
+                .description("Orders accepted by the service")
+                .register(meterRegistry);
     }
 
     public OrderDto getOrderById(Long id, CurrentUser currentUser) {
@@ -102,6 +110,7 @@ public class OrderService {
 
         OrderCreatedEvent event = orderCreatedEvent(savedOrder);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
+        ordersCreated.increment();
 
         return orderMapper.toDto(savedOrder);
     }

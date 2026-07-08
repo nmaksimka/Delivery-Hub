@@ -39,7 +39,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/auth/**").permitAll()
                         .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**")
                         .permitAll()
-                        .pathMatchers("/actuator/health/**").permitAll()
+                        .pathMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
 
                         .pathMatchers(HttpMethod.GET, "/api/restaurants/**").permitAll()

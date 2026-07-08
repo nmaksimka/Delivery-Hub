@@ -25,6 +25,7 @@ import feign.RequestTemplate;
 import feign.FeignException;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -76,6 +77,8 @@ class OrderServiceTest {
     @Mock
     private ProcessedEvents processedEvents;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private OrderService orderService;
 
     @Captor
@@ -87,7 +90,7 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
-                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC));
+                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -151,6 +154,33 @@ class OrderServiceTest {
             assertThat(event.getTotalAmount()).isEqualByComparingTo("35.00");
             assertThat(event.getItems()).extracting(OrderItemPayload::getItemName)
                     .containsExactly("Pizza", "Cola");
+        }
+
+        @Test
+        @DisplayName("считает созданные заказы в метрике orders.placed")
+        void countsCreatedOrders() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isEqualTo(2.0);
+        }
+
+        @Test
+        @DisplayName("не считает заказ, который не удалось создать")
+        void doesNotCountRejectedOrder() {
+            RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
+            when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(IllegalStateException.class);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
         }
 
         @Test

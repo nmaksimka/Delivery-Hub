@@ -12,6 +12,7 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,12 +57,14 @@ class DeliveryServiceTest {
     @Mock
     private ProcessedEvents processedEvents;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private DeliveryService deliveryService;
 
     @BeforeEach
     void setUp() {
         deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
     }
 
     @Nested
@@ -130,6 +133,20 @@ class DeliveryServiceTest {
 
             assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
             assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+        }
+
+        @Test
+        @DisplayName("считает сорванные доставки в метрике с тегом статуса")
+        void countsCancelledDeliveries() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.CANCELLED, null));
+
+            assertThat(meterRegistry.get(DeliveryService.STATUS_CHANGED)
+                    .tag(DeliveryService.STATUS_TAG, "CANCELLED").counter().count()).isEqualTo(1.0);
+            assertThat(meterRegistry.find(DeliveryService.STATUS_CHANGED)
+                    .tag(DeliveryService.STATUS_TAG, "DELIVERED").counter()).isNull();
         }
 
         @Test

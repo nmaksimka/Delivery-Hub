@@ -13,6 +13,9 @@ x-platform-credentials: &platform-credentials
   EUREKA_USER: ${EUREKA_USER:-eureka}
   EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
 
+x-json-logs: &json-logs
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+
 services:
   kafka:
     image: apache/kafka:4.1.2
@@ -147,6 +150,7 @@ services:
     ports:
       - "127.0.0.1:8761:8761"
     environment:
+      <<: *json-logs
       EUREKA_HOSTNAME: discoveryServer
       EUREKA_USER: ${EUREKA_USER:-eureka}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
@@ -165,6 +169,7 @@ services:
     ports:
       - "127.0.0.1:8888:8888"
     environment:
+      <<: *json-logs
       CONFIG_REPO_LOCATION: file:/config-repo
       CONFIG_USER: ${CONFIG_USER:-config}
       CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
@@ -183,7 +188,7 @@ services:
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
     environment:
-      <<: *platform-credentials
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
@@ -206,7 +211,7 @@ services:
       dockerfile: ./orderService/Dockerfile
     container_name: orderService
     environment:
-      <<: *platform-credentials
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
@@ -235,7 +240,7 @@ services:
       dockerfile: ./deliveryService/Dockerfile
     container_name: deliveryService
     environment:
-      <<: *platform-credentials
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     depends_on:
@@ -262,7 +267,7 @@ services:
       dockerfile: ./userService/Dockerfile
     container_name: userService
     environment:
-      <<: *platform-credentials
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
@@ -288,7 +293,7 @@ services:
     ports:
       - "3335:3335"
     environment:
-      <<: *platform-credentials
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
     depends_on:
       redis:
@@ -316,7 +321,51 @@ services:
     depends_on:
       - apiGateway
 
+  loki:
+    image: grafana/loki:3.7.3
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.17.0
+    container_name: alloy
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-deliveryhub}
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:12.4.4
+    container_name: grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required, see .env.example}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/services.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+
 volumes:
+  loki-data:
+  grafana-data:
   kafka-data:
   pg-restaurant-data:
   pg-order-data:
