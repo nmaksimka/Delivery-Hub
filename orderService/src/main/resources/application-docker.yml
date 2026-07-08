@@ -1,9 +1,0 @@
-spring:
-  datasource:
-    url: jdbc:postgresql://postgres-order:5432/order_db
-  kafka:
-    bootstrap-servers: kafka:9092
-
-app:
-  restaurant-service:
-    url: http://restaurantService:3331

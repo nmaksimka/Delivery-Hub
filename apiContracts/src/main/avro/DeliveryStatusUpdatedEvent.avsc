@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "DeliveryStatusUpdatedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "deliveryId", "type": "long"},
+    {"name": "orderId", "type": "long"},
+    {"name": "status", "type": "com.deliveryhub.contracts.enums.DeliveryStatus"},
+    {"name": "updatedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

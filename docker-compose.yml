@@ -6,6 +6,16 @@ x-postgres-healthcheck: &pg-healthcheck
   timeout: 5s
   retries: 10
 
+x-platform-credentials: &platform-credentials
+  CONFIG_SERVER_URL: http://configServer:8888
+  CONFIG_USER: ${CONFIG_USER:-config}
+  CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
+  EUREKA_USER: ${EUREKA_USER:-eureka}
+  EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
+
+x-json-logs: &json-logs
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+
 services:
   kafka:
     image: apache/kafka:4.1.2
@@ -35,6 +45,49 @@ services:
       interval: 10s
       timeout: 10s
       retries: 15
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:8.1.4
+    container_name: schema-registry
+    ports:
+      - "8085:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8081/subjects > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.5.0
+    container_name: kafka-ui
+    ports:
+      - "8086:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: deliveryhub
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+
+  redis:
+    image: redis:8.6.3-alpine
+    container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   postgres-restaurant:
     image: postgres:17.9-alpine
@@ -88,6 +141,46 @@ services:
       - pg-user-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
 
+  discoveryServer:
+    image: deliveryhub-discovery-server
+    build:
+      context: .
+      dockerfile: ./discoveryServer/Dockerfile
+    container_name: discoveryServer
+    ports:
+      - "127.0.0.1:8761:8761"
+    environment:
+      <<: *json-logs
+      EUREKA_HOSTNAME: discoveryServer
+      EUREKA_USER: ${EUREKA_USER:-eureka}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  configServer:
+    image: deliveryhub-config-server
+    build:
+      context: .
+      dockerfile: ./configServer/Dockerfile
+    container_name: configServer
+    ports:
+      - "127.0.0.1:8888:8888"
+    environment:
+      <<: *json-logs
+      CONFIG_REPO_LOCATION: file:/config-repo
+      CONFIG_USER: ${CONFIG_USER:-config}
+      CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
+    volumes:
+      - ./config-repo:/config-repo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   restaurantService:
     image: deliveryhub-restaurant-service
     build:
@@ -95,9 +188,14 @@ services:
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
     environment:
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-restaurant:
         condition: service_healthy
     healthcheck:
@@ -113,12 +211,19 @@ services:
       dockerfile: ./orderService/Dockerfile
     container_name: orderService
     environment:
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-order:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
       restaurantService:
         condition: service_healthy
@@ -135,12 +240,19 @@ services:
       dockerfile: ./deliveryService/Dockerfile
     container_name: deliveryService
     environment:
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-delivery:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3333/actuator/health/readiness || exit 1"]
@@ -155,10 +267,15 @@ services:
       dockerfile: ./userService/Dockerfile
     container_name: userService
     environment:
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
     depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       postgres-user:
         condition: service_healthy
     healthcheck:
@@ -176,9 +293,15 @@ services:
     ports:
       - "3335:3335"
     environment:
+      <<: [*platform-credentials, *json-logs]
       SPRING_PROFILES_ACTIVE: docker
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, see .env.example}
     depends_on:
+      redis:
+        condition: service_healthy
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
       restaurantService:
         condition: service_healthy
       orderService:
@@ -198,7 +321,51 @@ services:
     depends_on:
       - apiGateway
 
+  loki:
+    image: grafana/loki:3.7.3
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.17.0
+    container_name: alloy
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-deliveryhub}
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:12.4.4
+    container_name: grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required, see .env.example}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/services.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+
 volumes:
+  loki-data:
+  grafana-data:
   kafka-data:
   pg-restaurant-data:
   pg-order-data:

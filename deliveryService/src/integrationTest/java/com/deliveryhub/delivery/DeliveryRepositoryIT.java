@@ -10,12 +10,16 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(PostgresContainerConfig.class)
 class DeliveryRepositoryIT {
+
+    private static final Instant NOW = Instant.parse("2026-07-09T10:15:30Z");
 
     @Autowired
     private DeliveryRepository deliveryRepository;
@@ -24,7 +28,7 @@ class DeliveryRepositoryIT {
 
     @Test
     void findsDeliveryByOrderId() {
-        deliveryRepository.saveAndFlush(Delivery.forOrder(1001L));
+        deliveryRepository.saveAndFlush(Delivery.forOrder(1001L, NOW));
         entityManager.clear();
 
         assertThat(deliveryRepository.findByOrderId(1001L)).get()
@@ -38,18 +42,18 @@ class DeliveryRepositoryIT {
 
     @Test
     void databaseAllowsOnlyOneDeliveryPerOrder() {
-        deliveryRepository.saveAndFlush(Delivery.forOrder(1002L));
+        deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, NOW));
 
-        assertThatThrownBy(() -> deliveryRepository.saveAndFlush(Delivery.forOrder(1002L)))
+        assertThatThrownBy(() -> deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, NOW)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void persistsStatusAndCourier() {
-        Delivery delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(1003L));
+        Delivery delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(1003L, NOW));
 
-        delivery.assignCourier(55L);
-        delivery.changeStatus(DeliveryStatus.PICKED_UP);
+        delivery.assignCourier(55L, NOW);
+        delivery.changeStatus(DeliveryStatus.PICKED_UP, NOW);
         deliveryRepository.flush();
         entityManager.clear();
 

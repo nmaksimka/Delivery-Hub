@@ -3,60 +3,111 @@ server:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:local-dev-secret-key-change-me-at-least-32-bytes-long}
+    jwk-set-uri: ${JWT_JWK_SET_URI:http://userService/.well-known/jwks.json}
+    issuer: ${JWT_ISSUER:deliveryhub}
+  rate-limit:
+    common:
+      replenish-rate: 20
+      burst-capacity: 40
+    login:
+      replenish-rate: 1
+      burst-capacity: 5
+      requested-tokens: 1
 
 spring:
   application:
     name: apiGateway
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
     inetutils:
       ignored-interfaces:
         - .*
+    discovery:
+      client:
+        simple:
+          instances:
+            restaurantService:
+              - uri: http://localhost:3331
+            orderService:
+              - uri: http://localhost:3332
+            deliveryService:
+              - uri: http://localhost:3333
+            userService:
+              - uri: http://localhost:3334
     gateway:
       server:
         webflux:
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: ${app.rate-limit.common.replenish-rate}
+                redis-rate-limiter.burstCapacity: ${app.rate-limit.common.burst-capacity}
+                key-resolver: "#{@userOrIpKeyResolver}"
           routes:
+            - id: auth-login
+              uri: lb://userService
+              predicates:
+                - Path=/api/auth/login
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: ${app.rate-limit.login.replenish-rate}
+                    redis-rate-limiter.burstCapacity: ${app.rate-limit.login.burst-capacity}
+                    redis-rate-limiter.requestedTokens: ${app.rate-limit.login.requested-tokens}
+                    key-resolver: "#{@loginAttemptKeyResolver}"
             - id: restaurant-service
-              uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
+              uri: lb://restaurantService
               predicates:
                 - Path=/api/restaurants/**
             - id: order-service
-              uri: ${ORDER_SERVICE_URL:http://localhost:3332}
+              uri: lb://orderService
               predicates:
                 - Path=/api/orders/**
             - id: delivery-service
-              uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+              uri: lb://deliveryService
               predicates:
                 - Path=/api/deliveries/**
             - id: user-service
-              uri: ${USER_SERVICE_URL:http://localhost:3334}
+              uri: lb://userService
               predicates:
                 - Path=/api/auth/**
-
             - id: restaurant-docs
-              uri: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
+              uri: lb://restaurantService
               predicates:
                 - Path=/docs/restaurants/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: order-docs
-              uri: ${ORDER_SERVICE_URL:http://localhost:3332}
+              uri: lb://orderService
               predicates:
                 - Path=/docs/orders/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: delivery-docs
-              uri: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+              uri: lb://deliveryService
               predicates:
                 - Path=/docs/deliveries/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: user-docs
-              uri: ${USER_SERVICE_URL:http://localhost:3334}
+              uri: lb://userService
               predicates:
                 - Path=/docs/users/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
 
 management:
   server:

@@ -1,5 +1,5 @@
 plugins {
-    id("deliveryhub.spring-service")
+    id("deliveryhub.platform-client")
     id("deliveryhub.integration-test")
 }
 
@@ -9,8 +9,7 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.security)
 
-    implementation(libs.jjwt.api)
-    runtimeOnly(libs.bundles.jjwt.runtime)
+    implementation(libs.spring.security.oauth2.jose)
 
     runtimeOnly(libs.postgresql)
     implementation(libs.spring.boot.starter.flyway)

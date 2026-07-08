@@ -10,3 +10,5 @@ build
 *.md
 .env
 prometheus
+observability
+config-repo

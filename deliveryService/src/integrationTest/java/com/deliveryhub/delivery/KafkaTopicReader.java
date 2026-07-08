@@ -1,5 +1,8 @@
 package com.deliveryhub.delivery;
 
+import io.confluent.kafka.serializers.KafkaAvroDeserializer;
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -23,20 +26,24 @@ public final class KafkaTopicReader {
         this.bootstrapServers = bootstrapServers;
     }
 
-    public Optional<ConsumerRecord<String, String>> findFirst(String topic,
-                                                              Predicate<ConsumerRecord<String, String>> filter) {
+    public <T extends SpecificRecord> Optional<T> findFirst(String topic, Class<T> eventType, Predicate<T> filter) {
         Map<String, Object> config = Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
                 ConsumerConfig.GROUP_ID_CONFIG, "it-" + UUID.randomUUID(),
-                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class,
+                KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG, KafkaContainerConfig.SCHEMA_REGISTRY_URL,
+                KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG, true,
+                KafkaAvroDeserializerConfig.AVRO_USE_LOGICAL_TYPE_CONVERTERS_CONFIG, true);
         Instant deadline = Instant.now().plus(TIMEOUT);
-        try (KafkaConsumer<String, String> consumer =
-                     new KafkaConsumer<>(config, new StringDeserializer(), new StringDeserializer())) {
+        try (KafkaConsumer<String, Object> consumer = new KafkaConsumer<>(config)) {
             consumer.subscribe(List.of(topic));
             while (Instant.now().isBefore(deadline)) {
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) {
-                    if (filter.test(record)) {
-                        return Optional.of(record);
+                for (ConsumerRecord<String, Object> record : consumer.poll(Duration.ofMillis(500))) {
+                    T event = eventType.cast(record.value());
+                    if (filter.test(event)) {
+                        return Optional.of(event);
                     }
                 }
             }

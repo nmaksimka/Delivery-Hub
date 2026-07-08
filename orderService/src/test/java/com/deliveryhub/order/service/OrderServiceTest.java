@@ -4,6 +4,8 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
+import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -21,6 +23,9 @@ import com.deliveryhub.order.security.CurrentUser;
 import feign.Request;
 import feign.RequestTemplate;
 import feign.FeignException;
+import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,13 +34,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +64,7 @@ class OrderServiceTest {
 
     private static final long USER_ID = 42L;
     private static final long RESTAURANT_ID = 1L;
+    private static final Instant NOW = Instant.parse("2026-07-09T10:15:30Z");
 
     @Mock
     private OrderRepository orderRepository;
@@ -69,7 +77,8 @@ class OrderServiceTest {
     @Mock
     private ProcessedEvents processedEvents;
 
-    @InjectMocks
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private OrderService orderService;
 
     @Captor
@@ -79,6 +88,9 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        orderService = new OrderService(orderRepository, orderMapper,
+                new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
+                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -94,7 +106,7 @@ class OrderServiceTest {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "12.50", true);
             givenMenuItem(11L, "Cola", "3.00", true);
-            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
             orderService.createOrder(request, USER_ID);
@@ -114,7 +126,7 @@ class OrderServiceTest {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "10.00", true);
             givenMenuItem(11L, "Cola", "5.00", true);
-            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
             orderService.createOrder(request, 777L);
@@ -129,19 +141,46 @@ class OrderServiceTest {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "10.00", true);
             givenMenuItem(11L, "Cola", "5.00", true);
-            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
             orderService.createOrder(request, USER_ID);
 
             ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
-            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), captor.capture());
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
             OrderCreatedEvent event = captor.getValue();
-            assertThat(event.eventId()).isNotNull();
-            assertThat(event.userId()).isEqualTo(USER_ID);
-            assertThat(event.totalAmount()).isEqualByComparingTo("35.00");
-            assertThat(event.items()).extracting(OrderCreatedEvent.OrderItemPayload::itemName)
+            assertThat(event.getEventId()).isNotNull();
+            assertThat(event.getUserId()).isEqualTo(USER_ID);
+            assertThat(event.getTotalAmount()).isEqualByComparingTo("35.00");
+            assertThat(event.getItems()).extracting(OrderItemPayload::getItemName)
                     .containsExactly("Pizza", "Cola");
+        }
+
+        @Test
+        @DisplayName("считает созданные заказы в метрике orders.placed")
+        void countsCreatedOrders() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isEqualTo(2.0);
+        }
+
+        @Test
+        @DisplayName("не считает заказ, который не удалось создать")
+        void doesNotCountRejectedOrder() {
+            RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
+            when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(IllegalStateException.class);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
         }
 
         @Test
@@ -251,7 +290,7 @@ class OrderServiceTest {
             when(orderMapper.toDto(order)).thenReturn(dto());
 
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);
-            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.DELIVERY_STATUS_UPDATED))
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.DELIVERY_STATUS_UPDATED))
                     .thenReturn(true);
 
             orderService.applyDeliveryStatus(event);
@@ -263,7 +302,7 @@ class OrderServiceTest {
         @DisplayName("повторно доставленное событие не трогает заказ")
         void skipsAlreadyProcessedEvent() {
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.DELIVERED);
-            when(processedEvents.registerFirstDelivery(event.eventId(), Topics.DELIVERY_STATUS_UPDATED))
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.DELIVERY_STATUS_UPDATED))
                     .thenReturn(false);
 
             orderService.applyDeliveryStatus(event);
@@ -288,7 +327,7 @@ class OrderServiceTest {
     }
 
     private static Order orderOf(long userId) {
-        Order order = Order.place(userId, RESTAURANT_ID);
+        Order order = Order.place(userId, RESTAURANT_ID, NOW);
         order.addItem(10L, "Pizza", 1, BigDecimal.TEN);
         ReflectionTestUtils.setField(order, "id", 1L);
         return order;
@@ -303,5 +342,11 @@ class OrderServiceTest {
         Request request = Request.create(Request.HttpMethod.GET, "/api/restaurants/1",
                 Map.of(), null, new RequestTemplate());
         return new FeignException.NotFound("not found", request, null, Collections.emptyMap());
+    }
+
+    private static Order savedWithId(InvocationOnMock invocation) {
+        Order order = invocation.getArgument(0);
+        ReflectionTestUtils.setField(order, "id", 15L);
+        return order;
     }
 }

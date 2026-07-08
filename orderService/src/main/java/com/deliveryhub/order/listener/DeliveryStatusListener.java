@@ -22,7 +22,7 @@ public class DeliveryStatusListener {
     @KafkaListener(topics = Topics.DELIVERY_STATUS_UPDATED, groupId = "order-service-group")
     public void handleDeliveryStatusUpdated(DeliveryStatusUpdatedEvent event) {
         log.info("Received delivery status update: eventId={}, orderId={}, status={}",
-                event.eventId(), event.orderId(), event.status());
+                event.getEventId(), event.getOrderId(), event.getStatus());
         orderService.applyDeliveryStatus(event);
     }
 }

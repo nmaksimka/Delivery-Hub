@@ -1,5 +1,7 @@
 package com.deliveryhub.order.outbox;
 
+import com.deliveryhub.contracts.EventPayloads;
+import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -7,9 +9,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -41,7 +42,7 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        relay = new OutboxRelay(outboxEventRepository, kafkaTemplate, JsonMapper.builder().build(),
+        relay = new OutboxRelay(outboxEventRepository, kafkaTemplate,
                 new OutboxProperties(BATCH_SIZE, Duration.ofSeconds(1)), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -56,8 +57,8 @@ class OutboxRelayTest {
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(kafkaTemplate).send(eq("order-created"), eq("15"), payload.capture());
-        assertThat(payload.getValue()).isInstanceOf(JsonNode.class);
-        assertThat(((JsonNode) payload.getValue()).get("orderId").asInt()).isEqualTo(15);
+        assertThat(payload.getValue()).isInstanceOf(OrderCreatedEvent.class);
+        assertThat(((OrderCreatedEvent) payload.getValue()).getOrderId()).isEqualTo(15L);
         assertThat(event.getPublishedAt()).isEqualTo(NOW);
     }
 
@@ -98,6 +99,18 @@ class OutboxRelayTest {
 
     private static OutboxEvent pendingEvent(String orderId) {
         return new OutboxEvent(UUID.randomUUID(), "Order", orderId, "order-created",
-                "{\"orderId\": " + orderId + "}", NOW.minusSeconds(5));
+                orderCreatedPayload(orderId), NOW.minusSeconds(5));
+    }
+
+    private static byte[] orderCreatedPayload(String orderId) {
+        return EventPayloads.encode(OrderCreatedEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setOrderId(Long.parseLong(orderId))
+                .setUserId(42L)
+                .setRestaurantId(1L)
+                .setTotalAmount(new BigDecimal("34.00"))
+                .setCreatedAt(NOW)
+                .setItems(List.of())
+                .build());
     }
 }

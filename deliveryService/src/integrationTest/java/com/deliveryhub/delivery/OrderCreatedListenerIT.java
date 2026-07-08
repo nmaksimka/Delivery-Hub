@@ -2,10 +2,10 @@ package com.deliveryhub.delivery;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
+import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
-import com.jayway.jsonpath.JsonPath;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,12 +46,13 @@ class OrderCreatedListenerIT {
                 assertThat(deliveryRepository.findByOrderId(orderId)).get()
                         .satisfies(delivery -> assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED)));
 
-        Optional<ConsumerRecord<String, String>> statusUpdate = new KafkaTopicReader(kafka.getBootstrapServers())
-                .findFirst(Topics.DELIVERY_STATUS_UPDATED, record -> record.value().contains("\"orderId\":" + orderId));
+        Optional<DeliveryStatusUpdatedEvent> statusUpdate = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.DELIVERY_STATUS_UPDATED, DeliveryStatusUpdatedEvent.class,
+                        event -> event.getOrderId() == orderId);
 
         assertThat(statusUpdate).isPresent();
-        assertThat((String) JsonPath.read(statusUpdate.get().value(), "$.status")).isEqualTo("ASSIGNED");
-        assertThat((Integer) JsonPath.read(statusUpdate.get().value(), "$.orderId")).isEqualTo((int) orderId);
+        assertThat(statusUpdate.get().getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+        assertThat(statusUpdate.get().getEventId()).isNotNull();
     }
 
     @Test
@@ -93,6 +94,6 @@ class OrderCreatedListenerIT {
 
     private static OrderCreatedEvent orderCreated(UUID eventId, long orderId) {
         return new OrderCreatedEvent(eventId, orderId, 42L, 1L, new BigDecimal("34.00"), Instant.now(),
-                List.of(new OrderCreatedEvent.OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))));
+                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))));
     }
 }

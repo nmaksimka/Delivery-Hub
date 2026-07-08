@@ -21,7 +21,7 @@ public class OrderEventListener {
 
     @KafkaListener(topics = Topics.ORDER_CREATED, groupId = "delivery-service-group")
     public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("Received order-created event: eventId={}, orderId={}", event.eventId(), event.orderId());
+        log.info("Received order-created event: eventId={}, orderId={}", event.getEventId(), event.getOrderId());
         deliveryService.createDeliveryFromOrderEvent(event);
     }
 }

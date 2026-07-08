@@ -11,6 +11,7 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -28,23 +30,28 @@ public class DeliveryService {
 
     private static final Logger log = LoggerFactory.getLogger(DeliveryService.class);
     private static final String AGGREGATE_TYPE = "Delivery";
+    public static final String STATUS_CHANGED = "deliveries.status.changed";
+    public static final String STATUS_TAG = "status";
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryMapper deliveryMapper;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
                            Outbox outbox,
                            ProcessedEvents processedEvents,
-                           Clock clock) {
+                           Clock clock,
+                           MeterRegistry meterRegistry) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     public DeliveryDto getDeliveryById(Long id) {
@@ -69,7 +76,7 @@ public class DeliveryService {
         }
 
         Delivery delivery = deliveryRepository.save(Delivery.forOrder(
-                request.orderId(), request.courierId(), request.estimatedDeliveryTime()));
+                request.orderId(), request.courierId(), request.estimatedDeliveryTime(), clock.instant()));
 
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
@@ -80,10 +87,11 @@ public class DeliveryService {
     public DeliveryDto updateDeliveryStatus(Long id, UpdateDeliveryStatusRequest request) {
         Delivery delivery = findByIdOrThrow(id);
 
+        Instant now = clock.instant();
         if (request.courierId() != null) {
-            delivery.assignCourier(request.courierId());
+            delivery.assignCourier(request.courierId(), now);
         }
-        delivery.changeStatus(request.status());
+        delivery.changeStatus(request.status(), now);
 
         log.info("Delivery {} status updated to {}", id, request.status());
         publishStatusChange(delivery);
@@ -92,25 +100,31 @@ public class DeliveryService {
 
     @Transactional
     public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
-        if (!processedEvents.registerFirstDelivery(event.eventId(), Topics.ORDER_CREATED)) {
-            log.info("Event {} is already processed, skipping", event.eventId());
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
             return;
         }
-        if (deliveryRepository.existsByOrderId(event.orderId())) {
-            log.warn("Delivery already exists for orderId={}, skipping", event.orderId());
+        if (deliveryRepository.existsByOrderId(event.getOrderId())) {
+            log.warn("Delivery already exists for orderId={}, skipping", event.getOrderId());
             return;
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.orderId()));
+        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.getOrderId(), clock.instant()));
 
-        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.orderId());
+        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
     }
 
     private void publishStatusChange(Delivery delivery) {
-        outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED,
-                new DeliveryStatusUpdatedEvent(UUID.randomUUID(), delivery.getId(), delivery.getOrderId(),
-                        delivery.getStatus(), clock.instant()));
+        DeliveryStatusUpdatedEvent event = DeliveryStatusUpdatedEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setDeliveryId(delivery.getId())
+                .setOrderId(delivery.getOrderId())
+                .setStatus(delivery.getStatus())
+                .setUpdatedAt(delivery.getUpdatedAt())
+                .build();
+        outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
+        meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();
     }
 
     private Delivery findByIdOrThrow(Long id) {

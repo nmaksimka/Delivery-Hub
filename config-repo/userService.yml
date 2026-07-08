@@ -1,0 +1,16 @@
+app:
+  jwt:
+    access-token-ttl: 15m
+    refresh-token-ttl: 30d
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

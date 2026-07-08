@@ -10,7 +10,7 @@ COPY build-logic ./build-logic
 COPY apiContracts ./apiContracts
 COPY userService ./userService
 
-RUN --mount=type=cache,target=/root/.gradle ./gradlew :userService:bootJar --no-daemon
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked ./gradlew :userService:bootJar --no-daemon
 
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app

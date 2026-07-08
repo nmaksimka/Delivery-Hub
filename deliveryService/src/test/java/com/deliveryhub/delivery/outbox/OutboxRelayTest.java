@@ -1,5 +1,8 @@
 package com.deliveryhub.delivery.outbox;
 
+import com.deliveryhub.contracts.EventPayloads;
+import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -7,8 +10,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -41,7 +42,7 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        relay = new OutboxRelay(outboxEventRepository, kafkaTemplate, JsonMapper.builder().build(),
+        relay = new OutboxRelay(outboxEventRepository, kafkaTemplate,
                 new OutboxProperties(BATCH_SIZE, Duration.ofSeconds(1)), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -56,8 +57,8 @@ class OutboxRelayTest {
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(kafkaTemplate).send(eq("delivery-status-updated"), eq("15"), payload.capture());
-        assertThat(payload.getValue()).isInstanceOf(JsonNode.class);
-        assertThat(((JsonNode) payload.getValue()).get("orderId").asInt()).isEqualTo(15);
+        assertThat(payload.getValue()).isInstanceOf(DeliveryStatusUpdatedEvent.class);
+        assertThat(((DeliveryStatusUpdatedEvent) payload.getValue()).getOrderId()).isEqualTo(15L);
         assertThat(event.getPublishedAt()).isEqualTo(NOW);
     }
 
@@ -98,6 +99,16 @@ class OutboxRelayTest {
 
     private static OutboxEvent pendingEvent(String orderId) {
         return new OutboxEvent(UUID.randomUUID(), "Delivery", orderId, "delivery-status-updated",
-                "{\"orderId\": " + orderId + "}", NOW.minusSeconds(5));
+                statusUpdatedPayload(orderId), NOW.minusSeconds(5));
+    }
+
+    private static byte[] statusUpdatedPayload(String orderId) {
+        return EventPayloads.encode(DeliveryStatusUpdatedEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setDeliveryId(7L)
+                .setOrderId(Long.parseLong(orderId))
+                .setStatus(DeliveryStatus.ASSIGNED)
+                .setUpdatedAt(NOW)
+                .build());
     }
 }

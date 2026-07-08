@@ -1,5 +1,8 @@
 package com.deliveryhub.delivery;
 
+import com.deliveryhub.contracts.EventPayloads;
+import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.delivery.outbox.OutboxEvent;
 import com.deliveryhub.delivery.outbox.OutboxEventRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,14 +44,15 @@ class OutboxEventRepositoryIT {
     }
 
     @Test
-    void storesPayloadAsJsonbAndReturnsPendingEventsOldestFirst() {
+    void storesAvroPayloadAndReturnsPendingEventsOldestFirst() {
         OutboxEvent newer = outboxEventRepository.save(event("2", BASE.plusSeconds(10)));
         OutboxEvent older = outboxEventRepository.save(event("1", BASE));
 
         List<OutboxEvent> batch = newTransaction.execute(status -> outboxEventRepository.lockNextBatch(10));
 
         assertThat(batch).extracting(OutboxEvent::getId).containsExactly(older.getId(), newer.getId());
-        assertThat(batch.getFirst().getPayload()).contains("\"orderId\"");
+        assertThat(EventPayloads.decode("delivery-status-updated", batch.getFirst().getPayload()))
+                .isInstanceOfSatisfying(DeliveryStatusUpdatedEvent.class, event -> assertThat(event.getOrderId()).isEqualTo(1L));
     }
 
     @Test
@@ -84,6 +88,16 @@ class OutboxEventRepositoryIT {
 
     private static OutboxEvent event(String orderId, Instant createdAt) {
         return new OutboxEvent(UUID.randomUUID(), "Delivery", orderId, "delivery-status-updated",
-                "{\"orderId\": " + orderId + "}", createdAt);
+                statusUpdatedPayload(orderId), createdAt);
+    }
+
+    private static byte[] statusUpdatedPayload(String orderId) {
+        return EventPayloads.encode(DeliveryStatusUpdatedEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setDeliveryId(7L)
+                .setOrderId(Long.parseLong(orderId))
+                .setStatus(DeliveryStatus.ASSIGNED)
+                .setUpdatedAt(BASE)
+                .build());
     }
 }

@@ -13,12 +13,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @Import(PostgresContainerConfig.class)
 class OrderRepositoryIT {
+
+    private static final Instant NOW = Instant.parse("2026-07-09T10:15:30Z");
 
     @Autowired
     private OrderRepository orderRepository;
@@ -56,7 +59,7 @@ class OrderRepositoryIT {
     void persistsStatusChange() {
         Order order = orderRepository.saveAndFlush(orderOf(42L));
 
-        order.applyStatus(OrderStatus.CONFIRMED);
+        order.applyStatus(OrderStatus.CONFIRMED, NOW);
         orderRepository.flush();
         entityManager.clear();
 
@@ -65,7 +68,7 @@ class OrderRepositoryIT {
     }
 
     private static Order orderOf(long userId) {
-        Order order = Order.place(userId, 1L);
+        Order order = Order.place(userId, 1L, NOW);
         order.addItem(10L, "Pizza", 2, new BigDecimal("12.50"));
         order.addItem(11L, "Cola", 3, new BigDecimal("3.00"));
         return order;
