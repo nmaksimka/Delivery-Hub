@@ -1,4 +1,5 @@
 import { Outlet, ScrollRestoration } from 'react-router';
+import { CartDrawer } from './CartDrawer';
 import { Header } from './Header';
 import styles from './Layout.module.css';
 
@@ -15,6 +16,7 @@ export function Layout() {
           <span>Доставка еды из ресторанов Томска</span>
         </div>
       </footer>
+      <CartDrawer />
       <ScrollRestoration />
     </div>
   );
