@@ -18,7 +18,14 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.UnsupportedEncodingException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -128,6 +135,49 @@ class AuthApiIT {
         postJson("/api/auth/register", body);
 
         assertThat(postJson("/api/auth/register", body)).hasStatus(409);
+    }
+
+    @Test
+    void emailIsCaseInsensitive() {
+        assertThat(postJson("/api/auth/register", """
+                {"email": "Mixed.Case@Example.com", "password": "secret123", "name": "Mixed"}
+                """)).hasStatus(201).bodyJson().extractingPath("$.email").isEqualTo("mixed.case@example.com");
+
+        assertThat(postJson("/api/auth/register", """
+                {"email": "mixed.case@example.COM", "password": "secret123", "name": "Mixed"}
+                """)).hasStatus(409);
+        assertThat(postJson("/api/auth/login", """
+                {"email": "MIXED.CASE@EXAMPLE.COM", "password": "secret123"}
+                """)).hasStatusOk();
+    }
+
+    @Test
+    void concurrentRegistrationsWithSameEmailGiveOneConflict() throws Exception {
+        String body = "{\"email\": \"race@example.com\", \"password\": \"secret123\", \"name\": \"Race\"}";
+        int attempts = 6;
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(attempts)) {
+            List<Future<Integer>> statuses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                statuses.add(executor.submit(() -> {
+                    start.await();
+                    return postJson("/api/auth/register", body).getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+
+            List<Integer> results = new ArrayList<>();
+            for (Future<Integer> status : statuses) {
+                results.add(status.get(30, TimeUnit.SECONDS));
+            }
+            assertThat(results).containsOnly(201, 409);
+            assertThat(results).filteredOn(status -> status == 201).hasSize(1);
+        }
+    }
+
+    @Test
+    void swaggerDescriptionIsPublic() {
+        assertThat(mvc.get().uri("/v3/api-docs")).hasStatusOk();
     }
 
     @Test
