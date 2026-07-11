@@ -50,6 +50,16 @@ class RestaurantApiIT {
     }
 
     @Test
+    void keepsStandardStatusesForMalformedRequests() {
+        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.APPLICATION_JSON).content("{oops"))
+                .hasStatus(400).bodyJson().extractingPath("$.title").isEqualTo("Bad Request");
+        assertThat(mvc.patch().uri("/api/restaurants")).hasStatus(405);
+        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.TEXT_PLAIN).content("pizza"))
+                .hasStatus(415);
+        assertThat(mvc.get().uri("/api/restaurants/not-a-number")).hasStatus(400);
+    }
+
+    @Test
     void returnsProblemDetailForUnknownRestaurant() {
         assertThat(mvc.get().uri("/api/restaurants/999999")).hasStatus(404)
                 .bodyJson().extractingPath("$.detail").asString().contains("999999");
