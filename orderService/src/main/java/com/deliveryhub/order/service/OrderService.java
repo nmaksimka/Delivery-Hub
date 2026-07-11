@@ -30,7 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -77,11 +80,11 @@ public class OrderService {
     }
 
     public Page<OrderDto> getOrdersOfUser(Long userId, Pageable pageable) {
-        return orderRepository.findByUserId(userId, pageable).map(orderMapper::toDto);
+        return withItems(orderRepository.findIdsByUserId(userId, pageable));
     }
 
     public Page<OrderDto> getAllOrders(Pageable pageable) {
-        return orderRepository.findAll(pageable).map(orderMapper::toDto);
+        return withItems(orderRepository.findAllIds(pageable));
     }
 
     @Transactional
@@ -132,6 +135,12 @@ public class OrderService {
             return;
         }
         updateOrderStatus(event.getOrderId(), OrderStatusResolver.fromDeliveryStatus(event.getStatus()));
+    }
+
+    private Page<OrderDto> withItems(Page<Long> ids) {
+        Map<Long, Order> ordersById = orderRepository.findWithItemsByIdIn(ids.getContent()).stream()
+                .collect(Collectors.toMap(Order::getId, Function.identity()));
+        return ids.map(id -> orderMapper.toDto(ordersById.get(id)));
     }
 
     private OrderCreatedEvent orderCreatedEvent(Order order) {
