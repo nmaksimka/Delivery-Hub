@@ -1,7 +1,10 @@
 package com.deliveryhub.delivery.entity;
 
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.delivery.exception.DeliveryFinishedException;
+import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -22,41 +25,44 @@ class DeliveryTest {
     @ParameterizedTest
     @CsvSource({
             "ASSIGNED,   PICKED_UP",
-            "ASSIGNED,   DELIVERED",
+            "ASSIGNED,   CANCELLED",
             "PICKED_UP,  IN_TRANSIT",
             "IN_TRANSIT, DELIVERED",
             "IN_TRANSIT, CANCELLED"
     })
-    void movesForward(DeliveryStatus from, DeliveryStatus to) {
+    void movesOneStepForwardOrCancels(DeliveryStatus from, DeliveryStatus to) {
         Delivery delivery = deliveryIn(from);
 
-        delivery.changeStatus(to, NOW);
+        assertThat(delivery.changeStatus(to, NOW)).isTrue();
 
         assertThat(delivery.getStatus()).isEqualTo(to);
     }
 
     @ParameterizedTest
     @CsvSource({
+            "ASSIGNED,   IN_TRANSIT",
+            "ASSIGNED,   DELIVERED",
+            "PICKED_UP,  DELIVERED",
             "PICKED_UP,  ASSIGNED",
             "IN_TRANSIT, PICKED_UP",
             "DELIVERED,  IN_TRANSIT",
             "DELIVERED,  CANCELLED",
             "CANCELLED,  ASSIGNED"
     })
-    void rejectsBackwardAndPostFinalTransitions(DeliveryStatus from, DeliveryStatus to) {
+    void rejectsJumpsBackwardAndPostFinalTransitions(DeliveryStatus from, DeliveryStatus to) {
         Delivery delivery = deliveryIn(from);
 
         assertThatThrownBy(() -> delivery.changeStatus(to, NOW))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidStatusTransitionException.class)
                 .hasMessageContaining(from.name())
                 .hasMessageContaining(to.name());
     }
 
     @Test
-    void sameStatusIsIgnored() {
+    void sameStatusIsNotAChange() {
         Delivery delivery = deliveryIn(DeliveryStatus.DELIVERED);
 
-        delivery.changeStatus(DeliveryStatus.DELIVERED, NOW);
+        assertThat(delivery.changeStatus(DeliveryStatus.DELIVERED, NOW)).isFalse();
 
         assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
     }
@@ -66,14 +72,12 @@ class DeliveryTest {
         Delivery delivery = deliveryIn(DeliveryStatus.CANCELLED);
 
         assertThatThrownBy(() -> delivery.assignCourier(5L, NOW))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(DeliveryFinishedException.class);
     }
 
     private static Delivery deliveryIn(DeliveryStatus status) {
         Delivery delivery = Delivery.forOrder(100L, NOW);
-        if (status != DeliveryStatus.ASSIGNED) {
-            delivery.changeStatus(status, NOW);
-        }
+        ReflectionTestUtils.setField(delivery, "status", status);
         return delivery;
     }
 }

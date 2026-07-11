@@ -7,6 +7,7 @@ import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
@@ -72,7 +73,7 @@ public class DeliveryService {
     @Transactional
     public DeliveryDto createDelivery(CreateDeliveryRequest request) {
         if (deliveryRepository.existsByOrderId(request.orderId())) {
-            throw new IllegalStateException("Delivery already exists for order ID: " + request.orderId());
+            throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
         Delivery delivery = deliveryRepository.save(Delivery.forOrder(
@@ -91,10 +92,10 @@ public class DeliveryService {
         if (request.courierId() != null) {
             delivery.assignCourier(request.courierId(), now);
         }
-        delivery.changeStatus(request.status(), now);
-
-        log.info("Delivery {} status updated to {}", id, request.status());
-        publishStatusChange(delivery);
+        if (request.status() != null && delivery.changeStatus(request.status(), now)) {
+            log.info("Delivery {} status updated to {}", id, request.status());
+            publishStatusChange(delivery);
+        }
         return deliveryMapper.toDto(delivery);
     }
 

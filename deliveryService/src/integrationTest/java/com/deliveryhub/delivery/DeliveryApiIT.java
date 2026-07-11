@@ -30,7 +30,9 @@ class DeliveryApiIT {
         assertThat(created).hasStatus(201).bodyJson().extractingPath("$.status").isEqualTo("ASSIGNED");
         Integer deliveryId = JsonPath.read(bodyOf(created), "$.id");
 
+        assertThat(patchStatus(deliveryId, "DELIVERED")).hasStatus(409);
         assertThat(patchStatus(deliveryId, "PICKED_UP")).hasStatusOk();
+        assertThat(patchStatus(deliveryId, "IN_TRANSIT")).hasStatusOk();
         assertThat(patchStatus(deliveryId, "DELIVERED")).hasStatusOk();
         assertThat(patchStatus(deliveryId, "IN_TRANSIT")).hasStatus(409);
         assertThat(mvc.get().uri("/api/deliveries/order/8001")).hasStatusOk()
@@ -51,6 +53,17 @@ class DeliveryApiIT {
     void requiresOrderId() {
         assertThat(postJson("/api/deliveries", "{}")).hasStatus(400)
                 .bodyJson().extractingPath("$.errors.orderId").isEqualTo("Order ID is required");
+    }
+
+    @Test
+    void assignsCourierWithoutStatusAndRejectsEmptyPatch() {
+        MvcTestResult created = postJson("/api/deliveries", "{\"orderId\": 8003}");
+        Integer deliveryId = JsonPath.read(bodyOf(created), "$.id");
+        String uri = "/api/deliveries/" + deliveryId + "/status";
+
+        assertThat(mvc.patch().uri(uri).contentType(MediaType.APPLICATION_JSON).content("{\"courierId\": 9}"))
+                .hasStatusOk().bodyJson().extractingPath("$.courierId").isEqualTo(9);
+        assertThat(mvc.patch().uri(uri).contentType(MediaType.APPLICATION_JSON).content("{}")).hasStatus(400);
     }
 
     private MvcTestResult patchStatus(Integer deliveryId, String status) {

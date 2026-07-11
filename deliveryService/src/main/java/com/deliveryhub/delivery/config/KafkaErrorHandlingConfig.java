@@ -1,5 +1,6 @@
 package com.deliveryhub.delivery.config;
 
+import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.kafka.common.TopicPartition;
@@ -27,6 +28,9 @@ public class KafkaErrorHandlingConfig {
                     return new TopicPartition(record.topic() + ".DLT", -1);
                 });
 
-        return new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        DefaultErrorHandler errorHandler =
+                new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        errorHandler.addNotRetryableExceptions(InvalidStatusTransitionException.class);
+        return errorHandler;
     }
 }

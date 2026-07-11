@@ -8,6 +8,8 @@ import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
+import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
@@ -129,10 +131,34 @@ class DeliveryServiceTest {
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
             when(deliveryMapper.toDto(delivery)).thenReturn(dto());
 
-            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null));
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, null));
 
-            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
-            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+        }
+
+        @Test
+        @DisplayName("повтор того же статуса не порождает событие")
+        void sameStatusAppendsNothing() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.ASSIGNED, null));
+
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("курьера можно назначить, не меняя статус")
+        void assignsCourierWithoutStatus() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 55L));
+
+            assertThat(delivery.getCourierId()).isEqualTo(55L);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            verifyNoInteractions(outbox);
         }
 
         @Test
@@ -165,12 +191,11 @@ class DeliveryServiceTest {
         @DisplayName("недопустимый переход не оставляет события в outbox")
         void rejectedTransitionAppendsNothing() {
             Delivery delivery = existingDelivery();
-            delivery.changeStatus(DeliveryStatus.DELIVERED, NOW);
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
 
             assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(1L,
-                    new UpdateDeliveryStatusRequest(DeliveryStatus.IN_TRANSIT, null)))
-                    .isInstanceOf(IllegalStateException.class);
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null)))
+                    .isInstanceOf(InvalidStatusTransitionException.class);
             verifyNoInteractions(outbox);
         }
 
@@ -195,7 +220,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
             assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, null, null)))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(DeliveryAlreadyExistsException.class)
                     .hasMessageContaining("already exists");
         }
     }
