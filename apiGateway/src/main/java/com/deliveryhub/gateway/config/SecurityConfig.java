@@ -1,6 +1,7 @@
 package com.deliveryhub.gateway.config;
 
 import com.deliveryhub.gateway.security.IdentityHeadersFilter;
+import com.deliveryhub.gateway.security.ProblemResponses;
 import com.deliveryhub.gateway.security.RoleFromTokenConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,7 @@ import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -29,7 +31,12 @@ public class SecurityConfig {
     private static final String AUTH_API = "/api/auth/";
 
     @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http, ReactiveJwtDecoder jwtDecoder) {
+    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http,
+                                                            ReactiveJwtDecoder jwtDecoder,
+                                                            JsonMapper jsonMapper) {
+        ProblemResponses problems = new ProblemResponses(jsonMapper);
+        ServerAuthenticationEntryPoint unauthorized = (exchange, ex) -> problems.write(
+                exchange, HttpStatus.UNAUTHORIZED, "Access token is missing, expired or invalid");
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
@@ -37,7 +44,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/api/auth/**").permitAll()
-                        .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**")
+                        .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**",
+                                "/docs/**")
                         .permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
@@ -54,17 +62,15 @@ public class SecurityConfig {
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenConverter(bearerTokenOutsideAuthApi())
-                        .authenticationEntryPoint(unauthorized())
+                        .authenticationEntryPoint(unauthorized)
                         .jwt(jwt -> jwt
                                 .jwtDecoder(jwtDecoder)
                                 .jwtAuthenticationConverter(new RoleFromTokenConverter())))
                 .addFilterAfter(new IdentityHeadersFilter(), SecurityWebFiltersOrder.AUTHORIZATION)
                 .exceptionHandling(spec -> spec
-                        .authenticationEntryPoint(unauthorized())
-                        .accessDeniedHandler((exchange, ex) -> {
-                            exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                            return exchange.getResponse().setComplete();
-                        }))
+                        .authenticationEntryPoint(unauthorized)
+                        .accessDeniedHandler((exchange, ex) -> problems.write(
+                                exchange, HttpStatus.FORBIDDEN, "Your role is not allowed to do this")))
                 .build();
     }
 
@@ -73,13 +79,6 @@ public class SecurityConfig {
         return exchange -> exchange.getRequest().getPath().value().startsWith(AUTH_API)
                 ? Mono.empty()
                 : bearerToken.convert(exchange);
-    }
-
-    private static ServerAuthenticationEntryPoint unauthorized() {
-        return (exchange, ex) -> {
-            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
-        };
     }
 
     @Bean
