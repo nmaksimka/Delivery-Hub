@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.time.Instant;
 
@@ -60,5 +61,20 @@ class DeliveryRepositoryIT {
         Delivery loaded = deliveryRepository.findByOrderId(1003L).orElseThrow();
         assertThat(loaded.getCourierId()).isEqualTo(55L);
         assertThat(loaded.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+    }
+
+    @Test
+    void rejectsUpdateBasedOnStaleVersion() {
+        Delivery stale = deliveryRepository.saveAndFlush(Delivery.forOrder(1004L, NOW));
+        entityManager.detach(stale);
+
+        Delivery fresh = deliveryRepository.findByOrderId(1004L).orElseThrow();
+        fresh.changeStatus(DeliveryStatus.PICKED_UP, NOW);
+        deliveryRepository.flush();
+
+        stale.changeStatus(DeliveryStatus.CANCELLED, NOW);
+
+        assertThatThrownBy(() -> deliveryRepository.saveAndFlush(stale))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
     }
 }

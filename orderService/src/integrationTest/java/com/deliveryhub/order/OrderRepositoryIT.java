@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
@@ -19,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(PostgresContainerConfig.class)
@@ -89,6 +91,21 @@ class OrderRepositoryIT {
 
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void rejectsUpdateBasedOnStaleVersion() {
+        Order stale = orderRepository.saveAndFlush(orderOf(42L));
+        entityManager.detach(stale);
+
+        Order fresh = orderRepository.findById(stale.getId()).orElseThrow();
+        fresh.changeStatus(OrderStatus.CONFIRMED, NOW);
+        orderRepository.flush();
+
+        stale.changeStatus(OrderStatus.CANCELLED, NOW);
+
+        assertThatThrownBy(() -> orderRepository.saveAndFlush(stale))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
     }
 
     private static Order orderOf(long userId) {
