@@ -15,6 +15,7 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
@@ -178,7 +179,7 @@ class OrderServiceTest {
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class);
+                    .isInstanceOf(OrderRejectedException.class);
 
             assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
         }
@@ -197,26 +198,26 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("бросает IllegalStateException, если ресторан неактивен")
+        @DisplayName("отклоняет заказ, если ресторан неактивен")
         void failsWhenRestaurantInactive() {
             RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not active");
 
             verify(orderRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("бросает IllegalStateException, если блюдо недоступно")
+        @DisplayName("отклоняет заказ, если блюдо недоступно")
         void failsWhenMenuItemUnavailable() {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "12.50", false);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not available");
 
             verify(orderRepository, never()).save(any());
@@ -286,8 +287,7 @@ class OrderServiceTest {
         @DisplayName("переводит заказ в статус заказа, а не доставки")
         void mapsDeliveryStatusToOrderStatus() {
             Order order = orderOf(USER_ID);
-            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
-            when(orderMapper.toDto(order)).thenReturn(dto());
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);
             when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.DELIVERY_STATUS_UPDATED))

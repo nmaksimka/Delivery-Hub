@@ -1,5 +1,6 @@
 package com.deliveryhub.order.entity;
 
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -73,17 +74,29 @@ public class Order {
         totalAmount = totalAmount.add(item.lineTotal());
     }
 
-    public void applyStatus(OrderStatus next, Instant at) {
+    public boolean changeStatus(OrderStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
         Objects.requireNonNull(at, "at");
         if (next == status) {
-            return;
+            return false;
         }
         if (!status.canChangeTo(next)) {
-            throw new IllegalStateException("Order " + id + " cannot change status from " + status + " to " + next);
+            throw new InvalidStatusTransitionException(id, status, next);
         }
         status = next;
         updatedAt = at;
+        return true;
+    }
+
+    public boolean followDelivery(OrderStatus reported, Instant at) {
+        Objects.requireNonNull(reported, "reported");
+        Objects.requireNonNull(at, "at");
+        if (status.isFinal() || !status.isBefore(reported)) {
+            return false;
+        }
+        status = reported;
+        updatedAt = at;
+        return true;
     }
 
     public boolean belongsTo(Long userId) {

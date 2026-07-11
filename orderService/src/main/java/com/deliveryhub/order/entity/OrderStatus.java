@@ -1,5 +1,7 @@
 package com.deliveryhub.order.entity;
 
+import java.util.Set;
+
 public enum OrderStatus {
     CREATED,
     CONFIRMED,
@@ -12,9 +14,19 @@ public enum OrderStatus {
     }
 
     public boolean canChangeTo(OrderStatus next) {
-        if (isFinal()) {
-            return false;
-        }
-        return next == CANCELLED || next.ordinal() > ordinal();
+        return nextSteps().contains(next);
+    }
+
+    public boolean isBefore(OrderStatus other) {
+        return ordinal() < other.ordinal();
+    }
+
+    private Set<OrderStatus> nextSteps() {
+        return switch (this) {
+            case CREATED -> Set.of(CONFIRMED, CANCELLED);
+            case CONFIRMED -> Set.of(IN_DELIVERY, CANCELLED);
+            case IN_DELIVERY -> Set.of(DELIVERED, CANCELLED);
+            case DELIVERED, CANCELLED -> Set.of();
+        };
     }
 }

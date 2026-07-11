@@ -83,7 +83,7 @@ class OrderRepositoryIT {
     void persistsStatusChange() {
         Order order = orderRepository.saveAndFlush(orderOf(42L));
 
-        order.applyStatus(OrderStatus.CONFIRMED, NOW);
+        order.changeStatus(OrderStatus.CONFIRMED, NOW);
         orderRepository.flush();
         entityManager.clear();
 

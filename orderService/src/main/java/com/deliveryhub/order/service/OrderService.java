@@ -13,6 +13,7 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
@@ -93,7 +94,7 @@ public class OrderService {
 
         RestaurantDto restaurant = restaurantCatalog.restaurant(createRequest.restaurantId());
         if (!restaurant.active()) {
-            throw new IllegalStateException("Restaurant " + restaurant.id() + " is not active");
+            throw new OrderRejectedException("Restaurant " + restaurant.id() + " is not active");
         }
 
         Order order = Order.place(userId, createRequest.restaurantId(), clock.instant());
@@ -102,7 +103,7 @@ public class OrderService {
             MenuItemDto menuItem = restaurantCatalog.menuItem(createRequest.restaurantId(), itemRequest.menuItemId());
 
             if (!menuItem.available()) {
-                throw new IllegalStateException("Menu item " + menuItem.id() + " is not available");
+                throw new OrderRejectedException("Menu item " + menuItem.id() + " is not available");
             }
 
             order.addItem(menuItem.id(), menuItem.name(), itemRequest.quantity(), menuItem.price());
@@ -123,7 +124,7 @@ public class OrderService {
         Order order = orderRepository.findWithItemsById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
 
-        order.applyStatus(newStatus, clock.instant());
+        order.changeStatus(newStatus, clock.instant());
         log.info("Order {} status updated to {}", id, newStatus);
         return orderMapper.toDto(order);
     }
@@ -134,7 +135,15 @@ public class OrderService {
             log.info("Event {} is already processed, skipping", event.getEventId());
             return;
         }
-        updateOrderStatus(event.getOrderId(), OrderStatusResolver.fromDeliveryStatus(event.getStatus()));
+        Order order = orderRepository.findById(event.getOrderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Order with ID: " + event.getOrderId() + " was not found"));
+        OrderStatus reported = OrderStatusResolver.fromDeliveryStatus(event.getStatus());
+        if (order.followDelivery(reported, clock.instant())) {
+            log.info("Order {} status updated to {} after delivery event", order.getId(), reported);
+        } else {
+            log.info("Order {} stays {}, delivery reported {}", order.getId(), order.getStatus(), reported);
+        }
     }
 
     private Page<OrderDto> withItems(Page<Long> ids) {

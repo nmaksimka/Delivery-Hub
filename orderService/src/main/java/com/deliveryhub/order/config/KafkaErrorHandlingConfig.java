@@ -1,5 +1,6 @@
 package com.deliveryhub.order.config;
 
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -31,7 +32,7 @@ public class KafkaErrorHandlingConfig {
         DefaultErrorHandler errorHandler =
                 new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
 
-        errorHandler.addNotRetryableExceptions(EntityNotFoundException.class, IllegalStateException.class);
+        errorHandler.addNotRetryableExceptions(EntityNotFoundException.class, InvalidStatusTransitionException.class);
         return errorHandler;
     }
 }

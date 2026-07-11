@@ -1,6 +1,8 @@
 package com.deliveryhub.order.entity;
 
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -46,7 +48,7 @@ class OrderTest {
     @Test
     void itemsCannotBeAddedAfterConfirmation() {
         Order order = Order.place(42L, 1L, NOW);
-        order.applyStatus(OrderStatus.CONFIRMED, NOW);
+        order.changeStatus(OrderStatus.CONFIRMED, NOW);
 
         assertThatThrownBy(() -> order.addItem(10L, "Pizza", 1, BigDecimal.TEN))
                 .isInstanceOf(IllegalStateException.class);
@@ -55,40 +57,60 @@ class OrderTest {
     @ParameterizedTest
     @CsvSource({
             "CREATED,     CONFIRMED",
-            "CREATED,     IN_DELIVERY",
-            "CONFIRMED,   DELIVERED",
+            "CREATED,     CANCELLED",
+            "CONFIRMED,   IN_DELIVERY",
+            "CONFIRMED,   CANCELLED",
+            "IN_DELIVERY, DELIVERED",
             "IN_DELIVERY, CANCELLED"
     })
-    void movesForward(OrderStatus from, OrderStatus to) {
+    void movesOneStepForwardOrCancels(OrderStatus from, OrderStatus to) {
         Order order = orderIn(from);
 
-        order.applyStatus(to, NOW);
+        assertThat(order.changeStatus(to, NOW)).isTrue();
 
         assertThat(order.getStatus()).isEqualTo(to);
     }
 
     @ParameterizedTest
     @CsvSource({
+            "CREATED,     IN_DELIVERY",
+            "CREATED,     DELIVERED",
+            "CONFIRMED,   DELIVERED",
             "CONFIRMED,   CREATED",
             "IN_DELIVERY, CONFIRMED",
             "DELIVERED,   CANCELLED",
             "CANCELLED,   CONFIRMED"
     })
-    void rejectsBackwardAndPostFinalTransitions(OrderStatus from, OrderStatus to) {
+    void rejectsJumpsBackwardAndPostFinalTransitions(OrderStatus from, OrderStatus to) {
         Order order = orderIn(from);
 
-        assertThatThrownBy(() -> order.applyStatus(to, NOW))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> order.changeStatus(to, NOW))
+                .isInstanceOf(InvalidStatusTransitionException.class);
         assertThat(order.getStatus()).isEqualTo(from);
     }
 
     @Test
-    void repeatedStatusIsIgnored() {
+    void repeatedStatusIsNotAChange() {
         Order order = orderIn(OrderStatus.DELIVERED);
 
-        order.applyStatus(OrderStatus.DELIVERED, NOW);
+        assertThat(order.changeStatus(OrderStatus.DELIVERED, NOW)).isFalse();
+    }
 
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+    @ParameterizedTest
+    @CsvSource({
+            "CREATED,     IN_DELIVERY, IN_DELIVERY, true",
+            "CREATED,     DELIVERED,   DELIVERED,   true",
+            "CONFIRMED,   CANCELLED,   CANCELLED,   true",
+            "IN_DELIVERY, CONFIRMED,   IN_DELIVERY, false",
+            "DELIVERED,   CANCELLED,   DELIVERED,   false",
+            "CANCELLED,   IN_DELIVERY, CANCELLED,   false"
+    })
+    void followsDeliveryOnlyForward(OrderStatus from, OrderStatus reported, OrderStatus expected, boolean changed) {
+        Order order = orderIn(from);
+
+        assertThat(order.followDelivery(reported, NOW)).isEqualTo(changed);
+
+        assertThat(order.getStatus()).isEqualTo(expected);
     }
 
     @Test
@@ -101,7 +123,7 @@ class OrderTest {
 
     private static Order orderIn(OrderStatus status) {
         Order order = Order.place(42L, 1L, NOW);
-        order.applyStatus(status, NOW);
+        ReflectionTestUtils.setField(order, "status", status);
         return order;
     }
 }
