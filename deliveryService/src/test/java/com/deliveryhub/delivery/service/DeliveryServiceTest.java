@@ -219,7 +219,7 @@ class DeliveryServiceTest {
         void rejectsDuplicate() {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
-            assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, null, null)))
+            assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, null, null, null)))
                     .isInstanceOf(DeliveryAlreadyExistsException.class)
                     .hasMessageContaining("already exists");
         }
@@ -237,12 +237,12 @@ class DeliveryServiceTest {
     }
 
     private static Delivery existingDelivery() {
-        Delivery delivery = Delivery.forOrder(ORDER_ID, NOW);
+        Delivery delivery = Delivery.forOrder(ORDER_ID, 42L, NOW);
         ReflectionTestUtils.setField(delivery, "id", 1L);
         return delivery;
     }
 
     private static DeliveryDto dto() {
-        return new DeliveryDto(1L, ORDER_ID, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
+        return new DeliveryDto(1L, ORDER_ID, 42L, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
     }
 }

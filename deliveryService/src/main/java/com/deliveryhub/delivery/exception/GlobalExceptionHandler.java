@@ -34,6 +34,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ProblemDetail handleForbidden(ForbiddenException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ProblemDetail handleConcurrentUpdate(ObjectOptimisticLockingFailureException ex) {
         log.info("Concurrent update rejected: {}", ex.getMessage());

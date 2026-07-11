@@ -47,6 +47,7 @@ public class SecurityConfig {
 
                         .pathMatchers("/api/orders/all").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.PATCH, "/api/orders/*/status").hasAnyRole("ADMIN", "COURIER")
+                        .pathMatchers(HttpMethod.GET, "/api/deliveries").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers(HttpMethod.POST, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers(HttpMethod.PATCH, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
 

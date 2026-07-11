@@ -27,6 +27,9 @@ public class Delivery {
     @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
+    @Column(name = "user_id")
+    private Long userId;
+
     @Column(name = "courier_id")
     private Long courierId;
 
@@ -50,8 +53,9 @@ public class Delivery {
     protected Delivery() {
     }
 
-    private Delivery(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
+    private Delivery(Long orderId, Long userId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
+        this.userId = userId;
         this.courierId = courierId;
         this.estimatedDeliveryTime = estimatedDeliveryTime;
         this.status = DeliveryStatus.ASSIGNED;
@@ -59,12 +63,13 @@ public class Delivery {
         this.updatedAt = createdAt;
     }
 
-    public static Delivery forOrder(Long orderId, Instant createdAt) {
-        return new Delivery(orderId, null, null, createdAt);
+    public static Delivery forOrder(Long orderId, Long userId, Instant createdAt) {
+        return new Delivery(orderId, userId, null, null, createdAt);
     }
 
-    public static Delivery forOrder(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
-        return new Delivery(orderId, courierId, estimatedDeliveryTime, createdAt);
+    public static Delivery forOrder(Long orderId, Long userId, Long courierId, Instant estimatedDeliveryTime,
+                                    Instant createdAt) {
+        return new Delivery(orderId, userId, courierId, estimatedDeliveryTime, createdAt);
     }
 
     public boolean changeStatus(DeliveryStatus next, Instant at) {
@@ -89,6 +94,10 @@ public class Delivery {
         this.updatedAt = Objects.requireNonNull(at, "at");
     }
 
+    public boolean belongsTo(Long userId) {
+        return this.userId != null && this.userId.equals(userId);
+    }
+
     public boolean isFinished() {
         return status == DeliveryStatus.DELIVERED || status == DeliveryStatus.CANCELLED;
     }
@@ -106,6 +115,10 @@ public class Delivery {
 
     public Long getOrderId() {
         return orderId;
+    }
+
+    public Long getUserId() {
+        return userId;
     }
 
     public Long getCourierId() {

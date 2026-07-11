@@ -29,7 +29,7 @@ class DeliveryRepositoryIT {
 
     @Test
     void findsDeliveryByOrderId() {
-        deliveryRepository.saveAndFlush(Delivery.forOrder(1001L, NOW));
+        deliveryRepository.saveAndFlush(Delivery.forOrder(1001L, 42L, NOW));
         entityManager.clear();
 
         assertThat(deliveryRepository.findByOrderId(1001L)).get()
@@ -43,15 +43,15 @@ class DeliveryRepositoryIT {
 
     @Test
     void databaseAllowsOnlyOneDeliveryPerOrder() {
-        deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, NOW));
+        deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, 42L, NOW));
 
-        assertThatThrownBy(() -> deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, NOW)))
+        assertThatThrownBy(() -> deliveryRepository.saveAndFlush(Delivery.forOrder(1002L, 42L, NOW)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void persistsStatusAndCourier() {
-        Delivery delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(1003L, NOW));
+        Delivery delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(1003L, 42L, NOW));
 
         delivery.assignCourier(55L, NOW);
         delivery.changeStatus(DeliveryStatus.PICKED_UP, NOW);
@@ -65,7 +65,7 @@ class DeliveryRepositoryIT {
 
     @Test
     void rejectsUpdateBasedOnStaleVersion() {
-        Delivery stale = deliveryRepository.saveAndFlush(Delivery.forOrder(1004L, NOW));
+        Delivery stale = deliveryRepository.saveAndFlush(Delivery.forOrder(1004L, 42L, NOW));
         entityManager.detach(stale);
 
         Delivery fresh = deliveryRepository.findByOrderId(1004L).orElseThrow();

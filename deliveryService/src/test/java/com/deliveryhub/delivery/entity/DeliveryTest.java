@@ -19,7 +19,7 @@ class DeliveryTest {
 
     @Test
     void newDeliveryIsAssigned() {
-        assertThat(Delivery.forOrder(100L, NOW).getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+        assertThat(Delivery.forOrder(100L, 42L, NOW).getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
     }
 
     @ParameterizedTest
@@ -76,7 +76,7 @@ class DeliveryTest {
     }
 
     private static Delivery deliveryIn(DeliveryStatus status) {
-        Delivery delivery = Delivery.forOrder(100L, NOW);
+        Delivery delivery = Delivery.forOrder(100L, 42L, NOW);
         ReflectionTestUtils.setField(delivery, "status", status);
         return delivery;
     }

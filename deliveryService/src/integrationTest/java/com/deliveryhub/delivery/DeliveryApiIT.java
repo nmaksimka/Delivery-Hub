@@ -35,8 +35,30 @@ class DeliveryApiIT {
         assertThat(patchStatus(deliveryId, "IN_TRANSIT")).hasStatusOk();
         assertThat(patchStatus(deliveryId, "DELIVERED")).hasStatusOk();
         assertThat(patchStatus(deliveryId, "IN_TRANSIT")).hasStatus(409);
-        assertThat(mvc.get().uri("/api/deliveries/order/8001")).hasStatusOk()
+        assertThat(mvc.get().uri("/api/deliveries/order/8001").header("X-User-Id", "3").header("X-User-Role", "COURIER"))
+                .hasStatusOk()
                 .bodyJson().extractingPath("$.status").isEqualTo("DELIVERED");
+    }
+
+    @Test
+    void customerSeesOnlyOwnDelivery() {
+        MvcTestResult created = postJson("/api/deliveries", "{\"orderId\": 8010, \"userId\": 77}");
+        Integer deliveryId = JsonPath.read(bodyOf(created), "$.id");
+
+        assertThat(mvc.get().uri("/api/deliveries/" + deliveryId).header("X-User-Id", "77")).hasStatusOk();
+        assertThat(mvc.get().uri("/api/deliveries/order/8010").header("X-User-Id", "77")).hasStatusOk();
+        assertThat(mvc.get().uri("/api/deliveries/" + deliveryId).header("X-User-Id", "78")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/deliveries/order/8010").header("X-User-Id", "78")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/deliveries/" + deliveryId).header("X-User-Id", "78").header("X-User-Role", "ADMIN"))
+                .hasStatusOk();
+    }
+
+    @Test
+    void listIsClosedForCustomers() {
+        assertThat(mvc.get().uri("/api/deliveries").header("X-User-Id", "77")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/deliveries").header("X-User-Id", "5").header("X-User-Role", "COURIER"))
+                .hasStatusOk();
+        assertThat(mvc.get().uri("/api/deliveries")).hasStatus(400);
     }
 
     @Test

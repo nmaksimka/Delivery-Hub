@@ -8,10 +8,12 @@ import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
+import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.delivery.security.CurrentUser;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
@@ -55,18 +57,21 @@ public class DeliveryService {
         this.meterRegistry = meterRegistry;
     }
 
-    public DeliveryDto getDeliveryById(Long id) {
-        return deliveryMapper.toDto(findByIdOrThrow(id));
+    public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
+        return deliveryMapper.toDto(visibleTo(currentUser, findByIdOrThrow(id)));
     }
 
-    public DeliveryDto getDeliveryByOrderId(Long orderId) {
+    public DeliveryDto getDeliveryByOrderId(Long orderId, CurrentUser currentUser) {
         Delivery delivery = deliveryRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Delivery for order ID: " + orderId + " was not found"));
-        return deliveryMapper.toDto(delivery);
+        return deliveryMapper.toDto(visibleTo(currentUser, delivery));
     }
 
-    public Page<DeliveryDto> getAllDeliveries(Pageable pageable) {
+    public Page<DeliveryDto> getAllDeliveries(Pageable pageable, CurrentUser currentUser) {
+        if (!currentUser.seesEveryDelivery()) {
+            throw new ForbiddenException("Only couriers and administrators can list deliveries");
+        }
         return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
     }
 
@@ -77,7 +82,8 @@ public class DeliveryService {
         }
 
         Delivery delivery = deliveryRepository.save(Delivery.forOrder(
-                request.orderId(), request.courierId(), request.estimatedDeliveryTime(), clock.instant()));
+                request.orderId(), request.userId(), request.courierId(), request.estimatedDeliveryTime(),
+                clock.instant()));
 
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
@@ -110,7 +116,7 @@ public class DeliveryService {
             return;
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.getOrderId(), clock.instant()));
+        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant()));
 
         log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
@@ -126,6 +132,13 @@ public class DeliveryService {
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
         meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();
+    }
+
+    private static Delivery visibleTo(CurrentUser currentUser, Delivery delivery) {
+        if (!currentUser.seesEveryDelivery() && !delivery.belongsTo(currentUser.id())) {
+            throw new ForbiddenException("Delivery " + delivery.getId() + " does not belong to the current user");
+        }
+        return delivery;
     }
 
     private Delivery findByIdOrThrow(Long id) {
