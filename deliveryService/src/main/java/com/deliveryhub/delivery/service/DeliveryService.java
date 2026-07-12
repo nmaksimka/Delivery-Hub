@@ -1,6 +1,7 @@
 package com.deliveryhub.delivery.service;
 
 import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
@@ -23,6 +24,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -140,7 +143,21 @@ public class DeliveryService {
                 .setSequence(delivery.nextEventSequence())
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
-        meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();
+        countAfterCommit(delivery.getStatus());
+    }
+
+    private void countAfterCommit(DeliveryStatus status) {
+        Runnable count = () -> meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, status.name()).increment();
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            count.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                count.run();
+            }
+        });
     }
 
     private static Delivery visibleTo(CurrentUser currentUser, Delivery delivery) {
