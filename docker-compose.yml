@@ -21,7 +21,7 @@ services:
     image: apache/kafka:4.1.2
     container_name: kafka
     ports:
-      - "29092:29092"
+      - "127.0.0.1:29092:29092"
     environment:
       CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
       KAFKA_NODE_ID: 1
@@ -50,7 +50,7 @@ services:
     image: confluentinc/cp-schema-registry:8.1.4
     container_name: schema-registry
     ports:
-      - "8085:8081"
+      - "127.0.0.1:8085:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
@@ -68,7 +68,7 @@ services:
     image: kafbat/kafka-ui:v1.5.0
     container_name: kafka-ui
     ports:
-      - "8086:8080"
+      - "127.0.0.1:8086:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: deliveryhub
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -96,8 +96,6 @@ services:
       POSTGRES_DB: restaurant_db
       POSTGRES_USER: restaurant_user
       POSTGRES_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
-    ports:
-      - "5331:5432"
     volumes:
       - pg-restaurant-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -109,8 +107,6 @@ services:
       POSTGRES_DB: order_db
       POSTGRES_USER: order_user
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
-    ports:
-      - "5332:5432"
     volumes:
       - pg-order-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -122,8 +118,6 @@ services:
       POSTGRES_DB: delivery_db
       POSTGRES_USER: delivery_user
       POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
-    ports:
-      - "5333:5432"
     volumes:
       - pg-delivery-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -135,8 +129,6 @@ services:
       POSTGRES_DB: user_db
       POSTGRES_USER: user_user
       POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
-    ports:
-      - "5334:5432"
     volumes:
       - pg-user-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -310,16 +302,22 @@ services:
         condition: service_healthy
       userService:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9335/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   prometheus:
     image: prom/prometheus:v3.12.0
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
-      - apiGateway
+      apiGateway:
+        condition: service_healthy
 
   loki:
     image: grafana/loki:3.7.3
