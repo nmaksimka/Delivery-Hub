@@ -1,6 +1,7 @@
 package com.deliveryhub.order;
 
 import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.RestaurantServiceClient;
@@ -108,6 +109,34 @@ class OrderApiIT {
 
         assertThat(result).hasStatus(400).bodyJson().extractingPath("$.errors").asMap()
                 .containsKey("orderItemsRequest");
+    }
+
+    @Test
+    void ownerCancelsOwnOrderAndOrderCancelledEventIsPublished() {
+        Integer orderId = JsonPath.read(bodyOf(createOrder(88L)), "$.id");
+
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "89")).hasStatus(403);
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "88")).hasStatusOk()
+                .bodyJson().extractingPath("$.status").isEqualTo("CANCELLED");
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "88")).hasStatus(409);
+
+        Optional<OrderCancelledEvent> published = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.ORDER_CANCELLED, OrderCancelledEvent.class, event -> event.getOrderId() == orderId);
+
+        assertThat(published).isPresent();
+        assertThat(published.get().getUserId()).isEqualTo(88L);
+        assertThat(published.get().getSequence()).isEqualTo(2L);
+    }
+
+    @Test
+    void ownerCannotCancelOrderThatIsAlreadyOnItsWay() {
+        Integer orderId = JsonPath.read(bodyOf(createOrder(90L)), "$.id");
+        patchStatus(orderId, "CONFIRMED");
+        patchStatus(orderId, "IN_DELIVERY");
+
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "90")).hasStatus(409);
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel")
+                .header("X-User-Id", "1").header("X-User-Role", "ADMIN")).hasStatusOk();
     }
 
     @Test

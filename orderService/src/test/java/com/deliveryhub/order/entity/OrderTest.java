@@ -113,6 +113,26 @@ class OrderTest {
         assertThat(order.getStatus()).isEqualTo(expected);
     }
 
+    @ParameterizedTest
+    @CsvSource({"CREATED", "CONFIRMED"})
+    void customerCancelsOrderThatIsNotOnItsWay(OrderStatus from) {
+        Order order = orderIn(from);
+
+        order.cancelByCustomer(NOW);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"IN_DELIVERY", "DELIVERED", "CANCELLED"})
+    void customerCannotCancelOrderThatLeftRestaurantOrIsFinished(OrderStatus from) {
+        Order order = orderIn(from);
+
+        assertThatThrownBy(() -> order.cancelByCustomer(NOW))
+                .isInstanceOf(InvalidStatusTransitionException.class);
+        assertThat(order.getStatus()).isEqualTo(from);
+    }
+
     @Test
     void numbersOwnEventsWithoutGaps() {
         Order order = Order.place(42L, 1L, NOW);

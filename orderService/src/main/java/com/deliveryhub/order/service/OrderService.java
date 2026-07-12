@@ -2,6 +2,7 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
@@ -77,8 +78,7 @@ public class OrderService {
     }
 
     public OrderDto getOrderById(Long id, CurrentUser currentUser) {
-        Order order = orderRepository.findWithItemsById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
+        Order order = findWithItemsOrThrow(id);
 
         if (!currentUser.isAdmin() && !order.belongsTo(currentUser.id())) {
             throw new ForbiddenException("Order " + id + " does not belong to the current user");
@@ -135,11 +135,33 @@ public class OrderService {
 
     @Transactional
     public OrderDto updateOrderStatus(Long id, OrderStatus newStatus) {
-        Order order = orderRepository.findWithItemsById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
+        Order order = findWithItemsOrThrow(id);
 
-        order.changeStatus(newStatus, clock.instant());
-        log.info("Order {} status updated to {}", id, newStatus);
+        if (order.changeStatus(newStatus, clock.instant())) {
+            log.info("Order {} status updated to {}", id, newStatus);
+            if (newStatus == OrderStatus.CANCELLED) {
+                appendCancelled(order);
+            }
+        }
+        return orderMapper.toDto(order);
+    }
+
+    @Transactional
+    public OrderDto cancelOrder(Long id, CurrentUser currentUser) {
+        Order order = findWithItemsOrThrow(id);
+
+        if (currentUser.isAdmin()) {
+            if (!order.changeStatus(OrderStatus.CANCELLED, clock.instant())) {
+                return orderMapper.toDto(order);
+            }
+        } else {
+            if (!order.belongsTo(currentUser.id())) {
+                throw new ForbiddenException("Order " + id + " does not belong to the current user");
+            }
+            order.cancelByCustomer(clock.instant());
+        }
+        log.info("Order {} is cancelled by user {}", id, currentUser.id());
+        appendCancelled(order);
         return orderMapper.toDto(order);
     }
 
@@ -163,6 +185,22 @@ public class OrderService {
         } else {
             log.info("Order {} stays {}, delivery reported {}", order.getId(), order.getStatus(), reported);
         }
+    }
+
+    private void appendCancelled(Order order) {
+        OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setOrderId(order.getId())
+                .setUserId(order.getUserId())
+                .setCancelledAt(order.getUpdatedAt())
+                .setSequence(order.nextEventSequence())
+                .build();
+        outbox.append(AGGREGATE_TYPE, order.getId(), Topics.ORDER_CANCELLED, event.getEventId(), event);
+    }
+
+    private Order findWithItemsOrThrow(Long id) {
+        return orderRepository.findWithItemsById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
     }
 
     private Page<OrderDto> withItems(Page<Long> ids) {

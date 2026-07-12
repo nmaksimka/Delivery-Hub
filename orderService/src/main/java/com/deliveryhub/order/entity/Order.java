@@ -99,6 +99,13 @@ public class Order {
         return true;
     }
 
+    public void cancelByCustomer(Instant at) {
+        if (status != OrderStatus.CREATED && status != OrderStatus.CONFIRMED) {
+            throw new InvalidStatusTransitionException(id, status, OrderStatus.CANCELLED);
+        }
+        changeStatus(OrderStatus.CANCELLED, at);
+    }
+
     public boolean followDelivery(OrderStatus reported, Instant at) {
         Objects.requireNonNull(reported, "reported");
         Objects.requireNonNull(at, "at");

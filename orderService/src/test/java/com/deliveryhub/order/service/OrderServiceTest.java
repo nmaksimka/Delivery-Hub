@@ -3,6 +3,7 @@ package com.deliveryhub.order.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.RestaurantCatalog;
@@ -15,6 +16,7 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
@@ -350,6 +352,93 @@ class OrderServiceTest {
 
             assertThatThrownBy(() -> orderService.getOrderById(404L, new CurrentUser(USER_ID, "USER")))
                     .isInstanceOf(EntityNotFoundException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("cancelOrder")
+    class CancelOrder {
+
+        @Test
+        @DisplayName("владелец отменяет заказ, событие OrderCancelled уходит в outbox со следующим номером")
+        void ownerCancelsAndEventIsAppended() {
+            Order order = orderOf(USER_ID);
+            order.nextEventSequence();
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER"));
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            ArgumentCaptor<OrderCancelledEvent> event = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), event.capture());
+            assertThat(event.getValue().getOrderId()).isEqualTo(1L);
+            assertThat(event.getValue().getUserId()).isEqualTo(USER_ID);
+            assertThat(event.getValue().getSequence()).isEqualTo(2L);
+            assertThat(event.getValue().getCancelledAt()).isEqualTo(NOW);
+        }
+
+        @Test
+        @DisplayName("чужой заказ отменить нельзя")
+        void strangerCannotCancel() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, new CurrentUser(USER_ID + 1, "USER")))
+                    .isInstanceOf(ForbiddenException.class);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CREATED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("заказ в пути владелец отменить уже не может, а администратор может")
+        void onlyAdminCancelsOrderInDelivery() {
+            Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.IN_DELIVERY);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER")))
+                    .isInstanceOf(InvalidStatusTransitionException.class);
+            verifyNoInteractions(outbox);
+
+            orderService.cancelOrder(1L, new CurrentUser(1L, "ADMIN"));
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), any());
+        }
+
+        @Test
+        @DisplayName("повторная отмена администратором не порождает второго события")
+        void repeatedAdminCancelAppendsNothing() {
+            Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.CANCELLED);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOrder(1L, new CurrentUser(1L, "ADMIN"));
+
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("смена статуса на CANCELLED через PATCH тоже публикует OrderCancelled")
+        void statusPatchToCancelledAppendsEvent() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.updateOrderStatus(1L, OrderStatus.CANCELLED);
+            orderService.updateOrderStatus(1L, OrderStatus.CANCELLED);
+
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), any());
+        }
+
+        @Test
+        @DisplayName("обычная смена статуса событий не публикует")
+        void plainStatusChangeAppendsNothing() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.updateOrderStatus(1L, OrderStatus.CONFIRMED);
+
+            verifyNoInteractions(outbox);
         }
     }
 
