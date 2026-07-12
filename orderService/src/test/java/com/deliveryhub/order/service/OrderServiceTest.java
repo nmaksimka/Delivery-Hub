@@ -311,7 +311,7 @@ class OrderServiceTest {
         }
 
         private DeliveryStatusUpdatedEvent statusUpdate(DeliveryStatus status) {
-            return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 1L, status, Instant.EPOCH);
+            return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 1L, status, Instant.EPOCH, 2L);
         }
     }
 

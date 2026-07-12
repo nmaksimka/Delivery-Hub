@@ -91,15 +91,15 @@ class OrderEventsIT {
         Long orderId = placeOrder();
         UUID eventId = UUID.randomUUID();
         DeliveryStatusUpdatedEvent picked =
-                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now());
+                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L);
         DeliveryStatusUpdatedEvent sameIdOtherStatus =
-                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.DELIVERED, Instant.now());
+                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.DELIVERED, Instant.now(), 4L);
 
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), picked);
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), sameIdOtherStatus);
         Long markerOrderId = placeOrder();
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, markerOrderId.toString(), new DeliveryStatusUpdatedEvent(
-                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now()));
+                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now(), 2L));
 
         await().atMost(TIMEOUT).untilAsserted(() ->
                 assertThat(statusOf(markerOrderId)).isEqualTo(OrderStatus.CANCELLED));

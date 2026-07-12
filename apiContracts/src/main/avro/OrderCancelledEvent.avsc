@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "OrderCancelledEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "orderId", "type": "long"},
+    {"name": "userId", "type": "long"},
+    {"name": "cancelledAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "sequence", "type": "long", "default": 0}
+  ]
+}

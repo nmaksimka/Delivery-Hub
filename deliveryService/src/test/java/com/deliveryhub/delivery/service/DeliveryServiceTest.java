@@ -252,7 +252,7 @@ class DeliveryServiceTest {
     }
 
     private static OrderCreatedEvent orderCreated() {
-        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of());
+        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of(), 1L);
     }
 
     private static Delivery existingDelivery() {

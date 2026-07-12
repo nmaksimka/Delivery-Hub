@@ -1,6 +1,7 @@
 package com.deliveryhub.contracts;
 
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import org.apache.avro.message.BinaryMessageDecoder;
 import org.apache.avro.message.BinaryMessageEncoder;
@@ -16,6 +17,7 @@ public final class EventPayloads {
 
     private static final Map<String, BinaryMessageDecoder<? extends SpecificRecord>> DECODERS = Map.of(
             Topics.ORDER_CREATED, OrderCreatedEvent.getDecoder(),
+            Topics.ORDER_CANCELLED, OrderCancelledEvent.getDecoder(),
             Topics.DELIVERY_STATUS_UPDATED, DeliveryStatusUpdatedEvent.getDecoder());
 
     private EventPayloads() {

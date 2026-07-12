@@ -7,6 +7,7 @@
     {"name": "deliveryId", "type": "long"},
     {"name": "orderId", "type": "long"},
     {"name": "status", "type": "com.deliveryhub.contracts.enums.DeliveryStatus"},
-    {"name": "updatedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+    {"name": "updatedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "sequence", "type": "long", "default": 0}
   ]
 }

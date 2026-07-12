@@ -94,6 +94,6 @@ class OrderCreatedListenerIT {
 
     private static OrderCreatedEvent orderCreated(UUID eventId, long orderId) {
         return new OrderCreatedEvent(eventId, orderId, 42L, 1L, new BigDecimal("34.00"), Instant.now(),
-                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))));
+                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))), 1L);
     }
 }
