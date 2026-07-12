@@ -11,6 +11,13 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,6 +76,29 @@ class DeliveryApiIT {
         postJson("/api/deliveries", body);
 
         assertThat(postJson("/api/deliveries", body)).hasStatus(409);
+    }
+
+    @Test
+    void concurrentCreationForSameOrderGivesOneConflict() throws Exception {
+        int attempts = 6;
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(attempts)) {
+            List<Future<Integer>> statuses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                statuses.add(executor.submit(() -> {
+                    start.await();
+                    return postJson("/api/deliveries", "{\"orderId\": 8020}").getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+
+            List<Integer> results = new ArrayList<>();
+            for (Future<Integer> status : statuses) {
+                results.add(status.get(30, TimeUnit.SECONDS));
+            }
+            assertThat(results).containsOnly(201, 409);
+            assertThat(results).filteredOn(status -> status == 201).hasSize(1);
+        }
     }
 
     @Test

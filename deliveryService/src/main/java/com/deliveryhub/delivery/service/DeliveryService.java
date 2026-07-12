@@ -18,6 +18,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -81,9 +82,14 @@ public class DeliveryService {
             throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(
-                request.orderId(), request.userId(), request.courierId(), request.estimatedDeliveryTime(),
-                clock.instant()));
+        Delivery delivery;
+        try {
+            delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(
+                    request.orderId(), request.userId(), request.courierId(), request.estimatedDeliveryTime(),
+                    clock.instant()));
+        } catch (DataIntegrityViolationException e) {
+            throw new DeliveryAlreadyExistsException(request.orderId());
+        }
 
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
