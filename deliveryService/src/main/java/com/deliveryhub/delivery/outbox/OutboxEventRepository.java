@@ -1,6 +1,7 @@
 package com.deliveryhub.delivery.outbox;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,6 +25,10 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
     List<OutboxEvent> lockNextBatch(@Param("batchSize") int batchSize);
+
+    @Modifying
+    @Query("DELETE FROM OutboxEvent e WHERE e.publishedAt < :before")
+    int deletePublishedBefore(@Param("before") Instant before);
 
     long countByPublishedAtIsNullAndParkedAtIsNull();
 
