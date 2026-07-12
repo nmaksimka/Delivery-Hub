@@ -18,6 +18,8 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Map;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.times;
@@ -52,24 +54,24 @@ class RestaurantCatalogTest {
                 .thenThrow(unavailable())
                 .thenReturn(RESTAURANT);
 
-        assertThat(catalog.restaurant(1L)).isEqualTo(RESTAURANT);
+        assertThat(catalog.quote(1L, List.of(10L)).restaurant()).isEqualTo(RESTAURANT);
         verify(client, times(3)).getRestaurantById(1L);
     }
 
     @Test
     void givesUpAfterLastAttempt() {
-        when(client.getMenuItemById(1L, 10L)).thenThrow(unavailable());
+        when(client.getRestaurantById(1L)).thenThrow(unavailable());
 
-        assertThatThrownBy(() -> catalog.menuItem(1L, 10L))
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
                 .isInstanceOf(RestaurantServiceUnavailableException.class);
-        verify(client, times(3)).getMenuItemById(1L, 10L);
+        verify(client, times(3)).getRestaurantById(1L);
     }
 
     @Test
     void doesNotRepeatWhenCircuitIsOpen() {
         when(client.getRestaurantById(1L)).thenThrow(new RestaurantCircuitOpenException(null));
 
-        assertThatThrownBy(() -> catalog.restaurant(1L)).isInstanceOf(RestaurantCircuitOpenException.class);
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L))).isInstanceOf(RestaurantCircuitOpenException.class);
         verify(client, times(1)).getRestaurantById(1L);
     }
 
@@ -77,7 +79,7 @@ class RestaurantCatalogTest {
     void missingRestaurantIsNotRetriedAndBecomesEntityNotFound() {
         when(client.getRestaurantById(1L)).thenThrow(notFound());
 
-        assertThatThrownBy(() -> catalog.restaurant(1L))
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("Restaurant with ID: 1");
         verify(client, times(1)).getRestaurantById(1L);
@@ -86,9 +88,10 @@ class RestaurantCatalogTest {
     @Test
     void returnsMenuItemOfRestaurant() {
         MenuItemDto pizza = new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true);
-        when(client.getMenuItemById(1L, 10L)).thenReturn(pizza);
+        when(client.getRestaurantById(1L)).thenReturn(new RestaurantDto(1L, "Pizzeria", true));
+        when(client.getMenuItems(1L, List.of(10L))).thenReturn(List.of(pizza));
 
-        assertThat(catalog.menuItem(1L, 10L)).isEqualTo(pizza);
+        assertThat(catalog.quote(1L, List.of(10L)).item(10L)).contains(pizza);
     }
 
     private static RestaurantServiceUnavailableException unavailable() {

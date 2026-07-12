@@ -24,10 +24,14 @@ import org.testcontainers.kafka.KafkaContainer;
 
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -53,10 +57,9 @@ class OrderApiIT {
     void stubRestaurantService() {
         when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID))
                 .thenReturn(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 10L))
-                .thenReturn(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true));
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 11L))
-                .thenReturn(new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
+        when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(List.of(
+                new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true),
+                new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true)));
     }
 
     @Test
@@ -111,8 +114,44 @@ class OrderApiIT {
     void refusesToMoveDeliveredOrderBack() {
         Integer orderId = JsonPath.read(bodyOf(createOrder(42L)), "$.id");
 
+        assertThat(patchStatus(orderId, "DELIVERED")).hasStatus(409);
+        assertThat(patchStatus(orderId, "CONFIRMED")).hasStatusOk();
+        assertThat(patchStatus(orderId, "IN_DELIVERY")).hasStatusOk();
         assertThat(patchStatus(orderId, "DELIVERED")).hasStatusOk();
         assertThat(patchStatus(orderId, "CONFIRMED")).hasStatus(409);
+    }
+
+    @Test
+    void rejectsTooBigQuantityAndTooManyLines() {
+        MvcTestResult tooMany = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": [{\"menuItemId\": 10, \"quantity\": 101}]}")
+                .exchange();
+        String lines = String.join(",", Collections.nCopies(51, "{\"menuItemId\": 10, \"quantity\": 1}"));
+        MvcTestResult tooLong = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": [" + lines + "]}")
+                .exchange();
+
+        assertThat(tooMany).hasStatus(400).bodyJson().extractingPath("$.errors").asMap()
+                .containsKey("orderItemsRequest[0].quantity");
+        assertThat(tooLong).hasStatus(400).bodyJson().extractingPath("$.errors").asMap()
+                .containsKey("orderItemsRequest");
+    }
+
+    @Test
+    void duplicatedLinesBecomeOneOrderItem() {
+        MvcTestResult created = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": ["
+                        + "{\"menuItemId\": 10, \"quantity\": 1}, {\"menuItemId\": 10, \"quantity\": 2}]}")
+                .exchange();
+
+        assertThat(created).hasStatus(201).bodyJson().extractingPath("$.orderItems").asArray().hasSize(1);
+        assertThat(created).bodyJson().extractingPath("$.orderItems[0].quantity").isEqualTo(3);
     }
 
     private MvcTestResult createOrder(long userId) {

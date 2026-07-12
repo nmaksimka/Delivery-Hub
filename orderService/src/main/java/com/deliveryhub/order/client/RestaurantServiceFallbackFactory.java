@@ -7,6 +7,9 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.List;
+
 @Component
 public class RestaurantServiceFallbackFactory implements FallbackFactory<RestaurantServiceClient> {
 
@@ -20,7 +23,7 @@ public class RestaurantServiceFallbackFactory implements FallbackFactory<Restaur
             }
 
             @Override
-            public MenuItemDto getMenuItemById(Long restaurantId, Long menuItemId) {
+            public List<MenuItemDto> getMenuItems(Long restaurantId, Collection<Long> ids) {
                 throw failure;
             }
         };

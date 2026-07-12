@@ -35,24 +35,31 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionSystemException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -78,6 +85,10 @@ class OrderServiceTest {
     @Mock
     private ProcessedEvents processedEvents;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
+    private final List<MenuItemDto> menu = new ArrayList<>();
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private OrderService orderService;
@@ -91,7 +102,7 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
-                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
+                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -185,6 +196,69 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("одинаковые позиции схлопываются в одну строку с суммой количеств")
+        void mergesDuplicatedMenuItems() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+
+            orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
+                    new OrderItemRequest(10L, 2), new OrderItemRequest(10L, 3))), USER_ID);
+
+            verify(orderRepository).save(orderCaptor.capture());
+            assertThat(orderCaptor.getValue().getOrderItems()).singleElement()
+                    .satisfies(item -> assertThat(item.getQuantity()).isEqualTo(5));
+            assertThat(orderCaptor.getValue().getTotalAmount()).isEqualByComparingTo("62.50");
+            verify(restaurantServiceClient).getMenuItems(RESTAURANT_ID, Set.of(10L));
+        }
+
+        @Test
+        @DisplayName("сумма количеств одной позиции не может обойти лимит")
+        void rejectsMergedQuantityAboveLimit() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+
+            assertThatThrownBy(() -> orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
+                    new OrderItemRequest(10L, 60), new OrderItemRequest(10L, 60))), USER_ID))
+                    .isInstanceOf(OrderRejectedException.class)
+                    .hasMessageContaining("exceeds");
+            verifyNoInteractions(transactionManager);
+        }
+
+        @Test
+        @DisplayName("каталог опрашивается до открытия транзакции")
+        void asksCatalogBeforeOpeningTransaction() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+
+            orderService.createOrder(request, USER_ID);
+
+            InOrder order = inOrder(restaurantServiceClient, transactionManager, orderRepository);
+            order.verify(restaurantServiceClient).getRestaurantById(RESTAURANT_ID);
+            order.verify(restaurantServiceClient).getMenuItems(eq(RESTAURANT_ID), any());
+            order.verify(transactionManager).getTransaction(any());
+            order.verify(orderRepository).save(any(Order.class));
+            order.verify(transactionManager).commit(any());
+        }
+
+        @Test
+        @DisplayName("счётчик не растёт, если транзакция не закоммитилась")
+        void doesNotCountOrderWhenCommitFails() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            doThrow(new TransactionSystemException("commit failed")).when(transactionManager).commit(any());
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(TransactionSystemException.class);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
+        }
+
+        @Test
         @DisplayName("бросает EntityNotFoundException, если ресторана нет")
         void failsWhenRestaurantMissing() {
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenThrow(notFound());
@@ -227,7 +301,7 @@ class OrderServiceTest {
         @DisplayName("бросает EntityNotFoundException, если блюда нет в этом ресторане")
         void failsWhenMenuItemMissing() {
             givenActiveRestaurant();
-            when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 10L)).thenThrow(notFound());
+            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(List.of());
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(EntityNotFoundException.class)
@@ -337,8 +411,10 @@ class OrderServiceTest {
     }
 
     private void givenMenuItem(long id, String name, String price, boolean available) {
-        MenuItemDto item = new MenuItemDto(id, name, new BigDecimal(price), available);
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, id)).thenReturn(item);
+        if (menu.isEmpty()) {
+            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(menu);
+        }
+        menu.add(new MenuItemDto(id, name, new BigDecimal(price), available));
     }
 
     private static Order orderOf(long userId) {

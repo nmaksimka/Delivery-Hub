@@ -34,6 +34,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -60,8 +62,8 @@ class OrderEventsIT {
     @BeforeEach
     void stubRestaurantService() {
         when(restaurantServiceClient.getRestaurantById(1L)).thenReturn(new RestaurantDto(1L, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItemById(1L, 10L))
-                .thenReturn(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true));
+        when(restaurantServiceClient.getMenuItems(eq(1L), any()))
+                .thenReturn(List.of(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true)));
     }
 
     @Test
