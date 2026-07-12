@@ -98,6 +98,9 @@ app:
     poll-interval: 1s
     batch-size: 50
     send-timeout: 5s
+    max-attempts: 5
+    retry-backoff: 2s
+    max-backoff: 1m
 
 eureka:
   client:
