@@ -3,6 +3,7 @@ package com.deliveryhub.delivery.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
@@ -119,6 +120,71 @@ class DeliveryServiceTest {
 
             verify(deliveryRepository, never()).save(any());
             verifyNoInteractions(outbox);
+        }
+    }
+
+    @Nested
+    @DisplayName("cancelDeliveryOfOrder")
+    class CancelDeliveryOfOrder {
+
+        @Test
+        @DisplayName("отменяет доставку и сообщает об этом событием")
+        void cancelsDeliveryAndAppendsEvent() {
+            Delivery delivery = existingDelivery();
+            delivery.acceptOrderEvent(1L);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
+            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("устаревшая отмена отбрасывается")
+        void dropsStaleCancellation() {
+            Delivery delivery = existingDelivery();
+            delivery.acceptOrderEvent(5L);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("завершённая доставка не меняется")
+        void finishedDeliveryStaysAsIs() {
+            Delivery delivery = existingDelivery();
+            ReflectionTestUtils.setField(delivery, "status", DeliveryStatus.DELIVERED);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("отмена раньше создания доставки — ошибка, которую стоит повторить")
+        void failsWhenDeliveryIsNotCreatedYet() {
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.cancelDeliveryOfOrder(event))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        private OrderCancelledEvent orderCancelled(long sequence) {
+            return new OrderCancelledEvent(UUID.randomUUID(), ORDER_ID, 42L, NOW, sequence);
         }
     }
 

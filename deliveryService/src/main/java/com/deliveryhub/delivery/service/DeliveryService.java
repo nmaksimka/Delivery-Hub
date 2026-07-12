@@ -3,6 +3,7 @@ package com.deliveryhub.delivery.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
@@ -130,6 +131,30 @@ public class DeliveryService {
         Delivery delivery = deliveryRepository.save(created);
 
         log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
+        publishStatusChange(delivery);
+    }
+
+    @Transactional
+    public void cancelDeliveryOfOrder(OrderCancelledEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
+            return;
+        }
+        Delivery delivery = deliveryRepository.findByOrderId(event.getOrderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Delivery for order ID: " + event.getOrderId() + " was not found"));
+        if (!delivery.acceptOrderEvent(event.getSequence())) {
+            log.info("Event {} with sequence {} is older than the applied one, dropping",
+                    event.getEventId(), event.getSequence());
+            return;
+        }
+        if (delivery.isFinished()) {
+            log.info("Delivery {} is already {}, order cancellation changes nothing",
+                    delivery.getId(), delivery.getStatus());
+            return;
+        }
+        delivery.changeStatus(DeliveryStatus.CANCELLED, clock.instant());
+        log.info("Delivery {} is cancelled together with order {}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
     }
 
