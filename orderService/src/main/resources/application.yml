@@ -101,6 +101,12 @@ app:
     max-attempts: 5
     retry-backoff: 2s
     max-backoff: 1m
+  kafka:
+    topics:
+      partitions: 3
+      replicas: 1
+      retention: 7d
+      dead-letter-retention: 30d
 
 eureka:
   client:
