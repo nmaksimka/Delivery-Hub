@@ -109,10 +109,11 @@ public class OrderService {
             order.addItem(menuItem.id(), menuItem.name(), itemRequest.quantity(), menuItem.price());
         }
 
+        long sequence = order.nextEventSequence();
         Order savedOrder = orderRepository.save(order);
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
 
-        OrderCreatedEvent event = orderCreatedEvent(savedOrder);
+        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
         ordersCreated.increment();
 
@@ -138,6 +139,11 @@ public class OrderService {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Order with ID: " + event.getOrderId() + " was not found"));
+        if (!order.acceptDeliveryEvent(event.getSequence())) {
+            log.info("Event {} with sequence {} is older than the applied one, dropping",
+                    event.getEventId(), event.getSequence());
+            return;
+        }
         OrderStatus reported = OrderStatusResolver.fromDeliveryStatus(event.getStatus());
         if (order.followDelivery(reported, clock.instant())) {
             log.info("Order {} status updated to {} after delivery event", order.getId(), reported);
@@ -152,7 +158,7 @@ public class OrderService {
         return ids.map(id -> orderMapper.toDto(ordersById.get(id)));
     }
 
-    private OrderCreatedEvent orderCreatedEvent(Order order) {
+    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence) {
         List<OrderItemPayload> items = order.getOrderItems().stream()
                 .map(item -> OrderItemPayload.newBuilder()
                         .setMenuItemId(item.getMenuItemId())
@@ -169,6 +175,7 @@ public class OrderService {
                 .setTotalAmount(order.getTotalAmount())
                 .setCreatedAt(order.getCreatedAt())
                 .setItems(items)
+                .setSequence(sequence)
                 .build();
     }
 }

@@ -108,6 +108,23 @@ class OrderEventsIT {
     }
 
     @Test
+    void dropsDeliveryEventThatIsOlderThanAppliedOne() {
+        Long orderId = placeOrder();
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L));
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 1L, orderId, DeliveryStatus.CANCELLED, Instant.now(), 1L));
+        Long markerOrderId = placeOrder();
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, markerOrderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now(), 1L));
+
+        await().atMost(TIMEOUT).untilAsserted(() ->
+                assertThat(statusOf(markerOrderId)).isEqualTo(OrderStatus.CANCELLED));
+
+        assertThat(statusOf(orderId)).isEqualTo(OrderStatus.IN_DELIVERY);
+    }
+
+    @Test
     void exposesBusinessAndOutboxMetrics() {
         double before = meterRegistry.get(OrderService.ORDERS_PLACED).counter().count();
 

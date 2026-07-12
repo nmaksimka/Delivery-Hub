@@ -114,6 +114,33 @@ class OrderTest {
     }
 
     @Test
+    void numbersOwnEventsWithoutGaps() {
+        Order order = Order.place(42L, 1L, NOW);
+
+        assertThat(order.nextEventSequence()).isEqualTo(1);
+        assertThat(order.nextEventSequence()).isEqualTo(2);
+    }
+
+    @Test
+    void acceptsDeliveryEventsOnlyInGrowingOrder() {
+        Order order = Order.place(42L, 1L, NOW);
+
+        assertThat(order.acceptDeliveryEvent(2)).isTrue();
+        assertThat(order.acceptDeliveryEvent(2)).isFalse();
+        assertThat(order.acceptDeliveryEvent(1)).isFalse();
+        assertThat(order.acceptDeliveryEvent(5)).isTrue();
+    }
+
+    @Test
+    void eventWithoutSequenceIsAlwaysAccepted() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.acceptDeliveryEvent(7);
+
+        assertThat(order.acceptDeliveryEvent(0)).isTrue();
+        assertThat(order.acceptDeliveryEvent(7)).isFalse();
+    }
+
+    @Test
     void knowsItsOwner() {
         Order order = Order.place(42L, 1L, NOW);
 

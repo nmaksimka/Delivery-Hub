@@ -46,6 +46,12 @@ public class Delivery {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "event_sequence", nullable = false)
+    private long eventSequence;
+
+    @Column(name = "last_order_sequence", nullable = false)
+    private long lastOrderSequence;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -92,6 +98,22 @@ public class Delivery {
         }
         this.courierId = Objects.requireNonNull(courierId, "courierId");
         this.updatedAt = Objects.requireNonNull(at, "at");
+    }
+
+    public long nextEventSequence() {
+        eventSequence++;
+        return eventSequence;
+    }
+
+    public boolean acceptOrderEvent(long sequence) {
+        if (sequence <= 0) {
+            return true;
+        }
+        if (sequence <= lastOrderSequence) {
+            return false;
+        }
+        lastOrderSequence = sequence;
+        return true;
     }
 
     public boolean belongsTo(Long userId) {

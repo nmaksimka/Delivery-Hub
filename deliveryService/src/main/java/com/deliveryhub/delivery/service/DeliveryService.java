@@ -122,7 +122,9 @@ public class DeliveryService {
             return;
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant()));
+        Delivery created = Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant());
+        created.acceptOrderEvent(event.getSequence());
+        Delivery delivery = deliveryRepository.save(created);
 
         log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
@@ -135,6 +137,7 @@ public class DeliveryService {
                 .setOrderId(delivery.getOrderId())
                 .setStatus(delivery.getStatus())
                 .setUpdatedAt(delivery.getUpdatedAt())
+                .setSequence(delivery.nextEventSequence())
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
         meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();

@@ -94,6 +94,7 @@ class DeliveryServiceTest {
             assertThat(published.getDeliveryId()).isEqualTo(7L);
             assertThat(published.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
             assertThat(published.getUpdatedAt()).isEqualTo(NOW);
+            assertThat(published.getSequence()).isEqualTo(1L);
         }
 
         @Test

@@ -75,6 +75,25 @@ class DeliveryTest {
                 .isInstanceOf(DeliveryFinishedException.class);
     }
 
+    @Test
+    void acceptsOrderEventsOnlyInGrowingOrder() {
+        Delivery delivery = Delivery.forOrder(100L, 42L, NOW);
+
+        assertThat(delivery.acceptOrderEvent(1)).isTrue();
+        assertThat(delivery.acceptOrderEvent(1)).isFalse();
+        assertThat(delivery.acceptOrderEvent(3)).isTrue();
+        assertThat(delivery.acceptOrderEvent(2)).isFalse();
+        assertThat(delivery.acceptOrderEvent(0)).isTrue();
+    }
+
+    @Test
+    void numbersOwnEventsWithoutGaps() {
+        Delivery delivery = Delivery.forOrder(100L, 42L, NOW);
+
+        assertThat(delivery.nextEventSequence()).isEqualTo(1);
+        assertThat(delivery.nextEventSequence()).isEqualTo(2);
+    }
+
     private static Delivery deliveryIn(DeliveryStatus status) {
         Delivery delivery = Delivery.forOrder(100L, 42L, NOW);
         ReflectionTestUtils.setField(delivery, "status", status);

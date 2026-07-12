@@ -47,6 +47,12 @@ public class Order {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "event_sequence", nullable = false)
+    private long eventSequence;
+
+    @Column(name = "last_delivery_sequence", nullable = false)
+    private long lastDeliverySequence;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -101,6 +107,22 @@ public class Order {
         }
         status = reported;
         updatedAt = at;
+        return true;
+    }
+
+    public long nextEventSequence() {
+        eventSequence++;
+        return eventSequence;
+    }
+
+    public boolean acceptDeliveryEvent(long sequence) {
+        if (sequence <= 0) {
+            return true;
+        }
+        if (sequence <= lastDeliverySequence) {
+            return false;
+        }
+        lastDeliverySequence = sequence;
         return true;
     }
 

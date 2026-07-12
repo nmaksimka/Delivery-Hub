@@ -299,6 +299,21 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("событие старее уже применённого отбрасывается")
+        void dropsStaleEvent() {
+            Order order = orderOf(USER_ID);
+            order.acceptDeliveryEvent(5L);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            DeliveryStatusUpdatedEvent stale = statusUpdate(DeliveryStatus.DELIVERED);
+            when(processedEvents.registerFirstDelivery(stale.getEventId(), Topics.DELIVERY_STATUS_UPDATED))
+                    .thenReturn(true);
+
+            orderService.applyDeliveryStatus(stale);
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CREATED);
+        }
+
+        @Test
         @DisplayName("повторно доставленное событие не трогает заказ")
         void skipsAlreadyProcessedEvent() {
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.DELIVERED);
