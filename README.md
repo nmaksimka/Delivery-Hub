@@ -134,7 +134,12 @@ Kafka работает в режиме KRaft одним узлом, ZooKeeper н
 | PostgreSQL (order)       | localhost:5332                         |
 
 Порты 3331–3334 наружу не публикуются: обращаться к сервисам напрямую в обход
-авторизации гейтвея нельзя. Порты БД оставлены для локальной разработки.
+авторизации гейтвея нельзя. Наружу (на все интерфейсы) смотрит только гейтвей; Prometheus, Grafana,
+Kafka UI, Schema Registry, Kafka и служебные серверы привязаны к `127.0.0.1`.
+
+Порты баз данных вынесены в `docker-compose.override.yml`: Docker Compose подхватывает его сам,
+так что локально базы доступны на `127.0.0.1:5331–5334`. На сервере достаточно запускать
+`docker compose -f docker-compose.yml up -d` — без этого файла базы наружу не публикуются вовсе.
 
 > Схему держит Flyway, а Hibernate работает в режиме `validate`. Если вы
 > поднимали проект на старых миграциях, пересоздайте тома:
@@ -213,10 +218,22 @@ PATCH http://localhost:3335/api/deliveries/1/status
 Content-Type: application/json
 Authorization: Bearer <accessToken>
 
-{ "status": "IN_TRANSIT" }
+{ "status": "PICKED_UP" }
 ```
 
-Заказ получит событие и перейдёт в `IN_DELIVERY`.
+Заказ получит событие и перейдёт в `IN_DELIVERY`. Статус меняется только на один шаг:
+из `ASSIGNED` сразу в `DELIVERED` перейти нельзя (`409`). Курьера можно назначить и без смены статуса:
+`{ "courierId": 5 }`.
+
+### 6. Отмена своего заказа
+
+```http
+POST http://localhost:3335/api/orders/1/cancel
+Authorization: Bearer <accessToken>
+```
+
+Владелец может отменить заказ, пока тот `CREATED` или `CONFIRMED`; администратор — любой незавершённый.
+В Kafka уходит `order-cancelled`, доставка отменяется по этому событию.
 
 ## Модель доступа
 
@@ -230,7 +247,14 @@ Authorization: Bearer <accessToken>
 | `GET /api/orders`               | свои заказы              |
 | `GET /api/orders/{id}`          | владелец или `ADMIN`     |
 | `GET /api/orders/all`           | `ADMIN`                  |
-| `PATCH /api/deliveries/*/status`| `ADMIN`, `COURIER`       |
+| `POST /api/orders/{id}/cancel`  | владелец (до передачи курьеру) или `ADMIN` |
+| `PATCH /api/orders/*/status`    | `ADMIN`, `COURIER`       |
+| `GET /api/deliveries`           | `ADMIN`, `COURIER`       |
+| `GET /api/deliveries/{id}`, `/order/{orderId}` | владелец заказа, `ADMIN`, `COURIER` |
+| `POST /api/deliveries`, `PATCH /api/deliveries/*/status` | `ADMIN`, `COURIER` |
+
+Гейтвей отвечает на `401` и `403` телом `application/problem+json`. Правила проверяются тестом
+матрицы ролей (`GatewaySecurityIT.roleMatrix`).
 
 ## Аутентификация
 
@@ -270,6 +294,11 @@ Authorization: Bearer <accessToken>
 Это разные словари: статус доставки не записывается в заказ напрямую,
 а транслируется через `OrderStatusResolver`.
 
+Через API статус двигается строго на один шаг (или в `CANCELLED`), перескоки отклоняются с `409`.
+Заказ, который следует за событиями доставки, может догонять её вперёд, но назад не откатывается.
+Одновременные изменения одной записи ловит `@Version`: проигравший запрос получает `409`,
+а обработчик Kafka просто повторяет попытку.
+
 ## Надёжная доставка событий
 
 События не отправляются в Kafka напрямую из бизнес-кода. Сервис в одной транзакции сохраняет изменение
@@ -277,6 +306,20 @@ Authorization: Bearer <accessToken>
 (`FOR UPDATE SKIP LOCKED`), публикует их и проставляет `published_at`. Потребитель запоминает `eventId`
 в `processed_events` и повторно пришедшее событие пропускает. Подробности и компромиссы —
 в [ADR 0002](docs/adr/0002-transactional-outbox.md).
+
+Порядок и повторы описаны в [ADR 0004](docs/adr/0004-poryadok-sobytij-i-povtory.md):
+
+- публикует outbox один экземпляр сервиса за раз (`pg_try_advisory_xact_lock`), остальные пропускают запуск;
+- у каждого события есть `sequence` — номер внутри агрегата; потребитель отбрасывает событие,
+  которое старее уже применённого;
+- событие, которое не удаётся опубликовать, получает `attempts`, `last_error` и `next_attempt_at`,
+  повторяется с растущей паузой и после пятой неудачи паркуется (`parked_at`), не блокируя остальных;
+  недоступность брокера попыткой не считается;
+- запись, которую потребитель не смог разобрать или применить, уходит в `<topic>.DLT`
+  (нечитаемая — байт в байт);
+- опубликованные события, записи `processed_events` и мёртвые refresh-токены удаляются по расписанию.
+
+Метрики: `outbox.pending`, `outbox.parked`, `outbox.oldest.pending.age`, `outbox.publish.failures`.
 
 ## Обнаружение сервисов и конфигурация
 
