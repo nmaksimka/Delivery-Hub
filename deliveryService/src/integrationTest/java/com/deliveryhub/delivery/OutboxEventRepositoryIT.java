@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -66,7 +67,7 @@ class OutboxEventRepositoryIT {
 
         assertThat(pending).isEmpty();
         assertThat(outboxEventRepository.findById(event.getId()).orElseThrow().isPublished()).isTrue();
-        assertThat(outboxEventRepository.countByPublishedAtIsNull()).isZero();
+        assertThat(outboxEventRepository.countByPublishedAtIsNullAndParkedAtIsNull()).isZero();
     }
 
     @Test
@@ -84,6 +85,46 @@ class OutboxEventRepositoryIT {
                     .containsExactly(first.getId(), second.getId());
             assertThat(seenBySecondRelay).extracting(OutboxEvent::getId).containsExactly(third.getId());
         });
+    }
+
+    @Test
+    void parkedEventsAreNotOfferedToRelay() {
+        OutboxEvent poison = event("1", BASE);
+        poison.recordFailedAttempt("cannot decode", BASE, Duration.ofSeconds(1), 1);
+        outboxEventRepository.save(poison);
+        OutboxEvent healthy = outboxEventRepository.save(event("2", BASE.plusSeconds(1)));
+
+        List<OutboxEvent> batch = newTransaction.execute(status -> outboxEventRepository.lockNextBatch(10));
+
+        assertThat(batch).extracting(OutboxEvent::getId).containsExactly(healthy.getId());
+        assertThat(outboxEventRepository.countByParkedAtIsNotNull()).isEqualTo(1);
+        assertThat(outboxEventRepository.countByPublishedAtIsNullAndParkedAtIsNull()).isEqualTo(1);
+        assertThat(outboxEventRepository.findById(poison.getId()).orElseThrow().getLastError())
+                .isEqualTo("cannot decode");
+    }
+
+    @Test
+    void onlyOneTransactionHoldsRelayLock() {
+        newTransaction.executeWithoutResult(outer -> {
+            assertThat(outboxEventRepository.tryLockRelay(4242L)).isTrue();
+
+            Boolean secondInstance = newTransaction.execute(inner -> outboxEventRepository.tryLockRelay(4242L));
+            Boolean otherLock = newTransaction.execute(inner -> outboxEventRepository.tryLockRelay(4243L));
+
+            assertThat(secondInstance).isFalse();
+            assertThat(otherLock).isTrue();
+        });
+
+        Boolean afterRelease = newTransaction.execute(status -> outboxEventRepository.tryLockRelay(4242L));
+        assertThat(afterRelease).isTrue();
+    }
+
+    @Test
+    void reportsCreationTimeOfOldestPendingEvent() {
+        outboxEventRepository.save(event("2", BASE.plusSeconds(10)));
+        outboxEventRepository.save(event("1", BASE));
+
+        assertThat(outboxEventRepository.findOldestPendingCreatedAt()).contains(BASE);
     }
 
     private static OutboxEvent event(String orderId, Instant createdAt) {
