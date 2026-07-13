@@ -7,7 +7,10 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.deliveryhub.user.repository.RefreshTokenRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -18,7 +21,15 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.UnsupportedEncodingException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,6 +40,10 @@ class AuthApiIT {
 
     @Autowired
     private MockMvcTester mvc;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Test
     void registersUserAndLogsIn() {
@@ -95,6 +110,19 @@ class AuthApiIT {
     }
 
     @Test
+    void reuseIsStillDetectedAfterCleanupBecauseRevokedTokenIsKeptUntilItExpires() {
+        String stolen = JsonPath.read(bodyOf(login(register())), "$.refreshToken");
+        String legitimate = JsonPath.read(bodyOf(refresh(stolen)), "$.refreshToken");
+
+        Integer removed = new TransactionTemplate(transactionManager).execute(status ->
+                refreshTokenRepository.deleteExpiredBefore(Instant.now().plus(Duration.ofDays(1))));
+
+        assertThat(removed).isZero();
+        assertThat(refresh(stolen)).hasStatus(401);
+        assertThat(refresh(legitimate)).hasStatus(401);
+    }
+
+    @Test
     void reuseDoesNotTouchSessionsOnOtherDevices() {
         String email = register();
         String phone = JsonPath.read(bodyOf(login(email)), "$.refreshToken");
@@ -128,6 +156,49 @@ class AuthApiIT {
         postJson("/api/auth/register", body);
 
         assertThat(postJson("/api/auth/register", body)).hasStatus(409);
+    }
+
+    @Test
+    void emailIsCaseInsensitive() {
+        assertThat(postJson("/api/auth/register", """
+                {"email": "Mixed.Case@Example.com", "password": "secret123", "name": "Mixed"}
+                """)).hasStatus(201).bodyJson().extractingPath("$.email").isEqualTo("mixed.case@example.com");
+
+        assertThat(postJson("/api/auth/register", """
+                {"email": "mixed.case@example.COM", "password": "secret123", "name": "Mixed"}
+                """)).hasStatus(409);
+        assertThat(postJson("/api/auth/login", """
+                {"email": "MIXED.CASE@EXAMPLE.COM", "password": "secret123"}
+                """)).hasStatusOk();
+    }
+
+    @Test
+    void concurrentRegistrationsWithSameEmailGiveOneConflict() throws Exception {
+        String body = "{\"email\": \"race@example.com\", \"password\": \"secret123\", \"name\": \"Race\"}";
+        int attempts = 6;
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(attempts)) {
+            List<Future<Integer>> statuses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                statuses.add(executor.submit(() -> {
+                    start.await();
+                    return postJson("/api/auth/register", body).getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+
+            List<Integer> results = new ArrayList<>();
+            for (Future<Integer> status : statuses) {
+                results.add(status.get(30, TimeUnit.SECONDS));
+            }
+            assertThat(results).containsOnly(201, 409);
+            assertThat(results).filteredOn(status -> status == 201).hasSize(1);
+        }
+    }
+
+    @Test
+    void swaggerDescriptionIsPublic() {
+        assertThat(mvc.get().uri("/v3/api-docs")).hasStatusOk();
     }
 
     @Test

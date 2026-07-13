@@ -54,6 +54,13 @@ public class OrderController {
         return orderService.createOrder(createOrderRequest, userId);
     }
 
+    @PostMapping("/{id}/cancel")
+    public OrderDto cancelOrder(@PathVariable Long id,
+                                @RequestHeader("X-User-Id") Long userId,
+                                @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return orderService.cancelOrder(id, new CurrentUser(userId, role));
+    }
+
     @PatchMapping("/{id}/status")
     public OrderDto updateOrderStatus(@PathVariable Long id,
                                       @Valid @RequestBody UpdateOrderStatusRequest request) {

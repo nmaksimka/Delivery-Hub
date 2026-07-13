@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -16,6 +17,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "outbox_events")
 public class OutboxEvent implements Persistable<UUID> {
+
+    private static final int MAX_ERROR_LENGTH = 1000;
 
     @Id
     private UUID id;
@@ -38,6 +41,18 @@ public class OutboxEvent implements Persistable<UUID> {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(nullable = false)
+    private int attempts;
+
+    @Column(name = "last_error", length = MAX_ERROR_LENGTH)
+    private String lastError;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
+    @Column(name = "parked_at")
+    private Instant parkedAt;
+
     @Transient
     private boolean stored;
 
@@ -59,10 +74,46 @@ public class OutboxEvent implements Persistable<UUID> {
             throw new IllegalStateException("Outbox event " + id + " is already published");
         }
         publishedAt = Objects.requireNonNull(at, "at");
+        nextAttemptAt = null;
+    }
+
+    public void postpone(String error, Instant now, Duration delay) {
+        lastError = shortened(error);
+        nextAttemptAt = now.plus(delay);
+    }
+
+    public void recordFailedAttempt(String error, Instant now, Duration delay, int maxAttempts) {
+        attempts++;
+        lastError = shortened(error);
+        if (attempts >= maxAttempts) {
+            parkedAt = now;
+            nextAttemptAt = null;
+        } else {
+            nextAttemptAt = now.plus(delay);
+        }
     }
 
     public boolean isPublished() {
         return publishedAt != null;
+    }
+
+    public boolean isParked() {
+        return parkedAt != null;
+    }
+
+    public boolean isWaiting(Instant now) {
+        return nextAttemptAt != null && now.isBefore(nextAttemptAt);
+    }
+
+    public String aggregateKey() {
+        return aggregateType + ":" + aggregateId;
+    }
+
+    private static String shortened(String error) {
+        if (error == null || error.length() <= MAX_ERROR_LENGTH) {
+            return error;
+        }
+        return error.substring(0, MAX_ERROR_LENGTH);
     }
 
     @PostLoad
@@ -103,5 +154,31 @@ public class OutboxEvent implements Persistable<UUID> {
 
     public Instant getPublishedAt() {
         return publishedAt;
+    }
+
+    public int getAttempts() {
+        return attempts;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    public Instant getParkedAt() {
+        return parkedAt;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof OutboxEvent event && id.equals(event.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
     }
 }

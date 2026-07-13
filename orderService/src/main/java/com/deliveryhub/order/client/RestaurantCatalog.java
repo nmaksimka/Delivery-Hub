@@ -8,6 +8,11 @@ import io.github.resilience4j.retry.RetryRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 @Component
 public class RestaurantCatalog {
 
@@ -21,20 +26,19 @@ public class RestaurantCatalog {
         this.readRetry = retryRegistry.retry(RETRY_NAME);
     }
 
+    public MenuQuote quote(Long restaurantId, Collection<Long> menuItemIds) {
+        RestaurantDto restaurant = restaurant(restaurantId);
+        Map<Long, MenuItemDto> items = readRetry.executeSupplier(() -> client.getMenuItems(restaurantId, menuItemIds))
+                .stream()
+                .collect(Collectors.toMap(MenuItemDto::id, Function.identity()));
+        return new MenuQuote(restaurant, items);
+    }
+
     public RestaurantDto restaurant(Long restaurantId) {
         try {
             return readRetry.executeSupplier(() -> client.getRestaurantById(restaurantId));
         } catch (FeignException.NotFound e) {
             throw new EntityNotFoundException("Restaurant with ID: " + restaurantId + " was not found");
-        }
-    }
-
-    public MenuItemDto menuItem(Long restaurantId, Long menuItemId) {
-        try {
-            return readRetry.executeSupplier(() -> client.getMenuItemById(restaurantId, menuItemId));
-        } catch (FeignException.NotFound e) {
-            throw new EntityNotFoundException(
-                    "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId);
         }
     }
 }

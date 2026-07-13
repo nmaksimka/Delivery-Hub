@@ -4,6 +4,7 @@ import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
 import com.deliveryhub.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,10 +18,14 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/restaurants/{restaurantId}/menu")
 public class MenuItemController {
+
+    private static final int MAX_IDS = 100;
+
     private final MenuItemService menuItemService;
 
     public MenuItemController(MenuItemService menuItemService) {
@@ -30,7 +35,11 @@ public class MenuItemController {
     @GetMapping
     public List<MenuItemDto> getMenuByRestaurant(
             @PathVariable Long restaurantId,
-            @RequestParam(value = "availableOnly", defaultValue = "true") boolean availableOnly) {
+            @RequestParam(value = "availableOnly", defaultValue = "true") boolean availableOnly,
+            @RequestParam(value = "ids", required = false) @Size(max = MAX_IDS) Set<Long> ids) {
+        if (ids != null) {
+            return menuItemService.getMenuItemsByIds(restaurantId, ids);
+        }
         return menuItemService.getMenuItemsByRestaurant(restaurantId, availableOnly);
     }
 

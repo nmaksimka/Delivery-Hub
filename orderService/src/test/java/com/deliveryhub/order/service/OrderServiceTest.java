@@ -3,6 +3,7 @@ package com.deliveryhub.order.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.RestaurantCatalog;
@@ -15,6 +16,8 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
+import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
@@ -34,24 +37,31 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionSystemException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -77,6 +87,10 @@ class OrderServiceTest {
     @Mock
     private ProcessedEvents processedEvents;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
+    private final List<MenuItemDto> menu = new ArrayList<>();
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private OrderService orderService;
@@ -90,7 +104,7 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
-                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
+                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -178,7 +192,70 @@ class OrderServiceTest {
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class);
+                    .isInstanceOf(OrderRejectedException.class);
+
+            assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
+        }
+
+        @Test
+        @DisplayName("одинаковые позиции схлопываются в одну строку с суммой количеств")
+        void mergesDuplicatedMenuItems() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+
+            orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
+                    new OrderItemRequest(10L, 2), new OrderItemRequest(10L, 3))), USER_ID);
+
+            verify(orderRepository).save(orderCaptor.capture());
+            assertThat(orderCaptor.getValue().getOrderItems()).singleElement()
+                    .satisfies(item -> assertThat(item.getQuantity()).isEqualTo(5));
+            assertThat(orderCaptor.getValue().getTotalAmount()).isEqualByComparingTo("62.50");
+            verify(restaurantServiceClient).getMenuItems(RESTAURANT_ID, Set.of(10L));
+        }
+
+        @Test
+        @DisplayName("сумма количеств одной позиции не может обойти лимит")
+        void rejectsMergedQuantityAboveLimit() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+
+            assertThatThrownBy(() -> orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
+                    new OrderItemRequest(10L, 60), new OrderItemRequest(10L, 60))), USER_ID))
+                    .isInstanceOf(OrderRejectedException.class)
+                    .hasMessageContaining("exceeds");
+            verifyNoInteractions(transactionManager);
+        }
+
+        @Test
+        @DisplayName("каталог опрашивается до открытия транзакции")
+        void asksCatalogBeforeOpeningTransaction() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+
+            orderService.createOrder(request, USER_ID);
+
+            InOrder order = inOrder(restaurantServiceClient, transactionManager, orderRepository);
+            order.verify(restaurantServiceClient).getRestaurantById(RESTAURANT_ID);
+            order.verify(restaurantServiceClient).getMenuItems(eq(RESTAURANT_ID), any());
+            order.verify(transactionManager).getTransaction(any());
+            order.verify(orderRepository).save(any(Order.class));
+            order.verify(transactionManager).commit(any());
+        }
+
+        @Test
+        @DisplayName("счётчик не растёт, если транзакция не закоммитилась")
+        void doesNotCountOrderWhenCommitFails() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            doThrow(new TransactionSystemException("commit failed")).when(transactionManager).commit(any());
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(TransactionSystemException.class);
 
             assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
         }
@@ -197,26 +274,26 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("бросает IllegalStateException, если ресторан неактивен")
+        @DisplayName("отклоняет заказ, если ресторан неактивен")
         void failsWhenRestaurantInactive() {
             RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
             when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not active");
 
             verify(orderRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("бросает IllegalStateException, если блюдо недоступно")
+        @DisplayName("отклоняет заказ, если блюдо недоступно")
         void failsWhenMenuItemUnavailable() {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "12.50", false);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
-                    .isInstanceOf(IllegalStateException.class)
+                    .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not available");
 
             verify(orderRepository, never()).save(any());
@@ -226,7 +303,7 @@ class OrderServiceTest {
         @DisplayName("бросает EntityNotFoundException, если блюда нет в этом ресторане")
         void failsWhenMenuItemMissing() {
             givenActiveRestaurant();
-            when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 10L)).thenThrow(notFound());
+            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(List.of());
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(EntityNotFoundException.class)
@@ -279,6 +356,93 @@ class OrderServiceTest {
     }
 
     @Nested
+    @DisplayName("cancelOrder")
+    class CancelOrder {
+
+        @Test
+        @DisplayName("владелец отменяет заказ, событие OrderCancelled уходит в outbox со следующим номером")
+        void ownerCancelsAndEventIsAppended() {
+            Order order = orderOf(USER_ID);
+            order.nextEventSequence();
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER"));
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            ArgumentCaptor<OrderCancelledEvent> event = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), event.capture());
+            assertThat(event.getValue().getOrderId()).isEqualTo(1L);
+            assertThat(event.getValue().getUserId()).isEqualTo(USER_ID);
+            assertThat(event.getValue().getSequence()).isEqualTo(2L);
+            assertThat(event.getValue().getCancelledAt()).isEqualTo(NOW);
+        }
+
+        @Test
+        @DisplayName("чужой заказ отменить нельзя")
+        void strangerCannotCancel() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, new CurrentUser(USER_ID + 1, "USER")))
+                    .isInstanceOf(ForbiddenException.class);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CREATED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("заказ в пути владелец отменить уже не может, а администратор может")
+        void onlyAdminCancelsOrderInDelivery() {
+            Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.IN_DELIVERY);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER")))
+                    .isInstanceOf(InvalidStatusTransitionException.class);
+            verifyNoInteractions(outbox);
+
+            orderService.cancelOrder(1L, new CurrentUser(1L, "ADMIN"));
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), any());
+        }
+
+        @Test
+        @DisplayName("повторная отмена администратором не порождает второго события")
+        void repeatedAdminCancelAppendsNothing() {
+            Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.CANCELLED);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOrder(1L, new CurrentUser(1L, "ADMIN"));
+
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("смена статуса на CANCELLED через PATCH тоже публикует OrderCancelled")
+        void statusPatchToCancelledAppendsEvent() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.updateOrderStatus(1L, OrderStatus.CANCELLED);
+            orderService.updateOrderStatus(1L, OrderStatus.CANCELLED);
+
+            verify(outbox).append(eq("Order"), eq(1L), eq(Topics.ORDER_CANCELLED), any(), any());
+        }
+
+        @Test
+        @DisplayName("обычная смена статуса событий не публикует")
+        void plainStatusChangeAppendsNothing() {
+            Order order = orderOf(USER_ID);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.updateOrderStatus(1L, OrderStatus.CONFIRMED);
+
+            verifyNoInteractions(outbox);
+        }
+    }
+
+    @Nested
     @DisplayName("applyDeliveryStatus")
     class ApplyDeliveryStatus {
 
@@ -286,8 +450,7 @@ class OrderServiceTest {
         @DisplayName("переводит заказ в статус заказа, а не доставки")
         void mapsDeliveryStatusToOrderStatus() {
             Order order = orderOf(USER_ID);
-            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
-            when(orderMapper.toDto(order)).thenReturn(dto());
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);
             when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.DELIVERY_STATUS_UPDATED))
@@ -296,6 +459,21 @@ class OrderServiceTest {
             orderService.applyDeliveryStatus(event);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.IN_DELIVERY);
+        }
+
+        @Test
+        @DisplayName("событие старее уже применённого отбрасывается")
+        void dropsStaleEvent() {
+            Order order = orderOf(USER_ID);
+            order.acceptDeliveryEvent(5L);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            DeliveryStatusUpdatedEvent stale = statusUpdate(DeliveryStatus.DELIVERED);
+            when(processedEvents.registerFirstDelivery(stale.getEventId(), Topics.DELIVERY_STATUS_UPDATED))
+                    .thenReturn(true);
+
+            orderService.applyDeliveryStatus(stale);
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CREATED);
         }
 
         @Test
@@ -311,7 +489,7 @@ class OrderServiceTest {
         }
 
         private DeliveryStatusUpdatedEvent statusUpdate(DeliveryStatus status) {
-            return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 1L, status, Instant.EPOCH);
+            return new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 1L, status, Instant.EPOCH, 2L);
         }
     }
 
@@ -322,8 +500,10 @@ class OrderServiceTest {
     }
 
     private void givenMenuItem(long id, String name, String price, boolean available) {
-        MenuItemDto item = new MenuItemDto(id, name, new BigDecimal(price), available);
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, id)).thenReturn(item);
+        if (menu.isEmpty()) {
+            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(menu);
+        }
+        menu.add(new MenuItemDto(id, name, new BigDecimal(price), available));
     }
 
     private static Order orderOf(long userId) {

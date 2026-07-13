@@ -1,24 +1,32 @@
 package com.deliveryhub.delivery.service;
 
 import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
+import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.delivery.security.CurrentUser;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -54,29 +62,38 @@ public class DeliveryService {
         this.meterRegistry = meterRegistry;
     }
 
-    public DeliveryDto getDeliveryById(Long id) {
-        return deliveryMapper.toDto(findByIdOrThrow(id));
+    public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
+        return deliveryMapper.toDto(visibleTo(currentUser, findByIdOrThrow(id)));
     }
 
-    public DeliveryDto getDeliveryByOrderId(Long orderId) {
+    public DeliveryDto getDeliveryByOrderId(Long orderId, CurrentUser currentUser) {
         Delivery delivery = deliveryRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Delivery for order ID: " + orderId + " was not found"));
-        return deliveryMapper.toDto(delivery);
+        return deliveryMapper.toDto(visibleTo(currentUser, delivery));
     }
 
-    public Page<DeliveryDto> getAllDeliveries(Pageable pageable) {
+    public Page<DeliveryDto> getAllDeliveries(Pageable pageable, CurrentUser currentUser) {
+        if (!currentUser.seesEveryDelivery()) {
+            throw new ForbiddenException("Only couriers and administrators can list deliveries");
+        }
         return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
     }
 
     @Transactional
     public DeliveryDto createDelivery(CreateDeliveryRequest request) {
         if (deliveryRepository.existsByOrderId(request.orderId())) {
-            throw new IllegalStateException("Delivery already exists for order ID: " + request.orderId());
+            throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(
-                request.orderId(), request.courierId(), request.estimatedDeliveryTime(), clock.instant()));
+        Delivery delivery;
+        try {
+            delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(
+                    request.orderId(), request.userId(), request.courierId(), request.estimatedDeliveryTime(),
+                    clock.instant()));
+        } catch (DataIntegrityViolationException e) {
+            throw new DeliveryAlreadyExistsException(request.orderId());
+        }
 
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
@@ -91,10 +108,10 @@ public class DeliveryService {
         if (request.courierId() != null) {
             delivery.assignCourier(request.courierId(), now);
         }
-        delivery.changeStatus(request.status(), now);
-
-        log.info("Delivery {} status updated to {}", id, request.status());
-        publishStatusChange(delivery);
+        if (request.status() != null && delivery.changeStatus(request.status(), now)) {
+            log.info("Delivery {} status updated to {}", id, request.status());
+            publishStatusChange(delivery);
+        }
         return deliveryMapper.toDto(delivery);
     }
 
@@ -109,9 +126,35 @@ public class DeliveryService {
             return;
         }
 
-        Delivery delivery = deliveryRepository.save(Delivery.forOrder(event.getOrderId(), clock.instant()));
+        Delivery created = Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant());
+        created.acceptOrderEvent(event.getSequence());
+        Delivery delivery = deliveryRepository.save(created);
 
         log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
+        publishStatusChange(delivery);
+    }
+
+    @Transactional
+    public void cancelDeliveryOfOrder(OrderCancelledEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
+            return;
+        }
+        Delivery delivery = deliveryRepository.findByOrderId(event.getOrderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Delivery for order ID: " + event.getOrderId() + " was not found"));
+        if (!delivery.acceptOrderEvent(event.getSequence())) {
+            log.info("Event {} with sequence {} is older than the applied one, dropping",
+                    event.getEventId(), event.getSequence());
+            return;
+        }
+        if (delivery.isFinished()) {
+            log.info("Delivery {} is already {}, order cancellation changes nothing",
+                    delivery.getId(), delivery.getStatus());
+            return;
+        }
+        delivery.changeStatus(DeliveryStatus.CANCELLED, clock.instant());
+        log.info("Delivery {} is cancelled together with order {}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
     }
 
@@ -122,9 +165,31 @@ public class DeliveryService {
                 .setOrderId(delivery.getOrderId())
                 .setStatus(delivery.getStatus())
                 .setUpdatedAt(delivery.getUpdatedAt())
+                .setSequence(delivery.nextEventSequence())
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
-        meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, delivery.getStatus().name()).increment();
+        countAfterCommit(delivery.getStatus());
+    }
+
+    private void countAfterCommit(DeliveryStatus status) {
+        Runnable count = () -> meterRegistry.counter(STATUS_CHANGED, STATUS_TAG, status.name()).increment();
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            count.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                count.run();
+            }
+        });
+    }
+
+    private static Delivery visibleTo(CurrentUser currentUser, Delivery delivery) {
+        if (!currentUser.seesEveryDelivery() && !delivery.belongsTo(currentUser.id())) {
+            throw new ForbiddenException("Delivery " + delivery.getId() + " does not belong to the current user");
+        }
+        return delivery;
     }
 
     private Delivery findByIdOrThrow(Long id) {

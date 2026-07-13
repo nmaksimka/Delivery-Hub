@@ -34,6 +34,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -60,8 +62,8 @@ class OrderEventsIT {
     @BeforeEach
     void stubRestaurantService() {
         when(restaurantServiceClient.getRestaurantById(1L)).thenReturn(new RestaurantDto(1L, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItemById(1L, 10L))
-                .thenReturn(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true));
+        when(restaurantServiceClient.getMenuItems(eq(1L), any()))
+                .thenReturn(List.of(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true)));
     }
 
     @Test
@@ -91,15 +93,32 @@ class OrderEventsIT {
         Long orderId = placeOrder();
         UUID eventId = UUID.randomUUID();
         DeliveryStatusUpdatedEvent picked =
-                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now());
+                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L);
         DeliveryStatusUpdatedEvent sameIdOtherStatus =
-                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.DELIVERED, Instant.now());
+                new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.DELIVERED, Instant.now(), 4L);
 
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), picked);
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), sameIdOtherStatus);
         Long markerOrderId = placeOrder();
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, markerOrderId.toString(), new DeliveryStatusUpdatedEvent(
-                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now()));
+                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now(), 2L));
+
+        await().atMost(TIMEOUT).untilAsserted(() ->
+                assertThat(statusOf(markerOrderId)).isEqualTo(OrderStatus.CANCELLED));
+
+        assertThat(statusOf(orderId)).isEqualTo(OrderStatus.IN_DELIVERY);
+    }
+
+    @Test
+    void dropsDeliveryEventThatIsOlderThanAppliedOne() {
+        Long orderId = placeOrder();
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L));
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 1L, orderId, DeliveryStatus.CANCELLED, Instant.now(), 1L));
+        Long markerOrderId = placeOrder();
+        kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, markerOrderId.toString(), new DeliveryStatusUpdatedEvent(
+                UUID.randomUUID(), 2L, markerOrderId, DeliveryStatus.CANCELLED, Instant.now(), 1L));
 
         await().atMost(TIMEOUT).untilAsserted(() ->
                 assertThat(statusOf(markerOrderId)).isEqualTo(OrderStatus.CANCELLED));

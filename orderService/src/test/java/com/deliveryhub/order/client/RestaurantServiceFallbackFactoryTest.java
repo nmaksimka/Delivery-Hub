@@ -31,7 +31,7 @@ class RestaurantServiceFallbackFactoryTest {
         FeignException serverError =
                 new FeignException.ServiceUnavailable("unavailable", REQUEST, null, Map.of());
 
-        assertThatThrownBy(() -> factory.create(serverError).getMenuItemById(1L, 10L))
+        assertThatThrownBy(() -> factory.create(serverError).getMenuItems(1L, java.util.List.of(10L)))
                 .isExactlyInstanceOf(RestaurantServiceUnavailableException.class)
                 .hasCause(serverError);
     }

@@ -3,6 +3,7 @@ package com.deliveryhub.delivery.controller;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
+import com.deliveryhub.delivery.security.CurrentUser;
 import com.deliveryhub.delivery.service.DeliveryService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,18 +30,24 @@ public class DeliveryController {
     }
 
     @GetMapping
-    public Page<DeliveryDto> getAllDeliveries(@PageableDefault(size = 20) Pageable pageable) {
-        return deliveryService.getAllDeliveries(pageable);
+    public Page<DeliveryDto> getAllDeliveries(@PageableDefault(size = 20) Pageable pageable,
+                                              @RequestHeader("X-User-Id") Long userId,
+                                              @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return deliveryService.getAllDeliveries(pageable, new CurrentUser(userId, role));
     }
 
     @GetMapping("/{id}")
-    public DeliveryDto getDeliveryById(@PathVariable Long id) {
-        return deliveryService.getDeliveryById(id);
+    public DeliveryDto getDeliveryById(@PathVariable Long id,
+                                       @RequestHeader("X-User-Id") Long userId,
+                                       @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return deliveryService.getDeliveryById(id, new CurrentUser(userId, role));
     }
 
     @GetMapping("/order/{orderId}")
-    public DeliveryDto getDeliveryByOrderId(@PathVariable Long orderId) {
-        return deliveryService.getDeliveryByOrderId(orderId);
+    public DeliveryDto getDeliveryByOrderId(@PathVariable Long orderId,
+                                            @RequestHeader("X-User-Id") Long userId,
+                                            @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return deliveryService.getDeliveryByOrderId(orderId, new CurrentUser(userId, role));
     }
 
     @PostMapping

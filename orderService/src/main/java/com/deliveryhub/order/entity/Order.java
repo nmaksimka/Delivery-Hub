@@ -1,5 +1,6 @@
 package com.deliveryhub.order.entity;
 
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -45,6 +47,16 @@ public class Order {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "event_sequence", nullable = false)
+    private long eventSequence;
+
+    @Column(name = "last_delivery_sequence", nullable = false)
+    private long lastDeliverySequence;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> orderItems = new ArrayList<>();
 
@@ -73,17 +85,52 @@ public class Order {
         totalAmount = totalAmount.add(item.lineTotal());
     }
 
-    public void applyStatus(OrderStatus next, Instant at) {
+    public boolean changeStatus(OrderStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
         Objects.requireNonNull(at, "at");
         if (next == status) {
-            return;
+            return false;
         }
         if (!status.canChangeTo(next)) {
-            throw new IllegalStateException("Order " + id + " cannot change status from " + status + " to " + next);
+            throw new InvalidStatusTransitionException(id, status, next);
         }
         status = next;
         updatedAt = at;
+        return true;
+    }
+
+    public void cancelByCustomer(Instant at) {
+        if (status != OrderStatus.CREATED && status != OrderStatus.CONFIRMED) {
+            throw new InvalidStatusTransitionException(id, status, OrderStatus.CANCELLED);
+        }
+        changeStatus(OrderStatus.CANCELLED, at);
+    }
+
+    public boolean followDelivery(OrderStatus reported, Instant at) {
+        Objects.requireNonNull(reported, "reported");
+        Objects.requireNonNull(at, "at");
+        if (status.isFinal() || !status.isBefore(reported)) {
+            return false;
+        }
+        status = reported;
+        updatedAt = at;
+        return true;
+    }
+
+    public long nextEventSequence() {
+        eventSequence++;
+        return eventSequence;
+    }
+
+    public boolean acceptDeliveryEvent(long sequence) {
+        if (sequence <= 0) {
+            return true;
+        }
+        if (sequence <= lastDeliverySequence) {
+            return false;
+        }
+        lastDeliverySequence = sequence;
+        return true;
     }
 
     public boolean belongsTo(Long userId) {

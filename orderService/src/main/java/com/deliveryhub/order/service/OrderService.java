@@ -2,17 +2,19 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
-import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
@@ -26,11 +28,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -46,7 +54,8 @@ public class OrderService {
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final Clock clock;
-    private final Counter ordersCreated;
+    private final TransactionTemplate transaction;
+    private final Counter ordersPlaced;
 
     public OrderService(OrderRepository orderRepository,
                         OrderMapper orderMapper,
@@ -54,6 +63,7 @@ public class OrderService {
                         Outbox outbox,
                         ProcessedEvents processedEvents,
                         Clock clock,
+                        PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
@@ -61,14 +71,14 @@ public class OrderService {
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.clock = clock;
-        this.ordersCreated = Counter.builder(ORDERS_PLACED)
+        this.transaction = new TransactionTemplate(transactionManager);
+        this.ordersPlaced = Counter.builder(ORDERS_PLACED)
                 .description("Orders accepted by the service")
                 .register(meterRegistry);
     }
 
     public OrderDto getOrderById(Long id, CurrentUser currentUser) {
-        Order order = orderRepository.findWithItemsById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
+        Order order = findWithItemsOrThrow(id);
 
         if (!currentUser.isAdmin() && !order.belongsTo(currentUser.id())) {
             throw new ForbiddenException("Order " + id + " does not belong to the current user");
@@ -77,51 +87,81 @@ public class OrderService {
     }
 
     public Page<OrderDto> getOrdersOfUser(Long userId, Pageable pageable) {
-        return orderRepository.findByUserId(userId, pageable).map(orderMapper::toDto);
+        return withItems(orderRepository.findIdsByUserId(userId, pageable));
     }
 
     public Page<OrderDto> getAllOrders(Pageable pageable) {
-        return orderRepository.findAll(pageable).map(orderMapper::toDto);
+        return withItems(orderRepository.findAllIds(pageable));
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
-        log.info("Creating order for user {} from restaurant {}", userId, createRequest.restaurantId());
+        Long restaurantId = createRequest.restaurantId();
+        log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
-        RestaurantDto restaurant = restaurantCatalog.restaurant(createRequest.restaurantId());
-        if (!restaurant.active()) {
-            throw new IllegalStateException("Restaurant " + restaurant.id() + " is not active");
+        Map<Long, Integer> quantities = createRequest.quantitiesByMenuItem();
+        MenuQuote quote = restaurantCatalog.quote(restaurantId, quantities.keySet());
+        if (!quote.restaurant().active()) {
+            throw new OrderRejectedException("Restaurant " + restaurantId + " is not active");
         }
 
-        Order order = Order.place(userId, createRequest.restaurantId(), clock.instant());
-
-        for (OrderItemRequest itemRequest : createRequest.orderItemsRequest()) {
-            MenuItemDto menuItem = restaurantCatalog.menuItem(createRequest.restaurantId(), itemRequest.menuItemId());
-
+        Order order = Order.place(userId, restaurantId, clock.instant());
+        quantities.forEach((menuItemId, quantity) -> {
+            MenuItemDto menuItem = quote.item(menuItemId).orElseThrow(() -> new EntityNotFoundException(
+                    "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId));
             if (!menuItem.available()) {
-                throw new IllegalStateException("Menu item " + menuItem.id() + " is not available");
+                throw new OrderRejectedException("Menu item " + menuItemId + " is not available");
             }
+            if (quantity > OrderItemRequest.MAX_QUANTITY) {
+                throw new OrderRejectedException("Quantity of menu item " + menuItemId + " exceeds "
+                        + OrderItemRequest.MAX_QUANTITY);
+            }
+            order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
+        });
 
-            order.addItem(menuItem.id(), menuItem.name(), itemRequest.quantity(), menuItem.price());
-        }
-
-        Order savedOrder = orderRepository.save(order);
+        Order savedOrder = transaction.execute(status -> store(order));
+        ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
-
-        OrderCreatedEvent event = orderCreatedEvent(savedOrder);
-        outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
-        ordersCreated.increment();
-
         return orderMapper.toDto(savedOrder);
+    }
+
+    private Order store(Order order) {
+        long sequence = order.nextEventSequence();
+        Order savedOrder = orderRepository.save(order);
+        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
+        outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
+        return savedOrder;
     }
 
     @Transactional
     public OrderDto updateOrderStatus(Long id, OrderStatus newStatus) {
-        Order order = orderRepository.findWithItemsById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
+        Order order = findWithItemsOrThrow(id);
 
-        order.applyStatus(newStatus, clock.instant());
-        log.info("Order {} status updated to {}", id, newStatus);
+        if (order.changeStatus(newStatus, clock.instant())) {
+            log.info("Order {} status updated to {}", id, newStatus);
+            if (newStatus == OrderStatus.CANCELLED) {
+                appendCancelled(order);
+            }
+        }
+        return orderMapper.toDto(order);
+    }
+
+    @Transactional
+    public OrderDto cancelOrder(Long id, CurrentUser currentUser) {
+        Order order = findWithItemsOrThrow(id);
+
+        if (currentUser.isAdmin()) {
+            if (!order.changeStatus(OrderStatus.CANCELLED, clock.instant())) {
+                return orderMapper.toDto(order);
+            }
+        } else {
+            if (!order.belongsTo(currentUser.id())) {
+                throw new ForbiddenException("Order " + id + " does not belong to the current user");
+            }
+            order.cancelByCustomer(clock.instant());
+        }
+        log.info("Order {} is cancelled by user {}", id, currentUser.id());
+        appendCancelled(order);
         return orderMapper.toDto(order);
     }
 
@@ -131,10 +171,45 @@ public class OrderService {
             log.info("Event {} is already processed, skipping", event.getEventId());
             return;
         }
-        updateOrderStatus(event.getOrderId(), OrderStatusResolver.fromDeliveryStatus(event.getStatus()));
+        Order order = orderRepository.findById(event.getOrderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Order with ID: " + event.getOrderId() + " was not found"));
+        if (!order.acceptDeliveryEvent(event.getSequence())) {
+            log.info("Event {} with sequence {} is older than the applied one, dropping",
+                    event.getEventId(), event.getSequence());
+            return;
+        }
+        OrderStatus reported = OrderStatusResolver.fromDeliveryStatus(event.getStatus());
+        if (order.followDelivery(reported, clock.instant())) {
+            log.info("Order {} status updated to {} after delivery event", order.getId(), reported);
+        } else {
+            log.info("Order {} stays {}, delivery reported {}", order.getId(), order.getStatus(), reported);
+        }
     }
 
-    private OrderCreatedEvent orderCreatedEvent(Order order) {
+    private void appendCancelled(Order order) {
+        OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
+                .setEventId(UUID.randomUUID())
+                .setOrderId(order.getId())
+                .setUserId(order.getUserId())
+                .setCancelledAt(order.getUpdatedAt())
+                .setSequence(order.nextEventSequence())
+                .build();
+        outbox.append(AGGREGATE_TYPE, order.getId(), Topics.ORDER_CANCELLED, event.getEventId(), event);
+    }
+
+    private Order findWithItemsOrThrow(Long id) {
+        return orderRepository.findWithItemsById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order with ID: " + id + " was not found"));
+    }
+
+    private Page<OrderDto> withItems(Page<Long> ids) {
+        Map<Long, Order> ordersById = orderRepository.findWithItemsByIdIn(ids.getContent()).stream()
+                .collect(Collectors.toMap(Order::getId, Function.identity()));
+        return ids.map(id -> orderMapper.toDto(ordersById.get(id)));
+    }
+
+    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence) {
         List<OrderItemPayload> items = order.getOrderItems().stream()
                 .map(item -> OrderItemPayload.newBuilder()
                         .setMenuItemId(item.getMenuItemId())
@@ -151,6 +226,7 @@ public class OrderService {
                 .setTotalAmount(order.getTotalAmount())
                 .setCreatedAt(order.getCreatedAt())
                 .setItems(items)
+                .setSequence(sequence)
                 .build();
     }
 }

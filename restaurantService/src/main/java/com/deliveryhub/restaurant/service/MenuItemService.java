@@ -11,6 +11,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 
 @Service
@@ -34,6 +35,12 @@ public class MenuItemService {
                 ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
                 : menuItemRepository.findByRestaurantId(restaurantId);
         return menuItems.stream().map(menuItemMapper::toDto).toList();
+    }
+
+    public List<MenuItemDto> getMenuItemsByIds(Long restaurantId, Collection<Long> menuItemIds) {
+        return menuItemRepository.findByRestaurantIdAndIdIn(restaurantId, menuItemIds).stream()
+                .map(menuItemMapper::toDto)
+                .toList();
     }
 
     public MenuItemDto getMenuItemById(Long restaurantId, Long menuItemId) {

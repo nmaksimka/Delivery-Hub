@@ -1,0 +1,16 @@
+services:
+  postgres-restaurant:
+    ports:
+      - "127.0.0.1:5331:5432"
+
+  postgres-order:
+    ports:
+      - "127.0.0.1:5332:5432"
+
+  postgres-delivery:
+    ports:
+      - "127.0.0.1:5333:5432"
+
+  postgres-user:
+    ports:
+      - "127.0.0.1:5334:5432"

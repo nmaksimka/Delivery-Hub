@@ -15,6 +15,10 @@ import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.util.List;
+import org.springframework.http.HttpMethod;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -75,6 +79,7 @@ class GatewaySecurityIT {
         SERVICES.resetAll();
         SERVICES.stubFor(get(JWKS_URL).willReturn(okJson(new JWKSet(USER_SERVICE_KEY).toString(true))));
         SERVICES.stubFor(any(urlPathMatching("/api/.*")).willReturn(okJson("{}")));
+        SERVICES.stubFor(get("/v3/api-docs").willReturn(okJson("{}")));
         client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
     }
 
@@ -117,6 +122,94 @@ class GatewaySecurityIT {
     void rejectsRequestWithoutToken() {
         client.get().uri("/api/orders").exchange().expectStatus().isUnauthorized();
 
+        SERVICES.verify(0, anyRequestedFor(urlPathMatching("/api/.*")));
+    }
+
+    @Test
+    void unauthorizedAndForbiddenAreProblemDetails() {
+        client.get().uri("/api/orders").exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody().jsonPath("$.status").isEqualTo(401).jsonPath("$.instance").isEqualTo("/api/orders");
+        client.get().uri("/api/orders/all")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token(7L, "USER", "kate@example.com")))
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody().jsonPath("$.status").isEqualTo(403);
+    }
+
+    @ParameterizedTest(name = "{0} {1} as {2} -> {3}")
+    @CsvSource({
+            "GET,   /api/restaurants,            ANON,    200",
+            "GET,   /api/restaurants/1/menu,     ANON,    200",
+            "POST,  /api/restaurants,            ANON,    401",
+            "POST,  /api/restaurants,            USER,    403",
+            "POST,  /api/restaurants,            COURIER, 403",
+            "POST,  /api/restaurants,            ADMIN,   200",
+            "GET,   /api/orders,                 ANON,    401",
+            "GET,   /api/orders,                 USER,    200",
+            "GET,   /api/orders/all,             USER,    403",
+            "GET,   /api/orders/all,             COURIER, 403",
+            "GET,   /api/orders/all,             ADMIN,   200",
+            "PATCH, /api/orders/5/status,        USER,    403",
+            "PATCH, /api/orders/5/status,        COURIER, 200",
+            "PATCH, /api/orders/5/status,        ADMIN,   200",
+            "POST,  /api/orders/5/cancel,        ANON,    401",
+            "POST,  /api/orders/5/cancel,        USER,    200",
+            "GET,   /api/deliveries,             ANON,    401",
+            "GET,   /api/deliveries,             USER,    403",
+            "GET,   /api/deliveries,             COURIER, 200",
+            "GET,   /api/deliveries,             ADMIN,   200",
+            "GET,   /api/deliveries/5,           ANON,    401",
+            "GET,   /api/deliveries/5,           USER,    200",
+            "GET,   /api/deliveries/order/5,     USER,    200",
+            "POST,  /api/deliveries,             USER,    403",
+            "POST,  /api/deliveries,             COURIER, 200",
+            "PATCH, /api/deliveries/5/status,    USER,    403",
+            "PATCH, /api/deliveries/5/status,    COURIER, 200",
+            "GET,   /actuator/env,               ANON,    401",
+            "GET,   /actuator/env,               USER,    403",
+            "GET,   /docs/orders/v3/api-docs,    ANON,    200",
+            "GET,   /docs/users/v3/api-docs,     ANON,    200",
+            "POST,  /docs/orders/v3/api-docs,    ANON,    401",
+            "GET,   /docs/orders/api/orders,     ANON,    401",
+            "GET,   /docs/orders/api/orders/all, USER,    404",
+            "GET,   /docs/anything,              ANON,    401"
+    })
+    void roleMatrix(String method, String path, String role, int expectedStatus) {
+        WebTestClient.RequestHeadersSpec<?> request = client.method(HttpMethod.valueOf(method)).uri(path);
+        if (!"ANON".equals(role)) {
+            request = request.header(HttpHeaders.AUTHORIZATION,
+                    bearer(token(100L + role.length(), role, role.toLowerCase() + "@example.com")));
+        }
+
+        request.exchange().expectStatus().isEqualTo(expectedStatus);
+    }
+
+    @Test
+    void docsRoutesReachOnlyApiDescriptionOfService() {
+        client.get().uri("/docs/orders/v3/api-docs").exchange().expectStatus().isOk();
+        client.get().uri("/docs/orders/api/orders").exchange().expectStatus().isUnauthorized();
+
+        SERVICES.verify(1, getRequestedFor(urlEqualTo("/v3/api-docs")));
+        SERVICES.verify(0, anyRequestedFor(urlPathMatching("/api/.*")));
+    }
+
+    @Test
+    void rejectsTokenWithoutSubjectUserIdOrExpiration() {
+        JWTClaimsSet complete = claims(7L, "USER", "kate@example.com", Instant.now().plusSeconds(600), ISSUER);
+        JWTClaimsSet noSubject = new JWTClaimsSet.Builder(complete).subject(null).build();
+        JWTClaimsSet noUserId = new JWTClaimsSet.Builder(complete).claim("uid", null).build();
+        JWTClaimsSet noExpiration = new JWTClaimsSet.Builder(complete).expirationTime(null).build();
+
+        for (JWTClaimsSet incomplete : List.of(noSubject, noUserId, noExpiration)) {
+            client.get().uri("/api/orders")
+                    .header(HttpHeaders.AUTHORIZATION,
+                            bearer(sign(incomplete, JWSAlgorithm.RS256, signer(USER_SERVICE_KEY))))
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
         SERVICES.verify(0, anyRequestedFor(urlPathMatching("/api/.*")));
     }
 

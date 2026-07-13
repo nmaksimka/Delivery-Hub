@@ -1,6 +1,8 @@
 package com.deliveryhub.user.service;
 
+import com.deliveryhub.user.entity.User;
 import com.deliveryhub.user.repository.UserRepository;
+import com.deliveryhub.user.security.AppUserPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -18,7 +20,8 @@ public class DatabaseUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepository.findUserByEmail(email)
+        return userRepository.findUserByEmail(User.normalizeEmail(email))
+                .map(AppUserPrincipal::of)
                 .orElseThrow(() -> new UsernameNotFoundException("User with email: " + email + " was not found"));
     }
 }

@@ -2,6 +2,7 @@ package com.deliveryhub.contracts;
 
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import org.apache.avro.AvroRuntimeException;
@@ -39,7 +40,7 @@ class EventPayloadsTest {
     @Test
     void deliveryStatusSurvivesRoundTrip() {
         DeliveryStatusUpdatedEvent event =
-                new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 15L, DeliveryStatus.PICKED_UP, NOW);
+                new DeliveryStatusUpdatedEvent(UUID.randomUUID(), 7L, 15L, DeliveryStatus.PICKED_UP, NOW, 3L);
 
         byte[] payload = EventPayloads.encode(event);
 
@@ -67,5 +68,26 @@ class EventPayloadsTest {
         assertThatThrownBy(() -> EventPayloads.decode("payments", new byte[0]))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("payments");
+    }
+
+    @Test
+    void orderCancelledKeepsSequence() {
+        OrderCancelledEvent event = new OrderCancelledEvent(UUID.randomUUID(), 15L, 42L, NOW, 2L);
+
+        Object decoded = EventPayloads.decode(Topics.ORDER_CANCELLED, EventPayloads.encode(event));
+
+        assertThat(decoded).isEqualTo(event);
+        assertThat(((OrderCancelledEvent) decoded).getSequence()).isEqualTo(2L);
+    }
+
+    @Test
+    void sequenceIsOptionalForOldProducers() {
+        assertThat(DeliveryStatusUpdatedEvent.getClassSchema().getField("sequence").defaultVal()).isEqualTo(0L);
+        assertThat(OrderCreatedEvent.getClassSchema().getField("sequence").defaultVal()).isEqualTo(0L);
+    }
+
+    @Test
+    void deadLetterTopicHasSuffix() {
+        assertThat(Topics.deadLetterOf(Topics.ORDER_CREATED)).isEqualTo("order-created.DLT");
     }
 }

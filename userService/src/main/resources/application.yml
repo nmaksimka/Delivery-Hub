@@ -32,6 +32,9 @@ app:
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
     refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
     private-key: ${JWT_PRIVATE_KEY:}
+  cleanup:
+    interval: 1h
+    refresh-token-retention: 7d
 
 eureka:
   client:
