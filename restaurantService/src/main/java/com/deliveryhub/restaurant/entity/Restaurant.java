@@ -14,6 +14,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "restaurants")
@@ -36,6 +37,19 @@ public class Restaurant {
     @Column(name = "close_time")
     private LocalTime closeTime;
 
+    private String cuisine;
+
+    private String city;
+
+    @Column(name = "image_url", length = 512)
+    private String imageUrl;
+
+    @Column(name = "external_source", length = 32)
+    private String externalSource;
+
+    @Column(name = "external_id", length = 64)
+    private String externalId;
+
     @Column(name = "active", nullable = false)
     private boolean active;
 
@@ -57,6 +71,20 @@ public class Restaurant {
         this.name = name;
         this.address = address;
         this.phone = phone;
+    }
+
+    public static Restaurant imported(String externalSource, String externalId, String name, String address,
+                                      String phone) {
+        Restaurant restaurant = new Restaurant(name, address, phone);
+        restaurant.externalSource = Objects.requireNonNull(externalSource, "externalSource");
+        restaurant.externalId = Objects.requireNonNull(externalId, "externalId");
+        return restaurant;
+    }
+
+    public void describe(String cuisine, String city, String imageUrl) {
+        this.cuisine = cuisine;
+        this.city = city;
+        this.imageUrl = imageUrl;
     }
 
     public void changeWorkingHours(LocalTime openTime, LocalTime closeTime) {
@@ -92,6 +120,26 @@ public class Restaurant {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getCuisine() {
+        return cuisine;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public String getExternalSource() {
+        return externalSource;
+    }
+
+    public String getExternalId() {
+        return externalId;
     }
 
     public LocalTime getOpenTime() {

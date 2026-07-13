@@ -110,6 +110,6 @@ class RestaurantServiceTest {
     }
 
     private static RestaurantDto dto() {
-        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, true);
+        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true);
     }
 }

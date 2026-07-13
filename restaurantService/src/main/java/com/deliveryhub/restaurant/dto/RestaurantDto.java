@@ -7,6 +7,9 @@ public record RestaurantDto(
         String name,
         String address,
         String phone,
+        String cuisine,
+        String city,
+        String imageUrl,
         LocalTime openTime,
         LocalTime closeTime,
         boolean active) {

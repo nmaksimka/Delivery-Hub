@@ -34,6 +34,15 @@ public class MenuItem {
     @Column(nullable = false)
     private boolean available;
 
+    @Column(name = "image_url", length = 512)
+    private String imageUrl;
+
+    @Column(name = "external_source", length = 32)
+    private String externalSource;
+
+    @Column(name = "external_id", length = 64)
+    private String externalId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "restaurant_id", nullable = false)
     private Restaurant restaurant;
@@ -58,6 +67,15 @@ public class MenuItem {
         this.description = description;
         this.price = price;
         this.category = category;
+    }
+
+    public void changeImage(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
+    public void linkToSource(String externalSource, String externalId) {
+        this.externalSource = Objects.requireNonNull(externalSource, "externalSource");
+        this.externalId = Objects.requireNonNull(externalId, "externalId");
     }
 
     public void putOnSale() {
@@ -90,6 +108,18 @@ public class MenuItem {
 
     public boolean isAvailable() {
         return available;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public String getExternalSource() {
+        return externalSource;
+    }
+
+    public String getExternalId() {
+        return externalId;
     }
 
     public Restaurant getRestaurant() {
