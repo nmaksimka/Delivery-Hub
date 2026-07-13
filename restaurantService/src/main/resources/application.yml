@@ -25,6 +25,24 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  cache:
+    type: redis
+
+app:
+  mealdb:
+    base-url: ${MEALDB_BASE_URL:https://www.themealdb.com/api/json/v1/1}
+    connect-timeout: 2s
+    read-timeout: 5s
+    requests-per-second: 5
+    rate-limit-wait: 10s
+    max-attempts: 3
+    retry-backoff: 500ms
+    cache-ttl: 6h
+    meals-per-category: 12
 
 eureka:
   client:

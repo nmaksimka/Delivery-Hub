@@ -184,6 +184,8 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
     depends_on:
+      redis:
+        condition: service_healthy
       configServer:
         condition: service_healthy
       discoveryServer:
