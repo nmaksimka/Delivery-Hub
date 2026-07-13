@@ -28,11 +28,11 @@ public class RefreshTokenCleanup {
 
     @Scheduled(fixedDelayString = "${app.cleanup.interval:1h}", initialDelayString = "${app.cleanup.initial-delay:1m}")
     @Transactional
-    public void removeDeadTokens() {
-        int removed = refreshTokenRepository.deleteExpiredOrRevokedBefore(
+    public void removeExpiredTokens() {
+        int removed = refreshTokenRepository.deleteExpiredBefore(
                 clock.instant().minus(properties.refreshTokenRetention()));
         if (removed > 0) {
-            log.info("Removed {} expired or revoked refresh tokens", removed);
+            log.info("Removed {} expired refresh tokens", removed);
         }
     }
 }

@@ -18,12 +18,12 @@ class RefreshTokenCleanupTest {
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
 
     @Test
-    void removesTokensThatAreDeadLongerThanRetention() {
+    void removesTokensExpiredLongerThanRetention() {
         RefreshTokenCleanup cleanup = new RefreshTokenCleanup(refreshTokenRepository,
                 new CleanupProperties(Duration.ofDays(7)), Clock.fixed(NOW, ZoneOffset.UTC));
 
-        cleanup.removeDeadTokens();
+        cleanup.removeExpiredTokens();
 
-        verify(refreshTokenRepository).deleteExpiredOrRevokedBefore(Instant.parse("2026-07-13T03:00:00Z"));
+        verify(refreshTokenRepository).deleteExpiredBefore(Instant.parse("2026-07-13T03:00:00Z"));
     }
 }

@@ -77,23 +77,32 @@ class RefreshTokenRepositoryIT {
     }
 
     @Test
-    void deletesExpiredAndLongRevokedTokensButKeepsLiveOnes() {
-        Instant longAgo = NOW.minus(Duration.ofDays(60));
-        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "expired", longAgo, LIFETIME));
-        RefreshToken rotatedLongAgo =
-                refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "rotated", NOW.minus(Duration.ofDays(20)), LIFETIME));
-        refreshTokenRepository.saveAndFlush(rotatedLongAgo.rotate("live", NOW.minus(Duration.ofDays(10)), LIFETIME));
-        RefreshToken revokedRecently = refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "recent", NOW, LIFETIME));
-        revokedRecently.revoke(NOW);
+    void deletesOnlyExpiredTokens() {
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "expired", NOW.minus(Duration.ofDays(60)), LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "live", NOW, LIFETIME));
+
+        int removed = refreshTokenRepository.deleteExpiredBefore(NOW.minus(Duration.ofDays(7)));
+
+        assertThat(removed).isEqualTo(1);
+        assertThat(refreshTokenRepository.findByTokenHash("expired")).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("live")).isPresent();
+    }
+
+    @Test
+    void revokedButUnexpiredTokenSurvivesCleanupHoweverLongAgoItWasRevoked() {
+        RefreshToken rotated = refreshTokenRepository.saveAndFlush(
+                RefreshToken.issue(userId, "rotated", NOW.minus(Duration.ofDays(20)), LIFETIME));
+        refreshTokenRepository.saveAndFlush(rotated.rotate("successor", NOW.minus(Duration.ofDays(19)), LIFETIME));
         refreshTokenRepository.flush();
 
-        int removed = refreshTokenRepository.deleteExpiredOrRevokedBefore(NOW.minus(Duration.ofDays(7)));
+        int removed = refreshTokenRepository.deleteExpiredBefore(NOW.minus(Duration.ofDays(7)));
 
-        assertThat(removed).isEqualTo(2);
-        assertThat(refreshTokenRepository.findByTokenHash("expired")).isEmpty();
-        assertThat(refreshTokenRepository.findByTokenHash("rotated")).isEmpty();
-        assertThat(refreshTokenRepository.findByTokenHash("live")).isPresent();
-        assertThat(refreshTokenRepository.findByTokenHash("recent")).isPresent();
+        assertThat(removed).isZero();
+        assertThat(refreshTokenRepository.findByTokenHash("rotated")).get()
+                .satisfies(token -> {
+                    assertThat(token.isRevoked()).isTrue();
+                    assertThat(token.getReplacedBy()).isNotNull();
+                });
     }
 
     @Test

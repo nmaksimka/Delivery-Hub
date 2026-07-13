@@ -7,7 +7,10 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.deliveryhub.user.repository.RefreshTokenRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -18,6 +21,7 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.UnsupportedEncodingException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +40,10 @@ class AuthApiIT {
 
     @Autowired
     private MockMvcTester mvc;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Test
     void registersUserAndLogsIn() {
@@ -98,6 +106,19 @@ class AuthApiIT {
 
         assertThat(reuse).hasStatus(401)
                 .bodyJson().extractingPath("$.detail").isEqualTo("Refresh token is invalid or expired");
+        assertThat(refresh(legitimate)).hasStatus(401);
+    }
+
+    @Test
+    void reuseIsStillDetectedAfterCleanupBecauseRevokedTokenIsKeptUntilItExpires() {
+        String stolen = JsonPath.read(bodyOf(login(register())), "$.refreshToken");
+        String legitimate = JsonPath.read(bodyOf(refresh(stolen)), "$.refreshToken");
+
+        Integer removed = new TransactionTemplate(transactionManager).execute(status ->
+                refreshTokenRepository.deleteExpiredBefore(Instant.now().plus(Duration.ofDays(1))));
+
+        assertThat(removed).isZero();
+        assertThat(refresh(stolen)).hasStatus(401);
         assertThat(refresh(legitimate)).hasStatus(401);
     }
 
