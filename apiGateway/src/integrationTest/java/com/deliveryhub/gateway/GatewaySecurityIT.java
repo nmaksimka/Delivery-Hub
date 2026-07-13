@@ -170,7 +170,12 @@ class GatewaySecurityIT {
             "PATCH, /api/deliveries/5/status,    COURIER, 200",
             "GET,   /actuator/env,               ANON,    401",
             "GET,   /actuator/env,               USER,    403",
-            "GET,   /docs/orders/v3/api-docs,    ANON,    200"
+            "GET,   /docs/orders/v3/api-docs,    ANON,    200",
+            "GET,   /docs/users/v3/api-docs,     ANON,    200",
+            "POST,  /docs/orders/v3/api-docs,    ANON,    401",
+            "GET,   /docs/orders/api/orders,     ANON,    401",
+            "GET,   /docs/orders/api/orders/all, USER,    404",
+            "GET,   /docs/anything,              ANON,    401"
     })
     void roleMatrix(String method, String path, String role, int expectedStatus) {
         WebTestClient.RequestHeadersSpec<?> request = client.method(HttpMethod.valueOf(method)).uri(path);
@@ -180,6 +185,15 @@ class GatewaySecurityIT {
         }
 
         request.exchange().expectStatus().isEqualTo(expectedStatus);
+    }
+
+    @Test
+    void docsRoutesReachOnlyApiDescriptionOfService() {
+        client.get().uri("/docs/orders/v3/api-docs").exchange().expectStatus().isOk();
+        client.get().uri("/docs/orders/api/orders").exchange().expectStatus().isUnauthorized();
+
+        SERVICES.verify(1, getRequestedFor(urlEqualTo("/v3/api-docs")));
+        SERVICES.verify(0, anyRequestedFor(urlPathMatching("/api/.*")));
     }
 
     @Test

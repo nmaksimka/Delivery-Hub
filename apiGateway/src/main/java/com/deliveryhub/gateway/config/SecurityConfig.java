@@ -44,9 +44,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/api/auth/**").permitAll()
-                        .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**",
-                                "/docs/**")
+                        .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**")
                         .permitAll()
+                        .pathMatchers(HttpMethod.GET, "/docs/*/v3/api-docs", "/docs/*/v3/api-docs/**").permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
 
