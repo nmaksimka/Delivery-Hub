@@ -2,6 +2,7 @@ package com.deliveryhub.restaurant.controller;
 
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
+import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -36,11 +37,12 @@ public class MenuItemController {
     public List<MenuItemDto> getMenuByRestaurant(
             @PathVariable Long restaurantId,
             @RequestParam(value = "availableOnly", defaultValue = "true") boolean availableOnly,
-            @RequestParam(value = "ids", required = false) @Size(max = MAX_IDS) Set<Long> ids) {
+            @RequestParam(value = "ids", required = false) @Size(max = MAX_IDS) Set<Long> ids,
+            @RequestParam(value = "section", required = false) MenuSection section) {
         if (ids != null) {
             return menuItemService.getMenuItemsByIds(restaurantId, ids);
         }
-        return menuItemService.getMenuItemsByRestaurant(restaurantId, availableOnly);
+        return menuItemService.getMenuItemsByRestaurant(restaurantId, availableOnly, section);
     }
 
     @GetMapping("/{menuItemId}")

@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.service;
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
 import com.deliveryhub.restaurant.entity.MenuItem;
+import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
@@ -31,9 +32,20 @@ public class MenuItemService {
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
-        List<MenuItem> menuItems = availableOnly
-                ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
-                : menuItemRepository.findByRestaurantId(restaurantId);
+        return getMenuItemsByRestaurant(restaurantId, availableOnly, null);
+    }
+
+    public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly, MenuSection section) {
+        List<MenuItem> menuItems;
+        if (section == null) {
+            menuItems = availableOnly
+                    ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
+                    : menuItemRepository.findByRestaurantId(restaurantId);
+        } else {
+            menuItems = availableOnly
+                    ? menuItemRepository.findByRestaurantIdAndSectionAndAvailableTrue(restaurantId, section)
+                    : menuItemRepository.findByRestaurantIdAndSection(restaurantId, section);
+        }
         return menuItems.stream().map(menuItemMapper::toDto).toList();
     }
 

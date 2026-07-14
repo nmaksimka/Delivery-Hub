@@ -1,5 +1,7 @@
 package com.deliveryhub.restaurant.dto;
 
+import com.deliveryhub.restaurant.entity.MenuSection;
+
 import java.math.BigDecimal;
 
 public record MenuItemDto(
@@ -10,5 +12,7 @@ public record MenuItemDto(
         String category,
         boolean available,
         String imageUrl,
+        MenuSection section,
+        NutritionDto nutrition,
         Long restaurantId) {
 }
