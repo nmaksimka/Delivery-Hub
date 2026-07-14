@@ -2,6 +2,7 @@ package com.deliveryhub.restaurant.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.deliveryhub.restaurant.importer.ImportAlreadyRunningException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -32,8 +33,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ProblemDetail handleConflict(IllegalStateException ex) {
+    @ExceptionHandler(ImportAlreadyRunningException.class)
+    public ProblemDetail handleConflict(ImportAlreadyRunningException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 

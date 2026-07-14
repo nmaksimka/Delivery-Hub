@@ -21,7 +21,7 @@ class GatewayRoutesTest {
         List<String> routeIds = routeLocator.getRoutes().map(Route::getId).collectList().block();
 
         assertThat(routeIds).containsExactlyInAnyOrder(
-                "auth-login", "restaurant-service", "order-service", "delivery-service", "user-service",
+                "auth-login", "restaurant-service", "catalog-import", "order-service", "delivery-service", "user-service",
                 "restaurant-docs", "order-docs", "delivery-docs", "user-docs");
     }
 

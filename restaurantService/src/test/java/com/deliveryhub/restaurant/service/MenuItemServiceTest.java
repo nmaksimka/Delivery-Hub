@@ -132,6 +132,6 @@ class MenuItemServiceTest {
     }
 
     private static MenuItemDto dto() {
-        return new MenuItemDto(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, RESTAURANT_ID);
+        return new MenuItemDto(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, null, RESTAURANT_ID);
     }
 }

@@ -1,3 +1,6 @@
 spring:
   datasource:
     url: jdbc:postgresql://postgres-restaurant:5432/restaurant_db
+  data:
+    redis:
+      host: redis
