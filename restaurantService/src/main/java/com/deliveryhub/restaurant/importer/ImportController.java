@@ -27,6 +27,12 @@ public class ImportController {
         return importJobService.start(ImportSource.MEALDB);
     }
 
+    @PostMapping("/products")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ImportJobDto importProducts() {
+        return importJobService.start(ImportSource.OPENFOODFACTS);
+    }
+
     @GetMapping("/{jobId}")
     public ImportJobDto getJob(@PathVariable UUID jobId) {
         return importJobService.get(jobId);

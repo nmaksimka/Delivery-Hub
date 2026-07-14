@@ -1,5 +1,6 @@
 package com.deliveryhub.restaurant.importer;
 
 public enum ImportSource {
-    MEALDB
+    MEALDB,
+    OPENFOODFACTS
 }
