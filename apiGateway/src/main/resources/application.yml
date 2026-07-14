@@ -67,6 +67,10 @@ spring:
               uri: lb://restaurantService
               predicates:
                 - Path=/api/restaurants/**
+            - id: catalog-import
+              uri: lb://restaurantService
+              predicates:
+                - Path=/api/admin/imports/**
             - id: order-service
               uri: lb://orderService
               predicates:
