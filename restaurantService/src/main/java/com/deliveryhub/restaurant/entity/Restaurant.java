@@ -44,6 +44,9 @@ public class Restaurant {
     @Column(name = "image_url", length = 512)
     private String imageUrl;
 
+    @Column(name = "image_key")
+    private String imageKey;
+
     @Column(name = "external_source", length = 32)
     private String externalSource;
 
@@ -85,6 +88,10 @@ public class Restaurant {
         this.cuisine = cuisine;
         this.city = city;
         this.imageUrl = imageUrl;
+    }
+
+    public void storeImage(String imageKey) {
+        this.imageKey = imageKey;
     }
 
     public void changeWorkingHours(LocalTime openTime, LocalTime closeTime) {
@@ -132,6 +139,10 @@ public class Restaurant {
 
     public String getImageUrl() {
         return imageUrl;
+    }
+
+    public String getImageKey() {
+        return imageKey;
     }
 
     public String getExternalSource() {
