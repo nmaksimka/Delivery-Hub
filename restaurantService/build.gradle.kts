@@ -19,6 +19,7 @@ dependencies {
     implementation(libs.spring.boot.starter.flyway)
     runtimeOnly(libs.flyway.postgresql)
 
+    implementation(libs.aws.sdk.s3)
     implementation(libs.springdoc.webmvc.ui)
 
     implementation(libs.mapstruct)

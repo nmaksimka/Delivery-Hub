@@ -9,6 +9,7 @@ wiremock = "3.13.2"
 avro = "1.12.1"
 avro-plugin = "1.9.1"
 confluent = "8.1.4"
+aws-sdk = "2.46.19"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -59,6 +60,7 @@ mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
 spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
+aws-sdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 testcontainers-core = { module = "org.testcontainers:testcontainers" }
 testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
