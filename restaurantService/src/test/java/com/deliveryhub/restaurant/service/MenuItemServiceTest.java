@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.service;
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
 import com.deliveryhub.restaurant.entity.MenuItem;
+import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
@@ -132,6 +133,6 @@ class MenuItemServiceTest {
     }
 
     private static MenuItemDto dto() {
-        return new MenuItemDto(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, null, RESTAURANT_ID);
+        return new MenuItemDto(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, null, MenuSection.DISH, null, RESTAURANT_ID);
     }
 }

@@ -1,6 +1,7 @@
 package com.deliveryhub.restaurant.repository;
 
 import com.deliveryhub.restaurant.entity.MenuItem;
+import com.deliveryhub.restaurant.entity.MenuSection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +15,10 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, Long> {
     List<MenuItem> findByRestaurantId(Long restaurantId);
 
     List<MenuItem> findByRestaurantIdAndAvailableTrue(Long restaurantId);
+
+    List<MenuItem> findByRestaurantIdAndSection(Long restaurantId, MenuSection section);
+
+    List<MenuItem> findByRestaurantIdAndSectionAndAvailableTrue(Long restaurantId, MenuSection section);
 
     Optional<MenuItem> findByIdAndRestaurantId(Long id, Long restaurantId);
 

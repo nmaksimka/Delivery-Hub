@@ -1,5 +1,7 @@
 package com.deliveryhub.restaurant.config;
 
+import com.deliveryhub.restaurant.foodfacts.FoodFactsHttp;
+import com.deliveryhub.restaurant.foodfacts.FoodFactsProperties;
 import com.deliveryhub.restaurant.mealdb.MealDbHttp;
 import com.deliveryhub.restaurant.mealdb.MealDbProperties;
 import org.slf4j.Logger;
@@ -13,6 +15,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import org.springframework.data.redis.serializer.RedisSerializer;
+
+import java.time.Duration;
 
 @Configuration
 public class CacheConfig implements CachingConfigurer {
@@ -45,11 +49,17 @@ public class CacheConfig implements CachingConfigurer {
     }
 
     @Bean
-    public RedisCacheManagerBuilderCustomizer externalApiCaches(MealDbProperties mealDb) {
-        return builder -> builder.withCacheConfiguration(MealDbHttp.CACHE, RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(mealDb.cacheTtl())
+    public RedisCacheManagerBuilderCustomizer externalApiCaches(MealDbProperties mealDb, FoodFactsProperties foodFacts) {
+        return builder -> builder
+                .withCacheConfiguration(MealDbHttp.CACHE, externalApiCache(mealDb.cacheTtl()))
+                .withCacheConfiguration(FoodFactsHttp.CACHE, externalApiCache(foodFacts.cacheTtl()));
+    }
+
+    private static RedisCacheConfiguration externalApiCache(Duration ttl) {
+        return RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(ttl)
                 .disableCachingNullValues()
                 .prefixCacheNameWith("restaurant:")
-                .serializeValuesWith(SerializationPair.fromSerializer(RedisSerializer.string())));
+                .serializeValuesWith(SerializationPair.fromSerializer(RedisSerializer.string()));
     }
 }

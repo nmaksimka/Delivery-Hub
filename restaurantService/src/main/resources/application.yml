@@ -43,6 +43,17 @@ app:
     retry-backoff: 500ms
     cache-ttl: 6h
     meals-per-category: 12
+  foodfacts:
+    base-url: ${FOODFACTS_BASE_URL:https://world.openfoodfacts.org}
+    user-agent: DeliveryHub/1.0 (student project)
+    connect-timeout: 2s
+    read-timeout: 10s
+    requests-per-second: 2
+    rate-limit-wait: 10s
+    max-attempts: 3
+    retry-backoff: 1s
+    cache-ttl: 12h
+    products-per-category: 10
 
 eureka:
   client:
