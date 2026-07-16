@@ -1,6 +1,8 @@
 package com.deliveryhub.restaurant.storage;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
 public class ImageIntake {
@@ -20,5 +22,17 @@ public class ImageIntake {
         }
         ImageFormat format = ImageFormat.detect(content).orElseThrow(UnsupportedImageException::new);
         imageStorage.put(key, content, format.contentType());
+    }
+
+    public void discardAfterCommit(String key) {
+        if (key == null) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageStorage.delete(key);
+            }
+        });
     }
 }

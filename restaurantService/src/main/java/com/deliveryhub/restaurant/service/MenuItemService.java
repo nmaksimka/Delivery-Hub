@@ -8,12 +8,14 @@ import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageIntake;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -22,13 +24,16 @@ public class MenuItemService {
     private final MenuItemRepository menuItemRepository;
     private final RestaurantRepository restaurantRepository;
     private final MenuItemMapper menuItemMapper;
+    private final ImageIntake imageIntake;
 
     public MenuItemService(MenuItemRepository menuItemRepository,
                            RestaurantRepository restaurantRepository,
-                           MenuItemMapper menuItemMapper) {
+                           MenuItemMapper menuItemMapper,
+                           ImageIntake imageIntake) {
         this.menuItemRepository = menuItemRepository;
         this.restaurantRepository = restaurantRepository;
         this.menuItemMapper = menuItemMapper;
+        this.imageIntake = imageIntake;
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
@@ -69,6 +74,16 @@ public class MenuItemService {
                 request.name(), request.description(), request.price(), request.category());
         applyAvailability(menuItem, request);
         return menuItemMapper.toDto(menuItemRepository.save(menuItem));
+    }
+
+    @Transactional
+    public MenuItemDto replaceImage(Long restaurantId, Long menuItemId, byte[] content) {
+        MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
+        String key = "menu/" + restaurantId + "/" + menuItemId + "/" + UUID.randomUUID();
+        imageIntake.save(key, content);
+        imageIntake.discardAfterCommit(menuItem.getImageKey());
+        menuItem.storeImage(key);
+        return menuItemMapper.toDto(menuItem);
     }
 
     @Transactional
