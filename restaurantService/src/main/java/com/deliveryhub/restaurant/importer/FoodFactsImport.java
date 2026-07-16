@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.importer;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsClient;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsProduct;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsProperties;
+import com.deliveryhub.restaurant.storage.ImageMirror;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -20,13 +21,15 @@ public class FoodFactsImport implements CatalogImport {
     private final ProductCatalogWriter writer;
     private final ImportProgress progress;
     private final FoodFactsProperties properties;
+    private final ImageMirror imageMirror;
 
     public FoodFactsImport(FoodFactsClient foodFactsClient, ProductCatalogWriter writer, ImportProgress progress,
-                           FoodFactsProperties properties) {
+                           FoodFactsProperties properties, ImageMirror imageMirror) {
         this.foodFactsClient = foodFactsClient;
         this.writer = writer;
         this.progress = progress;
         this.properties = properties;
+        this.imageMirror = imageMirror;
     }
 
     @Override
@@ -54,7 +57,11 @@ public class FoodFactsImport implements CatalogImport {
                 if (name == null || name.isBlank()) {
                     progress.skipped(jobId);
                 } else {
-                    writer.store(jobId, candidate.group(), candidate.product());
+                    String imageKey = imageMirror
+                            .mirror("openfoodfacts/products/" + candidate.product().code(),
+                                    candidate.product().imageUrl())
+                            .orElse(null);
+                    writer.store(jobId, candidate.group(), candidate.product(), imageKey);
                 }
             }
             progress.completed(jobId);

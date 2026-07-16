@@ -4,6 +4,7 @@ import com.deliveryhub.restaurant.mealdb.MealDbCategory;
 import com.deliveryhub.restaurant.mealdb.MealDbClient;
 import com.deliveryhub.restaurant.mealdb.MealDbMeal;
 import com.deliveryhub.restaurant.mealdb.MealDbProperties;
+import com.deliveryhub.restaurant.storage.ImageMirror;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -22,13 +23,15 @@ public class MealImport implements CatalogImport {
     private final MealCatalogWriter writer;
     private final ImportProgress progress;
     private final MealDbProperties properties;
+    private final ImageMirror imageMirror;
 
     public MealImport(MealDbClient mealDbClient, MealCatalogWriter writer, ImportProgress progress,
-                      MealDbProperties properties) {
+                      MealDbProperties properties, ImageMirror imageMirror) {
         this.mealDbClient = mealDbClient;
         this.writer = writer;
         this.progress = progress;
         this.properties = properties;
+        this.imageMirror = imageMirror;
     }
 
     @Override
@@ -52,7 +55,10 @@ public class MealImport implements CatalogImport {
             for (String mealId : mealIds) {
                 Optional<MealDbMeal> meal = mealDbClient.meal(mealId);
                 if (meal.isPresent() && isComplete(meal.get())) {
-                    writer.store(jobId, meal.get());
+                    String imageKey = imageMirror
+                            .mirror("mealdb/meals/" + meal.get().idMeal(), meal.get().strMealThumb())
+                            .orElse(null);
+                    writer.store(jobId, meal.get(), imageKey);
                 } else {
                     progress.skipped(jobId);
                 }
