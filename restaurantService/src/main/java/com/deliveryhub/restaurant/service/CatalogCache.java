@@ -9,16 +9,23 @@ import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import jakarta.persistence.EntityNotFoundException;
-import org.springframework.cache.annotation.CacheEvict;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
 @Component
 @Transactional(readOnly = true)
 public class CatalogCache {
+
+    private static final Logger log = LoggerFactory.getLogger(CatalogCache.class);
 
     public static final String RESTAURANTS = "catalog-restaurants";
     public static final String RESTAURANT = "catalog-restaurant";
@@ -28,13 +35,16 @@ public class CatalogCache {
     private final MenuItemRepository menuItemRepository;
     private final RestaurantMapper restaurantMapper;
     private final MenuItemMapper menuItemMapper;
+    private final CacheManager cacheManager;
 
     public CatalogCache(RestaurantRepository restaurantRepository, MenuItemRepository menuItemRepository,
-                        RestaurantMapper restaurantMapper, MenuItemMapper menuItemMapper) {
+                        RestaurantMapper restaurantMapper, MenuItemMapper menuItemMapper,
+                        CacheManager cacheManager) {
         this.restaurantRepository = restaurantRepository;
         this.menuItemRepository = menuItemRepository;
         this.restaurantMapper = restaurantMapper;
         this.menuItemMapper = menuItemMapper;
+        this.cacheManager = cacheManager;
     }
 
     @Cacheable(cacheNames = RESTAURANTS, key = "#activeOnly")
@@ -57,16 +67,42 @@ public class CatalogCache {
         return findMenu(restaurantId, availableOnly, section).stream().map(menuItemMapper::toView).toList();
     }
 
-    @CacheEvict(cacheNames = {RESTAURANTS, RESTAURANT}, allEntries = true)
     public void evictRestaurants() {
+        evictAfterCommit(RESTAURANTS, RESTAURANT);
     }
 
-    @CacheEvict(cacheNames = MENU, allEntries = true)
     public void evictMenus() {
+        evictAfterCommit(MENU);
     }
 
-    @CacheEvict(cacheNames = {RESTAURANTS, RESTAURANT, MENU}, allEntries = true)
     public void evictAll() {
+        evictAfterCommit(RESTAURANTS, RESTAURANT, MENU);
+    }
+
+    private void evictAfterCommit(String... cacheNames) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    clear(cacheNames);
+                }
+            });
+        } else {
+            clear(cacheNames);
+        }
+    }
+
+    private void clear(String... cacheNames) {
+        for (String name : cacheNames) {
+            try {
+                Cache cache = cacheManager.getCache(name);
+                if (cache != null) {
+                    cache.invalidate();
+                }
+            } catch (RuntimeException e) {
+                log.warn("Cache {} could not be cleared, entries will expire by ttl: {}", name, e.toString());
+            }
+        }
     }
 
     private List<MenuItem> findMenu(Long restaurantId, boolean availableOnly, MenuSection section) {

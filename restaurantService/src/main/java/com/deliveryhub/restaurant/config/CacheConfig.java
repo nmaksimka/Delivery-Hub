@@ -71,7 +71,6 @@ public class CacheConfig implements CachingConfigurer {
         JavaType restaurantList = types.constructCollectionType(List.class, RestaurantView.class);
         JavaType menuList = types.constructCollectionType(List.class, MenuItemView.class);
         return builder -> builder
-                .transactionAware()
                 .withCacheConfiguration(CatalogCache.RESTAURANTS,
                         catalogCache(properties.ttl(), new JacksonJsonRedisSerializer<>(restaurantList)))
                 .withCacheConfiguration(CatalogCache.RESTAURANT,
