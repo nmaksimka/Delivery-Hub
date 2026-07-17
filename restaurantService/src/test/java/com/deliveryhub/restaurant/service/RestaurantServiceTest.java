@@ -5,6 +5,8 @@ import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageIntake;
+import com.deliveryhub.restaurant.storage.UnsupportedImageException;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,6 +39,8 @@ class RestaurantServiceTest {
     private RestaurantRepository restaurantRepository;
     @Mock
     private RestaurantMapper restaurantMapper;
+    @Mock
+    private ImageIntake imageIntake;
 
     @InjectMocks
     private RestaurantService restaurantService;
@@ -103,6 +111,48 @@ class RestaurantServiceTest {
         assertThat(existing.getName()).isEqualTo("Trattoria");
         assertThat(existing.getAddress()).isEqualTo("Mira 5");
         assertThat(existing.isActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("замена картинки сохраняет объект под новым ключом и планирует удаление старого")
+    void replacesImageAndDiscardsPreviousOne() {
+        Restaurant restaurant = restaurant();
+        restaurant.storeImage("restaurants/1/old");
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(restaurant));
+        when(restaurantMapper.toDto(restaurant)).thenReturn(dto());
+        byte[] content = {1, 2, 3};
+
+        restaurantService.replaceImage(1L, content);
+
+        assertThat(restaurant.getImageKey()).startsWith("restaurants/1/").isNotEqualTo("restaurants/1/old");
+        var order = inOrder(imageIntake);
+        order.verify(imageIntake).save(eq(restaurant.getImageKey()), eq(content));
+        order.verify(imageIntake).discardAfterCommit("restaurants/1/old");
+    }
+
+    @Test
+    @DisplayName("отклонённая картинка не меняет ключ ресторана")
+    void keepsKeyWhenImageIsRejected() {
+        Restaurant restaurant = restaurant();
+        restaurant.storeImage("restaurants/1/old");
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(restaurant));
+        doThrow(new UnsupportedImageException()).when(imageIntake).save(anyString(), any());
+
+        assertThatThrownBy(() -> restaurantService.replaceImage(1L, new byte[]{1}))
+                .isInstanceOf(UnsupportedImageException.class);
+
+        assertThat(restaurant.getImageKey()).isEqualTo("restaurants/1/old");
+        verify(imageIntake, never()).discardAfterCommit(any());
+    }
+
+    @Test
+    @DisplayName("замена картинки несуществующего ресторана — EntityNotFoundException")
+    void failsToReplaceImageOfMissingRestaurant() {
+        when(restaurantRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> restaurantService.replaceImage(404L, new byte[]{1}))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(imageIntake, never()).save(any(), any());
     }
 
     private static Restaurant restaurant() {

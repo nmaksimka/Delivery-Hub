@@ -8,6 +8,7 @@ import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageIntake;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,6 +43,8 @@ class MenuItemServiceTest {
     private RestaurantRepository restaurantRepository;
     @Mock
     private MenuItemMapper menuItemMapper;
+    @Mock
+    private ImageIntake imageIntake;
 
     @InjectMocks
     private MenuItemService menuItemService;
@@ -121,6 +126,34 @@ class MenuItemServiceTest {
 
         assertThatThrownBy(() -> menuItemService.addMenuItemToRestaurant(404L, request(true)))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("замена картинки блюда кладёт ключ внутри ресторана и планирует удаление старого")
+    void replacesImageAndDiscardsPreviousOne() {
+        MenuItem item = menuItem();
+        item.storeImage("menu/1/10/old");
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID))
+                .thenReturn(Optional.of(item));
+        when(menuItemMapper.toDto(item)).thenReturn(dto());
+        byte[] content = {1, 2, 3};
+
+        menuItemService.replaceImage(RESTAURANT_ID, MENU_ITEM_ID, content);
+
+        assertThat(item.getImageKey()).startsWith("menu/1/10/").isNotEqualTo("menu/1/10/old");
+        var order = inOrder(imageIntake);
+        order.verify(imageIntake).save(eq(item.getImageKey()), eq(content));
+        order.verify(imageIntake).discardAfterCommit("menu/1/10/old");
+    }
+
+    @Test
+    @DisplayName("не принимает картинку для блюда чужого ресторана")
+    void rejectsImageForItemOfAnotherRestaurant() {
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> menuItemService.replaceImage(999L, MENU_ITEM_ID, new byte[]{1}))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(imageIntake, never()).save(any(), any());
     }
 
     private static MenuItem menuItem() {
