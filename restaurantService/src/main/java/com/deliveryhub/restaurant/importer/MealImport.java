@@ -4,6 +4,7 @@ import com.deliveryhub.restaurant.mealdb.MealDbCategory;
 import com.deliveryhub.restaurant.mealdb.MealDbClient;
 import com.deliveryhub.restaurant.mealdb.MealDbMeal;
 import com.deliveryhub.restaurant.mealdb.MealDbProperties;
+import com.deliveryhub.restaurant.service.CatalogCache;
 import com.deliveryhub.restaurant.storage.ImageMirror;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,14 +25,17 @@ public class MealImport implements CatalogImport {
     private final ImportProgress progress;
     private final MealDbProperties properties;
     private final ImageMirror imageMirror;
+    private final CatalogCache catalogCache;
 
     public MealImport(MealDbClient mealDbClient, MealCatalogWriter writer, ImportProgress progress,
-                      MealDbProperties properties, ImageMirror imageMirror) {
+                      MealDbProperties properties, ImageMirror imageMirror,
+                      CatalogCache catalogCache) {
         this.mealDbClient = mealDbClient;
         this.writer = writer;
         this.progress = progress;
         this.properties = properties;
         this.imageMirror = imageMirror;
+        this.catalogCache = catalogCache;
     }
 
     @Override
@@ -68,6 +72,8 @@ public class MealImport implements CatalogImport {
         } catch (RuntimeException e) {
             log.error("Import job {} failed", jobId, e);
             progress.failed(jobId, e.getMessage());
+        } finally {
+            catalogCache.evictAll();
         }
     }
 
