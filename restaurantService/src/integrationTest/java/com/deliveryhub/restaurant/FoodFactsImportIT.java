@@ -6,6 +6,7 @@ import com.deliveryhub.restaurant.entity.NutriScore;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageStorage;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterAll;
@@ -31,14 +32,17 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresContainerConfig.class)
+@Import({PostgresContainerConfig.class, GarageContainerConfig.class})
 class FoodFactsImportIT {
+
+    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final WireMockServer FOOD_FACTS = new WireMockServer(options().dynamicPort());
@@ -55,6 +59,8 @@ class FoodFactsImportIT {
     private MenuItemRepository menuItemRepository;
     @Autowired
     private CacheManager cacheManager;
+    @Autowired
+    private ImageStorage imageStorage;
 
     @DynamicPropertySource
     static void foodFactsIsWireMock(DynamicPropertyRegistry registry) {
@@ -76,13 +82,14 @@ class FoodFactsImportIT {
         menuItemRepository.deleteAll();
         restaurantRepository.deleteAll();
         FOOD_FACTS.stubFor(get(urlPathEqualTo("/api/v2/search")).willReturn(okJson("{\"products\": []}")));
+        FOOD_FACTS.stubFor(get(urlPathMatching("/images/.*")).willReturn(aResponse().withStatus(200).withBody(PNG)));
         stubCategory("sodas", """
                 {"products": [
                   {"code": "5449000000996", "product_name": "Coca-Cola", "brands": "Coca-Cola, Other",
-                   "quantity": "330 ml", "nutriscore_grade": "e", "image_front_url": "https://img.example/cola.jpg",
+                   "quantity": "330 ml", "nutriscore_grade": "e", "image_front_url": "IMG_HOST/images/cola.jpg",
                    "nutriments": {"energy-kcal_100g": 42, "proteins_100g": 0, "fat_100g": 0, "carbohydrates_100g": 10.6}},
                   {"code": "no-name", "product_name": " "}]}
-                """);
+                """.replace("IMG_HOST", FOOD_FACTS.baseUrl()));
         stubCategory("waters", """
                 {"products": [{"code": "3068320055008", "product_name": "Evian", "product_name_ru": "Эвиан",
                    "nutriscore_grade": "a", "nutriments": {"energy-kcal_100g": 0}}]}
@@ -117,7 +124,9 @@ class FoodFactsImportIT {
         MenuItem cola = drinks.stream().filter(item -> item.getName().equals("Coca-Cola")).findFirst().orElseThrow();
         assertThat(cola.getCategory()).isEqualTo("Газировка");
         assertThat(cola.getDescription()).isEqualTo("Coca-Cola, 330 ml");
-        assertThat(cola.getImageUrl()).isEqualTo("https://img.example/cola.jpg");
+        assertThat(cola.getImageUrl()).isEqualTo(FOOD_FACTS.baseUrl() + "/images/cola.jpg");
+        assertThat(cola.getImageKey()).isEqualTo("openfoodfacts/products/5449000000996");
+        assertThat(imageStorage.exists(cola.getImageKey())).isTrue();
         assertThat(cola.getNutrition().energyKcal()).isEqualByComparingTo("42.0");
         assertThat(cola.getNutrition().carbsGrams()).isEqualByComparingTo("10.6");
         assertThat(cola.getNutrition().nutriScore()).isEqualTo(NutriScore.E);

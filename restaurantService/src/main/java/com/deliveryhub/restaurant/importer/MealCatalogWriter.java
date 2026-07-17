@@ -30,7 +30,7 @@ public class MealCatalogWriter {
     }
 
     @Transactional
-    public void store(UUID jobId, MealDbMeal meal) {
+    public void store(UUID jobId, MealDbMeal meal, String imageKey) {
         String source = ImportSource.MEALDB.name();
         String area = TomskRestaurants.areaKey(meal.strArea());
 
@@ -38,6 +38,9 @@ public class MealCatalogWriter {
         Restaurant restaurant = known.orElseGet(() -> restaurantRepository.save(newRestaurant(source, area)));
         if (restaurant.getImageUrl() == null) {
             restaurant.describe(restaurant.getCuisine(), restaurant.getCity(), meal.strMealThumb());
+        }
+        if (restaurant.getImageKey() == null && imageKey != null) {
+            restaurant.storeImage(imageKey);
         }
 
         String name = shortened(meal.strMeal());
@@ -50,6 +53,9 @@ public class MealCatalogWriter {
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, description, price, category));
         item.changeDetails(name, description, price, category);
         item.changeImage(meal.strMealThumb());
+        if (imageKey != null) {
+            item.storeImage(imageKey);
+        }
         if (existing.isEmpty()) {
             item.linkToSource(source, meal.idMeal());
             menuItemRepository.save(item);

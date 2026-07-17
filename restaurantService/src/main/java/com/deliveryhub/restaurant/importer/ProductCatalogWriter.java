@@ -32,7 +32,7 @@ public class ProductCatalogWriter {
     }
 
     @Transactional
-    public void store(UUID jobId, ProductShelves.Group group, FoodFactsProduct product) {
+    public void store(UUID jobId, ProductShelves.Group group, FoodFactsProduct product, String imageKey) {
         String source = ImportSource.OPENFOODFACTS.name();
         ProductShelves.Shelf shelf = group.shelf();
 
@@ -47,6 +47,9 @@ public class ProductCatalogWriter {
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, null, price, group.menuCategory()));
         item.changeDetails(name, describe(product), price, group.menuCategory());
         item.changeImage(product.imageUrl());
+        if (imageKey != null) {
+            item.storeImage(imageKey);
+        }
         item.moveToSection(shelf.section());
         item.changeNutrition(ProductNutrition.of(product));
         if (existing.isEmpty()) {

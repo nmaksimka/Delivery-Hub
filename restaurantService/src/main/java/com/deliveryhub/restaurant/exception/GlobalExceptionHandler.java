@@ -3,6 +3,8 @@ package com.deliveryhub.restaurant.exception;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.deliveryhub.restaurant.importer.ImportAlreadyRunningException;
+import com.deliveryhub.restaurant.storage.ImageTooLargeException;
+import com.deliveryhub.restaurant.storage.UnsupportedImageException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -36,6 +38,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ImportAlreadyRunningException.class)
     public ProblemDetail handleConflict(ImportAlreadyRunningException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(UnsupportedImageException.class)
+    public ProblemDetail handleUnsupportedImage(UnsupportedImageException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ex.getMessage());
+    }
+
+    @ExceptionHandler(ImageTooLargeException.class)
+    public ProblemDetail handleImageTooLarge(ImageTooLargeException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONTENT_TOO_LARGE, ex.getMessage());
     }
 
     @Override

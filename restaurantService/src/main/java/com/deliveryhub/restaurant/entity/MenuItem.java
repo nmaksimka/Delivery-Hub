@@ -40,6 +40,9 @@ public class MenuItem {
     @Column(name = "image_url", length = 512)
     private String imageUrl;
 
+    @Column(name = "image_key")
+    private String imageKey;
+
     @Column(name = "external_source", length = 32)
     private String externalSource;
 
@@ -81,6 +84,10 @@ public class MenuItem {
 
     public void changeImage(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public void storeImage(String imageKey) {
+        this.imageKey = imageKey;
     }
 
     public void linkToSource(String externalSource, String externalId) {
@@ -130,6 +137,10 @@ public class MenuItem {
 
     public String getImageUrl() {
         return imageUrl;
+    }
+
+    public String getImageKey() {
+        return imageKey;
     }
 
     public String getExternalSource() {

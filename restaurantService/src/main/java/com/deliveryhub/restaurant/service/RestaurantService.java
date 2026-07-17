@@ -5,11 +5,13 @@ import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageIntake;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -17,10 +19,13 @@ public class RestaurantService {
 
     private final RestaurantRepository restaurantRepository;
     private final RestaurantMapper restaurantMapper;
+    private final ImageIntake imageIntake;
 
-    public RestaurantService(RestaurantRepository restaurantRepository, RestaurantMapper restaurantMapper) {
+    public RestaurantService(RestaurantRepository restaurantRepository, RestaurantMapper restaurantMapper,
+                             ImageIntake imageIntake) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantMapper = restaurantMapper;
+        this.imageIntake = imageIntake;
     }
 
     public List<RestaurantDto> getAllRestaurants(boolean activeOnly) {
@@ -48,6 +53,16 @@ public class RestaurantService {
         restaurant.changeContacts(request.name(), request.address(), request.phone());
         restaurant.changeWorkingHours(request.openTime(), request.closeTime());
         applyActivity(restaurant, request);
+        return restaurantMapper.toDto(restaurant);
+    }
+
+    @Transactional
+    public RestaurantDto replaceImage(Long id, byte[] content) {
+        Restaurant restaurant = findByIdOrThrow(id);
+        String key = "restaurants/" + id + "/" + UUID.randomUUID();
+        imageIntake.save(key, content);
+        imageIntake.discardAfterCommit(restaurant.getImageKey());
+        restaurant.storeImage(key);
         return restaurantMapper.toDto(restaurant);
     }
 
