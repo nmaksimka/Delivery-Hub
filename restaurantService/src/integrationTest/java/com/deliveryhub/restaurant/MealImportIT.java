@@ -4,6 +4,7 @@ import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageStorage;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterAll;
@@ -28,15 +29,19 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.lessThanOrExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresContainerConfig.class)
+@Import({PostgresContainerConfig.class, GarageContainerConfig.class})
 class MealImportIT {
+
+    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final WireMockServer MEAL_DB = new WireMockServer(options().dynamicPort());
@@ -53,6 +58,8 @@ class MealImportIT {
     private MenuItemRepository menuItemRepository;
     @Autowired
     private CacheManager cacheManager;
+    @Autowired
+    private ImageStorage imageStorage;
 
     @DynamicPropertySource
     static void mealDbIsWireMock(DynamicPropertyRegistry registry) {
@@ -85,6 +92,7 @@ class MealImportIT {
         stubMeal("102", "Lasagne", "Pasta", "Italian");
         stubMeal("201", "Mochi", "Dessert", "Japanese");
         MEAL_DB.stubFor(get("/lookup.php?i=202").willReturn(okJson("{\"meals\": null}")));
+        MEAL_DB.stubFor(get(urlPathMatching("/images/.*")).willReturn(aResponse().withStatus(200).withBody(PNG)));
     }
 
     @Test
@@ -104,7 +112,8 @@ class MealImportIT {
         assertThat(italian.getCuisine()).isEqualTo("Итальянская");
         assertThat(italian.getCity()).isEqualTo("Томск");
         assertThat(italian.getAddress()).startsWith("г. Томск");
-        assertThat(italian.getImageUrl()).isEqualTo("https://img.example/101.jpg");
+        assertThat(italian.getImageUrl()).isEqualTo(MEAL_DB.baseUrl() + "/images/101.jpg");
+        assertThat(italian.getImageKey()).isEqualTo("mealdb/meals/101");
         assertThat(italian.isActive()).isTrue();
 
         List<MenuItem> menu = menuItemRepository.findByRestaurantId(italian.getId());
@@ -113,13 +122,16 @@ class MealImportIT {
             assertThat(item.getCategory()).isEqualTo("Паста");
             assertThat(item.getPrice()).isBetween(new BigDecimal("470.00"), new BigDecimal("580.00"));
             assertThat(item.getDescription()).isEqualTo("Cook it. Serve hot.");
-            assertThat(item.getImageUrl()).startsWith("https://img.example/");
+            assertThat(item.getImageUrl()).startsWith(MEAL_DB.baseUrl() + "/images/");
+            assertThat(item.getImageKey()).startsWith("mealdb/meals/");
+            assertThat(imageStorage.exists(item.getImageKey())).isTrue();
             assertThat(item.isAvailable()).isTrue();
         });
         assertThat(restaurantRepository.findByExternalSourceAndExternalId("MEALDB", "Japanese")).isPresent();
 
         assertThat(mvc.get().uri("/api/restaurants/" + italian.getId() + "/menu")).hasStatusOk()
-                .bodyJson().extractingPath("$[0].imageUrl").asString().startsWith("https://img.example/");
+                .bodyJson().extractingPath("$[0].imageUrl").asString()
+                .contains("/images/mealdb/meals/").contains("X-Amz-Signature=");
     }
 
     @Test
@@ -137,6 +149,7 @@ class MealImportIT {
         assertThat(menuItemRepository.count()).isEqualTo(items);
         MEAL_DB.verify(1, getRequestedFor(urlEqualTo("/categories.php")));
         MEAL_DB.verify(1, getRequestedFor(urlEqualTo("/lookup.php?i=101")));
+        MEAL_DB.verify(lessThanOrExactly(1), getRequestedFor(urlEqualTo("/images/101.jpg")));
     }
 
     @Test
@@ -173,8 +186,8 @@ class MealImportIT {
     private static void stubMeal(String id, String name, String category, String area) {
         MEAL_DB.stubFor(get("/lookup.php?i=" + id).willReturn(okJson("""
                 {"meals": [{"idMeal": "%s", "strMeal": "%s", "strCategory": "%s", "strArea": "%s",
-                  "strInstructions": "Cook it.\\r\\nServe hot.", "strMealThumb": "https://img.example/%s.jpg"}]}
-                """.formatted(id, name, category, area, id))));
+                  "strInstructions": "Cook it.\\r\\nServe hot.", "strMealThumb": "%s/images/%s.jpg"}]}
+                """.formatted(id, name, category, area, MEAL_DB.baseUrl(), id))));
     }
 
     private static String bodyOf(MvcTestResult result) {
