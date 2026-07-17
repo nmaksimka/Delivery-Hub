@@ -25,15 +25,18 @@ public class MenuItemService {
     private final RestaurantRepository restaurantRepository;
     private final MenuItemMapper menuItemMapper;
     private final ImageIntake imageIntake;
+    private final CatalogCache catalogCache;
 
     public MenuItemService(MenuItemRepository menuItemRepository,
                            RestaurantRepository restaurantRepository,
                            MenuItemMapper menuItemMapper,
-                           ImageIntake imageIntake) {
+                           ImageIntake imageIntake,
+                           CatalogCache catalogCache) {
         this.menuItemRepository = menuItemRepository;
         this.restaurantRepository = restaurantRepository;
         this.menuItemMapper = menuItemMapper;
         this.imageIntake = imageIntake;
+        this.catalogCache = catalogCache;
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
@@ -41,17 +44,7 @@ public class MenuItemService {
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly, MenuSection section) {
-        List<MenuItem> menuItems;
-        if (section == null) {
-            menuItems = availableOnly
-                    ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
-                    : menuItemRepository.findByRestaurantId(restaurantId);
-        } else {
-            menuItems = availableOnly
-                    ? menuItemRepository.findByRestaurantIdAndSectionAndAvailableTrue(restaurantId, section)
-                    : menuItemRepository.findByRestaurantIdAndSection(restaurantId, section);
-        }
-        return menuItems.stream().map(menuItemMapper::toDto).toList();
+        return catalogCache.menu(restaurantId, availableOnly, section).stream().map(menuItemMapper::fromView).toList();
     }
 
     public List<MenuItemDto> getMenuItemsByIds(Long restaurantId, Collection<Long> menuItemIds) {
@@ -73,7 +66,9 @@ public class MenuItemService {
         MenuItem menuItem = restaurant.addMenuItem(
                 request.name(), request.description(), request.price(), request.category());
         applyAvailability(menuItem, request);
-        return menuItemMapper.toDto(menuItemRepository.save(menuItem));
+        MenuItemDto created = menuItemMapper.toDto(menuItemRepository.save(menuItem));
+        catalogCache.evictMenus();
+        return created;
     }
 
     @Transactional
@@ -83,12 +78,14 @@ public class MenuItemService {
         imageIntake.save(key, content);
         imageIntake.discardAfterCommit(menuItem.getImageKey());
         menuItem.storeImage(key);
+        catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
 
     @Transactional
     public void removeMenuItem(Long restaurantId, Long menuItemId) {
         menuItemRepository.delete(findInRestaurantOrThrow(restaurantId, menuItemId));
+        catalogCache.evictMenus();
     }
 
     @Transactional
@@ -96,6 +93,7 @@ public class MenuItemService {
         MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
         menuItem.changeDetails(request.name(), request.description(), request.price(), request.category());
         applyAvailability(menuItem, request);
+        catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
 

@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.importer;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsClient;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsProduct;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsProperties;
+import com.deliveryhub.restaurant.service.CatalogCache;
 import com.deliveryhub.restaurant.storage.ImageMirror;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,14 +23,17 @@ public class FoodFactsImport implements CatalogImport {
     private final ImportProgress progress;
     private final FoodFactsProperties properties;
     private final ImageMirror imageMirror;
+    private final CatalogCache catalogCache;
 
     public FoodFactsImport(FoodFactsClient foodFactsClient, ProductCatalogWriter writer, ImportProgress progress,
-                           FoodFactsProperties properties, ImageMirror imageMirror) {
+                           FoodFactsProperties properties, ImageMirror imageMirror,
+                           CatalogCache catalogCache) {
         this.foodFactsClient = foodFactsClient;
         this.writer = writer;
         this.progress = progress;
         this.properties = properties;
         this.imageMirror = imageMirror;
+        this.catalogCache = catalogCache;
     }
 
     @Override
@@ -69,6 +73,8 @@ public class FoodFactsImport implements CatalogImport {
         } catch (RuntimeException e) {
             log.error("Import job {} failed", jobId, e);
             progress.failed(jobId, e.getMessage());
+        } finally {
+            catalogCache.evictAll();
         }
     }
 

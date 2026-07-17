@@ -20,23 +20,22 @@ public class RestaurantService {
     private final RestaurantRepository restaurantRepository;
     private final RestaurantMapper restaurantMapper;
     private final ImageIntake imageIntake;
+    private final CatalogCache catalogCache;
 
     public RestaurantService(RestaurantRepository restaurantRepository, RestaurantMapper restaurantMapper,
-                             ImageIntake imageIntake) {
+                             ImageIntake imageIntake, CatalogCache catalogCache) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantMapper = restaurantMapper;
         this.imageIntake = imageIntake;
+        this.catalogCache = catalogCache;
     }
 
     public List<RestaurantDto> getAllRestaurants(boolean activeOnly) {
-        List<Restaurant> restaurants = activeOnly
-                ? restaurantRepository.findByActiveTrue()
-                : restaurantRepository.findAll();
-        return restaurants.stream().map(restaurantMapper::toDto).toList();
+        return catalogCache.restaurants(activeOnly).stream().map(restaurantMapper::fromView).toList();
     }
 
     public RestaurantDto getRestaurantById(Long id) {
-        return restaurantMapper.toDto(findByIdOrThrow(id));
+        return restaurantMapper.fromView(catalogCache.restaurant(id));
     }
 
     @Transactional
@@ -44,7 +43,9 @@ public class RestaurantService {
         Restaurant restaurant = new Restaurant(request.name(), request.address(), request.phone());
         restaurant.changeWorkingHours(request.openTime(), request.closeTime());
         applyActivity(restaurant, request);
-        return restaurantMapper.toDto(restaurantRepository.save(restaurant));
+        RestaurantDto created = restaurantMapper.toDto(restaurantRepository.save(restaurant));
+        catalogCache.evictRestaurants();
+        return created;
     }
 
     @Transactional
@@ -53,6 +54,7 @@ public class RestaurantService {
         restaurant.changeContacts(request.name(), request.address(), request.phone());
         restaurant.changeWorkingHours(request.openTime(), request.closeTime());
         applyActivity(restaurant, request);
+        catalogCache.evictRestaurants();
         return restaurantMapper.toDto(restaurant);
     }
 
@@ -63,12 +65,14 @@ public class RestaurantService {
         imageIntake.save(key, content);
         imageIntake.discardAfterCommit(restaurant.getImageKey());
         restaurant.storeImage(key);
+        catalogCache.evictRestaurants();
         return restaurantMapper.toDto(restaurant);
     }
 
     @Transactional
     public void removeRestaurant(Long id) {
         restaurantRepository.delete(findByIdOrThrow(id));
+        catalogCache.evictAll();
     }
 
     private void applyActivity(Restaurant restaurant, RestaurantRequest request) {

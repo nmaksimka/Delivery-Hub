@@ -31,6 +31,8 @@ spring:
       port: ${REDIS_PORT:6379}
   cache:
     type: redis
+    redis:
+      enable-statistics: true
   servlet:
     multipart:
       max-file-size: 6MB
@@ -48,6 +50,8 @@ app:
     max-image-size: 5MB
     download-connect-timeout: 2s
     download-read-timeout: 10s
+  catalog-cache:
+    ttl: 5m
   mealdb:
     base-url: ${MEALDB_BASE_URL:https://www.themealdb.com/api/json/v1/1}
     connect-timeout: 2s

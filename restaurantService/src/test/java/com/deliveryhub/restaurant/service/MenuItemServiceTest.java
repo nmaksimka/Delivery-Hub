@@ -2,6 +2,7 @@ package com.deliveryhub.restaurant.service;
 
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
+import com.deliveryhub.restaurant.dto.MenuItemView;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.entity.Restaurant;
@@ -45,6 +46,8 @@ class MenuItemServiceTest {
     private MenuItemMapper menuItemMapper;
     @Mock
     private ImageIntake imageIntake;
+    @Mock
+    private CatalogCache catalogCache;
 
     @InjectMocks
     private MenuItemService menuItemService;
@@ -82,13 +85,24 @@ class MenuItemServiceTest {
     }
 
     @Test
-    @DisplayName("по умолчанию отдаёт только доступные позиции меню")
-    void returnsOnlyAvailableByDefault() {
-        when(menuItemRepository.findByRestaurantIdAndAvailableTrue(RESTAURANT_ID)).thenReturn(List.of(menuItem()));
-        when(menuItemMapper.toDto(any())).thenReturn(dto());
+    @DisplayName("меню читается из кэша каталога без фильтра по разделу")
+    void readsMenuFromCatalogCache() {
+        MenuItemView view = view();
+        when(catalogCache.menu(RESTAURANT_ID, true, null)).thenReturn(List.of(view));
+        when(menuItemMapper.fromView(view)).thenReturn(dto());
 
-        assertThat(menuItemService.getMenuItemsByRestaurant(RESTAURANT_ID, true)).hasSize(1);
+        assertThat(menuItemService.getMenuItemsByRestaurant(RESTAURANT_ID, true)).containsExactly(dto());
         verify(menuItemRepository, never()).findByRestaurantId(RESTAURANT_ID);
+    }
+
+    @Test
+    @DisplayName("меню передаёт в кэш раздел и флаг доступности")
+    void passesSectionAndAvailabilityToCache() {
+        MenuItemView view = view();
+        when(catalogCache.menu(RESTAURANT_ID, false, MenuSection.DRINK)).thenReturn(List.of(view));
+        when(menuItemMapper.fromView(view)).thenReturn(dto());
+
+        assertThat(menuItemService.getMenuItemsByRestaurant(RESTAURANT_ID, false, MenuSection.DRINK)).hasSize(1);
     }
 
     @Test
@@ -105,6 +119,7 @@ class MenuItemServiceTest {
             assertThat(item.getRestaurant()).isSameAs(restaurant);
             assertThat(item.isAvailable()).isTrue();
         });
+        verify(catalogCache).evictMenus();
     }
 
     @Test
@@ -117,6 +132,20 @@ class MenuItemServiceTest {
         menuItemService.updateMenuItem(RESTAURANT_ID, MENU_ITEM_ID, request(false));
 
         assertThat(item.isAvailable()).isFalse();
+        verify(catalogCache).evictMenus();
+    }
+
+    @Test
+    @DisplayName("удаление блюда сбрасывает кэш меню")
+    void removalEvictsMenus() {
+        MenuItem item = menuItem();
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID))
+                .thenReturn(Optional.of(item));
+
+        menuItemService.removeMenuItem(RESTAURANT_ID, MENU_ITEM_ID);
+
+        verify(menuItemRepository).delete(item);
+        verify(catalogCache).evictMenus();
     }
 
     @Test
@@ -144,6 +173,7 @@ class MenuItemServiceTest {
         var order = inOrder(imageIntake);
         order.verify(imageIntake).save(eq(item.getImageKey()), eq(content));
         order.verify(imageIntake).discardAfterCommit("menu/1/10/old");
+        verify(catalogCache).evictMenus();
     }
 
     @Test
@@ -154,6 +184,7 @@ class MenuItemServiceTest {
         assertThatThrownBy(() -> menuItemService.replaceImage(999L, MENU_ITEM_ID, new byte[]{1}))
                 .isInstanceOf(EntityNotFoundException.class);
         verify(imageIntake, never()).save(any(), any());
+        verify(catalogCache, never()).evictMenus();
     }
 
     private static MenuItem menuItem() {
@@ -163,6 +194,11 @@ class MenuItemServiceTest {
 
     private static MenuItemRequest request(boolean available) {
         return new MenuItemRequest("Pizza", null, new BigDecimal("12.50"), "pizza", available);
+    }
+
+    private static MenuItemView view() {
+        return new MenuItemView(MENU_ITEM_ID, "Pizza", null, new BigDecimal("12.50"), "pizza", true, null,
+                "menu/1/10/key", MenuSection.DISH, null, RESTAURANT_ID);
     }
 
     private static MenuItemDto dto() {
