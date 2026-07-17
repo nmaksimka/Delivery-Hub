@@ -31,8 +31,23 @@ spring:
       port: ${REDIS_PORT:6379}
   cache:
     type: redis
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 7MB
 
 app:
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:3900}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:3900}
+    region: garage
+    bucket: ${STORAGE_BUCKET:images}
+    access-key: ${STORAGE_ACCESS_KEY:GK0123456789abcdef01234567}
+    secret-key: ${STORAGE_SECRET_KEY:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    presign-ttl: 10m
+    max-image-size: 5MB
+    download-connect-timeout: 2s
+    download-read-timeout: 10s
   mealdb:
     base-url: ${MEALDB_BASE_URL:https://www.themealdb.com/api/json/v1/1}
     connect-timeout: 2s
