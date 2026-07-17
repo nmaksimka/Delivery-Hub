@@ -1,5 +1,7 @@
 package com.deliveryhub.restaurant.mapper;
 
+import com.deliveryhub.restaurant.dto.MenuItemView;
+import com.deliveryhub.restaurant.dto.RestaurantView;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.storage.ImageStorage;
@@ -23,6 +25,16 @@ public class ImageLinks {
     @Named("restaurantImage")
     public String of(Restaurant restaurant) {
         return resolve(restaurant.getImageKey(), restaurant.getImageUrl());
+    }
+
+    @Named("menuItemViewImage")
+    public String of(MenuItemView view) {
+        return resolve(view.imageKey(), view.externalImageUrl());
+    }
+
+    @Named("restaurantViewImage")
+    public String of(RestaurantView view) {
+        return resolve(view.imageKey(), view.externalImageUrl());
     }
 
     private String resolve(String imageKey, String externalUrl) {

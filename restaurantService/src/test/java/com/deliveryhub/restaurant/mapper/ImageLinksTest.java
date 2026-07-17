@@ -1,5 +1,7 @@
 package com.deliveryhub.restaurant.mapper;
 
+import com.deliveryhub.restaurant.dto.MenuItemView;
+import com.deliveryhub.restaurant.dto.RestaurantView;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.storage.InMemoryImageStorage;
@@ -50,6 +52,30 @@ class ImageLinksTest {
         restaurant.describe("Italian", "Tomsk", "https://external.example/r.jpg");
 
         assertThat(links.of(restaurant)).isEqualTo("https://external.example/r.jpg");
+    }
+
+    @Test
+    void cachedRestaurantViewGetsFreshSignedUrlFromKey() {
+        RestaurantView view = new RestaurantView(1L, "Pizzeria", null, null, null, null,
+                "https://external.example/r.jpg", "restaurants/1/abc", null, null, true);
+
+        assertThat(links.of(view)).isEqualTo("http://storage.test/images/restaurants/1/abc?signed");
+    }
+
+    @Test
+    void cachedRestaurantViewWithoutKeyKeepsExternalUrl() {
+        RestaurantView view = new RestaurantView(1L, "Pizzeria", null, null, null, null,
+                "https://external.example/r.jpg", null, null, null, true);
+
+        assertThat(links.of(view)).isEqualTo("https://external.example/r.jpg");
+    }
+
+    @Test
+    void cachedMenuItemViewGetsSignedUrlFromKey() {
+        MenuItemView view = new MenuItemView(2L, "Pizza", null, new BigDecimal("10.00"), "pizza", true,
+                null, "menu/1/2/abc", null, null, 1L);
+
+        assertThat(links.of(view)).isEqualTo("http://storage.test/images/menu/1/2/abc?signed");
     }
 
     private static MenuItem menuItem() {
