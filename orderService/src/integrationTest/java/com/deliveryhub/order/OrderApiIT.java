@@ -4,13 +4,12 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
-import com.deliveryhub.order.client.RestaurantServiceClient;
+import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.jayway.jsonpath.JsonPath;
-import feign.FeignException;
-import feign.Request;
-import feign.RequestTemplate;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,15 +51,14 @@ class OrderApiIT {
     @Autowired
     private KafkaContainer kafka;
     @MockitoBean
-    private RestaurantServiceClient restaurantServiceClient;
+    private RestaurantCatalog restaurantCatalog;
 
     @BeforeEach
     void stubRestaurantService() {
-        when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID))
-                .thenReturn(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(List.of(
-                new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true),
-                new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true)));
+        when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenReturn(new MenuQuote(
+                new RestaurantDto(RESTAURANT_ID, "Pizzeria", true),
+                Map.of(10L, new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true),
+                        11L, new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true))));
     }
 
     @Test
@@ -92,7 +90,8 @@ class OrderApiIT {
 
     @Test
     void returnsNotFoundWhenRestaurantDoesNotExist() {
-        when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenThrow(notFound());
+        when(restaurantCatalog.quote(eq(RESTAURANT_ID), any()))
+                .thenThrow(new EntityNotFoundException("Restaurant with ID: 1 was not found"));
 
         assertThat(createOrder(42L)).hasStatus(404);
     }
@@ -196,12 +195,6 @@ class OrderApiIT {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\": \"" + status + "\"}")
                 .exchange();
-    }
-
-    private static FeignException.NotFound notFound() {
-        Request request = Request.create(Request.HttpMethod.GET, "/api/restaurants/1",
-                Map.of(), null, new RequestTemplate());
-        return new FeignException.NotFound("not found", request, null, Map.of());
     }
 
     private static String bodyOf(MvcTestResult result) {
