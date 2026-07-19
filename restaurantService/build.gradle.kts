@@ -4,6 +4,8 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":apiContracts"))
+    implementation(libs.spring.grpc.server.starter)
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.validation)
@@ -26,4 +28,5 @@ dependencies {
     annotationProcessor(libs.mapstruct.processor)
 
     testImplementation(libs.wiremock)
+    testImplementation(libs.grpc.inprocess)
 }
