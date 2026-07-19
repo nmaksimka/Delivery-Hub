@@ -217,6 +217,8 @@ services:
       context: .
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
+    expose:
+      - "9331"
     environment:
       <<: [*platform-credentials, *json-logs, *storage-credentials]
       SPRING_PROFILES_ACTIVE: docker
