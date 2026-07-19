@@ -3,7 +3,6 @@ package com.deliveryhub.order.exception;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import feign.FeignException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -73,12 +72,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
                 .body(problem);
-    }
-
-    @ExceptionHandler(FeignException.class)
-    public ProblemDetail handleDownstream(FeignException ex) {
-        log.error("Downstream call failed: {}", ex.getMessage());
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, "Restaurant service is unavailable");
     }
 
     @ExceptionHandler(Exception.class)
