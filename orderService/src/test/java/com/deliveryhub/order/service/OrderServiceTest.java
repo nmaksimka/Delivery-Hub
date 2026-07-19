@@ -6,8 +6,8 @@ import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
-import com.deliveryhub.order.client.RestaurantServiceClient;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -23,11 +23,6 @@ import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
-import feign.Request;
-import feign.RequestTemplate;
-import feign.FeignException;
-import io.github.resilience4j.retry.RetryConfig;
-import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,13 +44,13 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,7 +76,7 @@ class OrderServiceTest {
     @Mock
     private OrderMapper orderMapper;
     @Mock
-    private RestaurantServiceClient restaurantServiceClient;
+    private RestaurantCatalog restaurantCatalog;
     @Mock
     private Outbox outbox;
     @Mock
@@ -103,7 +98,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
-                new RestaurantCatalog(restaurantServiceClient, RetryRegistry.of(RetryConfig.ofDefaults())), outbox,
+                restaurantCatalog, outbox,
                 processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
@@ -188,8 +183,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("не считает заказ, который не удалось создать")
         void doesNotCountRejectedOrder() {
-            RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
-            when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
+            givenRestaurant(false);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(OrderRejectedException.class);
@@ -211,7 +205,7 @@ class OrderServiceTest {
             assertThat(orderCaptor.getValue().getOrderItems()).singleElement()
                     .satisfies(item -> assertThat(item.getQuantity()).isEqualTo(5));
             assertThat(orderCaptor.getValue().getTotalAmount()).isEqualByComparingTo("62.50");
-            verify(restaurantServiceClient).getMenuItems(RESTAURANT_ID, Set.of(10L));
+            verify(restaurantCatalog).quote(RESTAURANT_ID, Set.of(10L));
         }
 
         @Test
@@ -237,9 +231,8 @@ class OrderServiceTest {
 
             orderService.createOrder(request, USER_ID);
 
-            InOrder order = inOrder(restaurantServiceClient, transactionManager, orderRepository);
-            order.verify(restaurantServiceClient).getRestaurantById(RESTAURANT_ID);
-            order.verify(restaurantServiceClient).getMenuItems(eq(RESTAURANT_ID), any());
+            InOrder order = inOrder(restaurantCatalog, transactionManager, orderRepository);
+            order.verify(restaurantCatalog).quote(eq(RESTAURANT_ID), any());
             order.verify(transactionManager).getTransaction(any());
             order.verify(orderRepository).save(any(Order.class));
             order.verify(transactionManager).commit(any());
@@ -263,7 +256,8 @@ class OrderServiceTest {
         @Test
         @DisplayName("бросает EntityNotFoundException, если ресторана нет")
         void failsWhenRestaurantMissing() {
-            when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenThrow(notFound());
+            when(restaurantCatalog.quote(eq(RESTAURANT_ID), any()))
+                    .thenThrow(new EntityNotFoundException("Restaurant with ID: 1 was not found"));
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(EntityNotFoundException.class)
@@ -276,8 +270,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("отклоняет заказ, если ресторан неактивен")
         void failsWhenRestaurantInactive() {
-            RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", false);
-            when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
+            givenRestaurant(false);
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(OrderRejectedException.class)
@@ -303,7 +296,6 @@ class OrderServiceTest {
         @DisplayName("бросает EntityNotFoundException, если блюда нет в этом ресторане")
         void failsWhenMenuItemMissing() {
             givenActiveRestaurant();
-            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(List.of());
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(EntityNotFoundException.class)
@@ -495,14 +487,16 @@ class OrderServiceTest {
 
 
     private void givenActiveRestaurant() {
-        RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", true);
-        when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenReturn(restaurant);
+        givenRestaurant(true);
+    }
+
+    private void givenRestaurant(boolean active) {
+        RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", active);
+        when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenAnswer(invocation -> new MenuQuote(restaurant,
+                menu.stream().collect(Collectors.toMap(MenuItemDto::id, Function.identity()))));
     }
 
     private void givenMenuItem(long id, String name, String price, boolean available) {
-        if (menu.isEmpty()) {
-            when(restaurantServiceClient.getMenuItems(eq(RESTAURANT_ID), any())).thenReturn(menu);
-        }
         menu.add(new MenuItemDto(id, name, new BigDecimal(price), available));
     }
 
@@ -516,12 +510,6 @@ class OrderServiceTest {
     private static OrderDto dto() {
         return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, BigDecimal.TEN,
                 Instant.EPOCH, Instant.EPOCH, List.of());
-    }
-
-    private static FeignException.NotFound notFound() {
-        Request request = Request.create(Request.HttpMethod.GET, "/api/restaurants/1",
-                Map.of(), null, new RequestTemplate());
-        return new FeignException.NotFound("not found", request, null, Collections.emptyMap());
     }
 
     private static Order savedWithId(InvocationOnMock invocation) {
