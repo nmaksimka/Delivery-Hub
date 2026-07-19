@@ -1,6 +1,9 @@
 spring:
   cache:
     type: simple
+  grpc:
+    server:
+      port: 0
 
 management:
   health:

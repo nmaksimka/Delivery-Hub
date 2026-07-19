@@ -4,7 +4,8 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
-import com.deliveryhub.order.client.RestaurantServiceClient;
+import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -29,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -57,13 +59,13 @@ class OrderEventsIT {
     @Autowired
     private MeterRegistry meterRegistry;
     @MockitoBean
-    private RestaurantServiceClient restaurantServiceClient;
+    private RestaurantCatalog restaurantCatalog;
 
     @BeforeEach
     void stubRestaurantService() {
-        when(restaurantServiceClient.getRestaurantById(1L)).thenReturn(new RestaurantDto(1L, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItems(eq(1L), any()))
-                .thenReturn(List.of(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true)));
+        when(restaurantCatalog.quote(eq(1L), any())).thenReturn(new MenuQuote(
+                new RestaurantDto(1L, "Pizzeria", true),
+                Map.of(10L, new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true))));
     }
 
     @Test

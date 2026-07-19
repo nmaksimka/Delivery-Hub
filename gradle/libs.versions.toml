@@ -10,6 +10,10 @@ avro = "1.12.1"
 avro-plugin = "1.9.1"
 confluent = "8.1.4"
 aws-sdk = "2.46.19"
+spring-grpc = "1.0.3"
+grpc = "1.77.1"
+protobuf = "4.33.4"
+protobuf-plugin = "0.9.6"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -69,7 +73,21 @@ testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgr
 avro = { module = "org.apache.avro:avro", version.ref = "avro" }
 kafka-avro-serializer = { module = "io.confluent:kafka-avro-serializer", version.ref = "confluent" }
 
+spring-grpc-server-starter = { module = "org.springframework.grpc:spring-grpc-server-spring-boot-starter", version.ref = "spring-grpc" }
+spring-grpc-client-starter = { module = "org.springframework.grpc:spring-grpc-client-spring-boot-starter", version.ref = "spring-grpc" }
+spring-grpc-test = { module = "org.springframework.grpc:spring-grpc-test", version.ref = "spring-grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+grpc-netty = { module = "io.grpc:grpc-netty", version.ref = "grpc" }
+grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
+grpc-protoc-gen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
+tomcat-annotations = { module = "org.apache.tomcat:annotations-api", version = "6.0.53" }
+
 [bundles]
 
 [plugins]
 avro = { id = "com.github.davidmc24.gradle.plugin.avro", version.ref = "avro-plugin" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

@@ -13,22 +13,11 @@ spring:
     inetutils:
       ignored-interfaces:
         - .*
-    discovery:
-      client:
-        simple:
-          instances:
-            restaurantService:
-              - uri: http://localhost:3331
-    openfeign:
-      circuitbreaker:
-        enabled: true
-        group:
-          enabled: true
-      client:
-        config:
-          restaurantService:
-            connect-timeout: 1000
-            read-timeout: 2000
+  grpc:
+    client:
+      channels:
+        restaurant:
+          address: ${RESTAURANT_GRPC_ADDRESS:static://localhost:9331}
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5332}/${DB_NAME:order_db}
     username: ${DB_USER:order_user}
@@ -75,12 +64,7 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 2
         automatic-transition-from-open-to-half-open-enabled: true
         ignore-exceptions:
-          - feign.FeignException$FeignClientException
-  timelimiter:
-    configs:
-      restaurantService:
-        timeout-duration: 3s
-        cancel-running-future: true
+          - jakarta.persistence.EntityNotFoundException
   retry:
     instances:
       restaurantService:
@@ -89,11 +73,11 @@ resilience4j:
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
         retry-exceptions:
-          - com.deliveryhub.order.client.RestaurantServiceUnavailableException
-        ignore-exceptions:
-          - com.deliveryhub.order.client.RestaurantCircuitOpenException
+          - com.deliveryhub.order.client.RestaurantUnreachableException
 
 app:
+  restaurant-grpc:
+    deadline: 2s
   outbox:
     poll-interval: 1s
     batch-size: 50
