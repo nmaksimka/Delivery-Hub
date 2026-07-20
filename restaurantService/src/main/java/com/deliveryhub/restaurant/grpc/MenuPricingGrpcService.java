@@ -75,7 +75,8 @@ public class MenuPricingGrpcService extends MenuPricingGrpc.MenuPricingImplBase 
                 .setRestaurantClosed(!restaurant.isOpenAt(LocalTime.now(clock.withZone(workingHours.zone()))));
         if (restaurant.getOpenTime() != null && restaurant.getCloseTime() != null) {
             response.setOpensAt(HOURS.format(restaurant.getOpenTime()))
-                    .setClosesAt(HOURS.format(restaurant.getCloseTime()));
+                    .setClosesAt(HOURS.format(restaurant.getCloseTime()))
+                    .setTimeZone(workingHours.zone().getId());
         }
         menuItemIds.forEach(id -> response.addItems(quoted(id, found.get(id), restaurant.getId())));
 

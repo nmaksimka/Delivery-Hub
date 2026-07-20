@@ -153,6 +153,7 @@ class MenuPricingGrpcServiceTest {
         assertThat(response.getRestaurantActive()).isTrue();
         assertThat(response.getOpensAt()).isEqualTo("04:00");
         assertThat(response.getClosesAt()).isEqualTo("06:00");
+        assertThat(response.getTimeZone()).isEqualTo("Asia/Tomsk");
     }
 
     @Test
@@ -164,6 +165,7 @@ class MenuPricingGrpcServiceTest {
 
         assertThat(response.getRestaurantClosed()).isFalse();
         assertThat(response.getOpensAt()).isEmpty();
+        assertThat(response.getTimeZone()).isEmpty();
     }
 
     @Test

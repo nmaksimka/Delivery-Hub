@@ -23,6 +23,7 @@ message QuoteResponse {
   bool restaurant_closed = 5;
   string opens_at = 6;
   string closes_at = 7;
+  string time_zone = 8;
 }
 
 message QuotedItem {
