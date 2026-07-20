@@ -53,6 +53,32 @@ public class MenuItemService {
                 .toList();
     }
 
+    public List<MenuItemDto> getWholeMenu(Long restaurantId) {
+        return menuItemRepository.findByRestaurantId(restaurantId).stream().map(menuItemMapper::toDto).toList();
+    }
+
+    public List<MenuItemDto> getStopList(Long restaurantId) {
+        return menuItemRepository.findByRestaurantIdAndAvailableFalse(restaurantId).stream()
+                .map(menuItemMapper::toDto)
+                .toList();
+    }
+
+    @Transactional
+    public MenuItemDto withdrawFromSale(Long restaurantId, Long menuItemId) {
+        MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
+        menuItem.withdrawFromSale();
+        catalogCache.evictMenus();
+        return menuItemMapper.toDto(menuItem);
+    }
+
+    @Transactional
+    public MenuItemDto putOnSale(Long restaurantId, Long menuItemId) {
+        MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
+        menuItem.putOnSale();
+        catalogCache.evictMenus();
+        return menuItemMapper.toDto(menuItem);
+    }
+
     public MenuItemDto getMenuItemById(Long restaurantId, Long menuItemId) {
         return menuItemMapper.toDto(findInRestaurantOrThrow(restaurantId, menuItemId));
     }
