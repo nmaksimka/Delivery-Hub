@@ -61,6 +61,11 @@ public class User {
         return new User(normalizeEmail(email), passwordHash, name, phone, Role.USER, registeredAt);
     }
 
+    public void changeRole(Role role, Instant changedAt) {
+        this.role = Objects.requireNonNull(role, "role");
+        this.updatedAt = Objects.requireNonNull(changedAt, "changedAt");
+    }
+
     public static String normalizeEmail(String email) {
         return Objects.requireNonNull(email, "email").strip().toLowerCase(Locale.ROOT);
     }
