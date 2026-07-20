@@ -56,6 +56,9 @@ public class Restaurant {
     @Column(name = "active", nullable = false)
     private boolean active;
 
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @OneToMany(mappedBy = "restaurant", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItem> menuItems = new ArrayList<>();
 
@@ -97,6 +100,31 @@ public class Restaurant {
     public void changeWorkingHours(LocalTime openTime, LocalTime closeTime) {
         this.openTime = openTime;
         this.closeTime = closeTime;
+    }
+
+    public boolean isOpenAt(LocalTime time) {
+        if (openTime == null || closeTime == null || openTime.equals(closeTime)) {
+            return true;
+        }
+        if (openTime.isBefore(closeTime)) {
+            return !time.isBefore(openTime) && time.isBefore(closeTime);
+        }
+        return !time.isBefore(openTime) || time.isBefore(closeTime);
+    }
+
+    public void assignOwner(Long ownerId) {
+        if (ownerId == null || ownerId <= 0) {
+            throw new IllegalArgumentException("Owner id must be positive");
+        }
+        this.ownerId = ownerId;
+    }
+
+    public void removeOwner() {
+        ownerId = null;
+    }
+
+    public boolean isOwnedBy(Long userId) {
+        return ownerId != null && ownerId.equals(userId);
     }
 
     public void activate() {
@@ -159,6 +187,10 @@ public class Restaurant {
 
     public LocalTime getCloseTime() {
         return closeTime;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
     }
 
     public boolean isActive() {
