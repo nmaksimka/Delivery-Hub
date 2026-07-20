@@ -15,5 +15,7 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
 
     Optional<Restaurant> findByIdAndOwnerId(Long id, Long ownerId);
 
+    boolean existsByIdAndOwnerId(Long id, Long ownerId);
+
     Optional<Restaurant> findByExternalSourceAndExternalId(String externalSource, String externalId);
 }
