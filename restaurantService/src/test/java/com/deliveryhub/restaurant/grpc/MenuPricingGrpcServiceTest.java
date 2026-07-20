@@ -5,6 +5,7 @@ import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
 import com.deliveryhub.contracts.pricing.QuoteRequest;
 import com.deliveryhub.contracts.pricing.QuoteResponse;
 import com.deliveryhub.contracts.pricing.QuotedItem;
+import com.deliveryhub.restaurant.config.WorkingHoursProperties;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
@@ -24,6 +25,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,6 +44,7 @@ import static org.mockito.Mockito.when;
 class MenuPricingGrpcServiceTest {
 
     private static final long RESTAURANT_ID = 1L;
+    private static final Clock NOON_IN_TOMSK = Clock.fixed(Instant.parse("2026-07-27T05:00:00Z"), ZoneOffset.UTC);
 
     @Mock
     private RestaurantRepository restaurantRepository;
@@ -52,7 +59,8 @@ class MenuPricingGrpcServiceTest {
     void startServer() throws Exception {
         String name = UUID.randomUUID().toString();
         server = InProcessServerBuilder.forName(name).directExecutor()
-                .addService(new MenuPricingGrpcService(restaurantRepository, menuItemRepository))
+                .addService(new MenuPricingGrpcService(restaurantRepository, menuItemRepository,
+                        new WorkingHoursProperties(ZoneId.of("Asia/Tomsk")), NOON_IN_TOMSK))
                 .build().start();
         channel = InProcessChannelBuilder.forName(name).directExecutor().build();
         stub = MenuPricingGrpc.newBlockingStub(channel);
@@ -116,6 +124,46 @@ class MenuPricingGrpcServiceTest {
         when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
 
         assertThat(stub.quote(request(10L)).getRestaurantActive()).isFalse();
+    }
+
+    @Test
+    void reportsOpenRestaurantWithItsHours() {
+        Restaurant restaurant = restaurant(RESTAURANT_ID, true);
+        restaurant.changeWorkingHours(LocalTime.of(10, 0), LocalTime.of(22, 0));
+        when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant));
+        when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
+
+        QuoteResponse response = stub.quote(request(10L));
+
+        assertThat(response.getRestaurantClosed()).isFalse();
+        assertThat(response.getOpensAt()).isEqualTo("10:00");
+        assertThat(response.getClosesAt()).isEqualTo("22:00");
+    }
+
+    @Test
+    void reportsClosedRestaurantByTomskTimeNotByUtc() {
+        Restaurant restaurant = restaurant(RESTAURANT_ID, true);
+        restaurant.changeWorkingHours(LocalTime.of(4, 0), LocalTime.of(6, 0));
+        when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant));
+        when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
+
+        QuoteResponse response = stub.quote(request(10L));
+
+        assertThat(response.getRestaurantClosed()).isTrue();
+        assertThat(response.getRestaurantActive()).isTrue();
+        assertThat(response.getOpensAt()).isEqualTo("04:00");
+        assertThat(response.getClosesAt()).isEqualTo("06:00");
+    }
+
+    @Test
+    void restaurantWithoutHoursIsNeverClosed() {
+        when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant(RESTAURANT_ID, true)));
+        when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
+
+        QuoteResponse response = stub.quote(request(10L));
+
+        assertThat(response.getRestaurantClosed()).isFalse();
+        assertThat(response.getOpensAt()).isEmpty();
     }
 
     @Test
