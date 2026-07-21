@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.net.InetAddress;
 import java.net.URI;
 
 @Configuration
@@ -43,6 +44,11 @@ public class StorageConfig {
     @Bean
     public ImageStorage imageStorage(S3Client client, S3Presigner presigner, StorageProperties properties) {
         return new S3ImageStorage(client, presigner, properties);
+    }
+
+    @Bean
+    public ImageSources.HostResolver hostResolver() {
+        return InetAddress::getAllByName;
     }
 
     private static S3Configuration pathStyle() {

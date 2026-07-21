@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,6 +52,7 @@ class ImageIntakeTest {
 
     static StorageProperties properties(DataSize maxImageSize) {
         return new StorageProperties("http://localhost:1", "http://localhost:1", "garage", "images", "key", "secret",
-                Duration.ofMinutes(10), maxImageSize, Duration.ofSeconds(1), Duration.ofSeconds(2));
+                Duration.ofMinutes(10), maxImageSize, Duration.ofSeconds(1), Duration.ofSeconds(2),
+                new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
     }
 }
