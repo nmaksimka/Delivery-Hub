@@ -1,6 +1,10 @@
 package com.deliveryhub.restaurant.storage;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronizationUtils;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
@@ -15,6 +19,13 @@ class ImageIntakeTest {
 
     private final InMemoryImageStorage storage = new InMemoryImageStorage();
     private final ImageIntake intake = new ImageIntake(storage, properties(DataSize.ofBytes(16)));
+
+    @AfterEach
+    void clearTransaction() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     void storesValidImageWithDetectedContentType() {
@@ -48,6 +59,67 @@ class ImageIntakeTest {
         assertThatThrownBy(() -> intake.save("text", "hello world".getBytes()))
                 .isInstanceOf(UnsupportedImageException.class);
         assertThat(storage.exists("text")).isFalse();
+    }
+
+    @Test
+    void removesUploadedImageWhenTransactionRollsBack() {
+        TransactionSynchronizationManager.initSynchronization();
+        intake.save("fresh", PNG);
+
+        complete(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+        assertThat(storage.exists("fresh")).isFalse();
+    }
+
+    @Test
+    void keepsUploadedImageWhenTransactionCommits() {
+        TransactionSynchronizationManager.initSynchronization();
+        intake.save("fresh", PNG);
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+        complete(TransactionSynchronization.STATUS_COMMITTED);
+
+        assertThat(storage.exists("fresh")).isTrue();
+    }
+
+    @Test
+    void deletesReplacedImageOnlyAfterCommit() {
+        storage.put("old", PNG, "image/png");
+        TransactionSynchronizationManager.initSynchronization();
+        intake.discardAfterCommit("old");
+
+        assertThat(storage.exists("old")).isTrue();
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(storage.exists("old")).isFalse();
+    }
+
+    @Test
+    void failedDeleteAfterCommitDoesNotBreakFollowingHooks() {
+        ImageIntake failing = new ImageIntake(new InMemoryImageStorage() {
+            @Override
+            public void delete(String key) {
+                throw new IllegalStateException("storage is down");
+            }
+        }, properties(DataSize.ofBytes(16)));
+        boolean[] nextHookRan = {false};
+        TransactionSynchronizationManager.initSynchronization();
+        failing.discardAfterCommit("old");
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                nextHookRan[0] = true;
+            }
+        });
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(nextHookRan[0]).isTrue();
+    }
+
+    private static void complete(int status) {
+        TransactionSynchronizationUtils.invokeAfterCompletion(
+                TransactionSynchronizationManager.getSynchronizations(), status);
     }
 
     static StorageProperties properties(DataSize maxImageSize) {
