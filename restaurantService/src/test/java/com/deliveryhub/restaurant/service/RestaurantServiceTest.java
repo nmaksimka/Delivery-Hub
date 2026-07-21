@@ -188,6 +188,39 @@ class RestaurantServiceTest {
         verify(imageIntake, never()).save(any(), any());
     }
 
+    @Test
+    void workingHoursChangeEvictsRestaurants() {
+        Restaurant restaurant = restaurant();
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(restaurant));
+
+        restaurantService.changeWorkingHours(1L, LocalTime.of(9, 0), LocalTime.of(21, 0));
+
+        assertThat(restaurant.getOpenTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(restaurant.getCloseTime()).isEqualTo(LocalTime.of(21, 0));
+        verify(catalogCache).evictRestaurants();
+    }
+
+    @Test
+    void assignsAndRemovesOwner() {
+        Restaurant restaurant = restaurant();
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(restaurant));
+
+        assertThat(restaurantService.assignOwner(1L, 7L).ownerId()).isEqualTo(7L);
+        assertThat(restaurantService.getOwner(1L).ownerId()).isEqualTo(7L);
+
+        restaurantService.removeOwner(1L);
+
+        assertThat(restaurant.getOwnerId()).isNull();
+    }
+
+    @Test
+    void doesNotAssignOwnerToMissingRestaurant() {
+        when(restaurantRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> restaurantService.assignOwner(404L, 7L))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
     private static Restaurant restaurant() {
         return new Restaurant("Pizzeria", "Lenina 1", null);
     }

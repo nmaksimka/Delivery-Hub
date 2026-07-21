@@ -20,6 +20,10 @@ message QuoteResponse {
   string restaurant_name = 2;
   bool restaurant_active = 3;
   repeated QuotedItem items = 4;
+  bool restaurant_closed = 5;
+  string opens_at = 6;
+  string closes_at = 7;
+  string time_zone = 8;
 }
 
 message QuotedItem {

@@ -21,7 +21,8 @@ class GatewayRoutesTest {
         List<String> routeIds = routeLocator.getRoutes().map(Route::getId).collectList().block();
 
         assertThat(routeIds).containsExactlyInAnyOrder(
-                "auth-login", "restaurant-service", "catalog-import", "order-service", "delivery-service", "user-service",
+                "auth-login", "restaurant-service", "catalog-import", "restaurant-owners", "restaurant-cabinet",
+                "user-admin", "order-service", "delivery-service", "user-service",
                 "restaurant-docs", "order-docs", "delivery-docs", "user-docs");
     }
 
@@ -33,6 +34,19 @@ class GatewayRoutesTest {
         assertThat(routes).filteredOn(route -> route.getId().equals("order-service"))
                 .singleElement()
                 .satisfies(route -> assertThat(route.getUri().getHost()).isEqualTo("orderService"));
+    }
+
+    @Test
+    void cabinetAndOwnerAssignmentGoToRestaurantServiceAndUserRolesToUserService() {
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+
+        assertThat(routes).filteredOn(route -> List.of("restaurant-cabinet", "restaurant-owners")
+                        .contains(route.getId()))
+                .hasSize(2)
+                .allSatisfy(route -> assertThat(route.getUri().getHost()).isEqualTo("restaurantService"));
+        assertThat(routes).filteredOn(route -> route.getId().equals("user-admin"))
+                .singleElement()
+                .satisfies(route -> assertThat(route.getUri().getHost()).isEqualTo("userService"));
     }
 
     @Test

@@ -98,6 +98,30 @@ class RestaurantCatalogTest {
     }
 
     @Test
+    void readsClosedRestaurantWithItsHours() {
+        behaviour = answer -> reply(answer, QuoteResponse.newBuilder()
+                .setRestaurantId(1L).setRestaurantName("Pizzeria").setRestaurantActive(true)
+                .setRestaurantClosed(true).setOpensAt("10:00").setClosesAt("22:00").setTimeZone("Asia/Tomsk")
+                .build());
+
+        MenuQuote quote = catalog.quote(1L, List.of(10L));
+
+        assertThat(quote.restaurant().closed()).isTrue();
+        assertThat(quote.restaurant().workingHours()).isEqualTo("10:00-22:00 Asia/Tomsk");
+    }
+
+    @Test
+    void answerWithoutHoursMeansOpenRestaurant() {
+        behaviour = answer -> reply(answer,
+                QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantActive(true).build());
+
+        MenuQuote quote = catalog.quote(1L, List.of(10L));
+
+        assertThat(quote.restaurant().closed()).isFalse();
+        assertThat(quote.restaurant().workingHours()).isEmpty();
+    }
+
+    @Test
     void turnsNotFoundIntoMissingRestaurantWithoutRetry() {
         behaviour = answer -> answer.onError(Status.NOT_FOUND.asRuntimeException());
 

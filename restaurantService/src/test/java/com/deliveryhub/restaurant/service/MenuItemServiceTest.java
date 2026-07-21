@@ -187,6 +187,49 @@ class MenuItemServiceTest {
         verify(catalogCache, never()).evictMenus();
     }
 
+    @Test
+    void stopListTakesItemOffSaleAndEvictsMenus() {
+        MenuItem item = menuItem();
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID)).thenReturn(Optional.of(item));
+
+        menuItemService.withdrawFromSale(RESTAURANT_ID, MENU_ITEM_ID);
+
+        assertThat(item.isAvailable()).isFalse();
+        verify(catalogCache).evictMenus();
+    }
+
+    @Test
+    void itemReturnsFromStopListAndMenusAreEvicted() {
+        MenuItem item = menuItem();
+        item.withdrawFromSale();
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID)).thenReturn(Optional.of(item));
+
+        menuItemService.putOnSale(RESTAURANT_ID, MENU_ITEM_ID);
+
+        assertThat(item.isAvailable()).isTrue();
+        verify(catalogCache).evictMenus();
+    }
+
+    @Test
+    void stopListDoesNotReachItemOfAnotherRestaurant() {
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, 999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> menuItemService.withdrawFromSale(999L, MENU_ITEM_ID))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(catalogCache, never()).evictMenus();
+    }
+
+    @Test
+    void stopListIsReadFromDatabaseNotFromCache() {
+        MenuItem item = menuItem();
+        MenuItemDto dto = dto();
+        when(menuItemRepository.findByRestaurantIdAndAvailableFalse(RESTAURANT_ID)).thenReturn(List.of(item));
+        when(menuItemMapper.toDto(item)).thenReturn(dto);
+
+        assertThat(menuItemService.getStopList(RESTAURANT_ID)).containsExactly(dto);
+        verify(catalogCache, never()).menu(any(), eq(false), any());
+    }
+
     private static MenuItem menuItem() {
         return new Restaurant("Pizzeria", null, null)
                 .addMenuItem("Pizza", null, new BigDecimal("12.50"), "pizza");

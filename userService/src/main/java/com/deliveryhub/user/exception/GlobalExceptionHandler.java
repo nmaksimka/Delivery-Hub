@@ -27,6 +27,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ProblemDetail handleUserNotFound(UserNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(AdminOnlyException.class)
+    public ProblemDetail handleAdminOnly(AdminOnlyException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    @ExceptionHandler(OwnRoleChangeException.class)
+    public ProblemDetail handleOwnRoleChange(OwnRoleChangeException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleBadCredentials(AuthenticationException ex) {
         log.debug("Authentication failed: {}", ex.getMessage());

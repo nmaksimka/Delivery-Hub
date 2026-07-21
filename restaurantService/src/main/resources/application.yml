@@ -55,6 +55,8 @@ app:
     download-read-timeout: 10s
   catalog-cache:
     ttl: 5m
+  working-hours:
+    zone: Asia/Tomsk
   mealdb:
     base-url: ${MEALDB_BASE_URL:https://www.themealdb.com/api/json/v1/1}
     connect-timeout: 2s

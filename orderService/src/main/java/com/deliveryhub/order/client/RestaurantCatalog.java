@@ -77,9 +77,16 @@ public class RestaurantCatalog {
         return new RestaurantServiceUnavailableException("Restaurant service answered " + code, e);
     }
 
+    private static String workingHours(QuoteResponse response) {
+        if (response.getOpensAt().isEmpty() || response.getClosesAt().isEmpty()) {
+            return "";
+        }
+        return (response.getOpensAt() + "-" + response.getClosesAt() + " " + response.getTimeZone()).strip();
+    }
+
     private static MenuQuote toQuote(QuoteResponse response) {
         RestaurantDto restaurant = new RestaurantDto(response.getRestaurantId(), response.getRestaurantName(),
-                response.getRestaurantActive());
+                response.getRestaurantActive(), response.getRestaurantClosed(), workingHours(response));
         Map<Long, MenuItemDto> items = new HashMap<>();
         for (QuotedItem item : response.getItemsList()) {
             if (item.getStatus() == ItemStatus.ITEM_STATUS_AVAILABLE

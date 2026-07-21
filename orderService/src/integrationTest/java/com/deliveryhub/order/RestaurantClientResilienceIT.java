@@ -89,6 +89,18 @@ class RestaurantClientResilienceIT {
     }
 
     @Test
+    void rejectsOrderFromClosedRestaurantWithHoursInProblem() {
+        behaviour = answer -> reply(answer, pizzeria("12.50").toBuilder()
+                .setRestaurantClosed(true).setOpensAt("10:00").setClosesAt("22:00").setTimeZone("Asia/Tomsk").build());
+
+        MvcTestResult result = placeOrder();
+
+        assertThat(result).hasStatus(409).bodyJson().extractingPath("$.detail")
+                .isEqualTo("Restaurant 1 is closed now, working hours: 10:00-22:00 Asia/Tomsk");
+        assertThat(CALLS).hasValue(1);
+    }
+
+    @Test
     void repeatsCallAfterUnavailableUntilItSucceeds() {
         AtomicInteger attempt = new AtomicInteger();
         behaviour = answer -> {

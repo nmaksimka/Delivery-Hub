@@ -8,6 +8,7 @@ import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
+import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
@@ -104,6 +105,9 @@ public class OrderService {
         if (!quote.restaurant().active()) {
             throw new OrderRejectedException("Restaurant " + restaurantId + " is not active");
         }
+        if (quote.restaurant().closed()) {
+            throw new OrderRejectedException(closedMessage(quote.restaurant()));
+        }
 
         Order order = Order.place(userId, restaurantId, clock.instant());
         quantities.forEach((menuItemId, quantity) -> {
@@ -123,6 +127,13 @@ public class OrderService {
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
+    }
+
+    private static String closedMessage(RestaurantDto restaurant) {
+        String closed = "Restaurant " + restaurant.id() + " is closed now";
+        return restaurant.workingHours().isBlank()
+                ? closed
+                : closed + ", working hours: " + restaurant.workingHours();
     }
 
     private Order store(Order order) {
