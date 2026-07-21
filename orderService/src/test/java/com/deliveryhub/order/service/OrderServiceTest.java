@@ -280,6 +280,29 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("отклоняет заказ в закрытый ресторан и называет часы работы")
+        void failsWhenRestaurantClosed() {
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk"));
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(OrderRejectedException.class)
+                    .hasMessage("Restaurant 1 is closed now, working hours: 10:00-22:00 Asia/Tomsk");
+
+            verify(orderRepository, never()).save(any());
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("закрытый ресторан без расписания отклоняется без часов в сообщении")
+        void failsWhenRestaurantClosedWithoutHours() {
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, ""));
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+                    .isInstanceOf(OrderRejectedException.class)
+                    .hasMessage("Restaurant 1 is closed now");
+        }
+
+        @Test
         @DisplayName("отклоняет заказ, если блюдо недоступно")
         void failsWhenMenuItemUnavailable() {
             givenActiveRestaurant();
@@ -491,7 +514,10 @@ class OrderServiceTest {
     }
 
     private void givenRestaurant(boolean active) {
-        RestaurantDto restaurant = new RestaurantDto(RESTAURANT_ID, "Pizzeria", active);
+        givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", active));
+    }
+
+    private void givenRestaurant(RestaurantDto restaurant) {
         when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenAnswer(invocation -> new MenuQuote(restaurant,
                 menu.stream().collect(Collectors.toMap(MenuItemDto::id, Function.identity()))));
     }
