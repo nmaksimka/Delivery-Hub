@@ -37,6 +37,10 @@ public class ProductCatalogWriter {
         ProductShelves.Shelf shelf = group.shelf();
 
         Optional<Restaurant> known = restaurantRepository.findByExternalSourceAndExternalId(source, shelf.externalId());
+        if (known.isPresent() && known.get().hasOwner()) {
+            progress.change(jobId, ImportJob::recordSkipped);
+            return;
+        }
         Restaurant restaurant = known.orElseGet(() -> restaurantRepository.save(newRestaurant(source, shelf)));
 
         String name = shortened(product.displayName(), MAX_NAME_LENGTH);
@@ -47,7 +51,7 @@ public class ProductCatalogWriter {
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, null, price, group.menuCategory()));
         item.changeDetails(name, describe(product), price, group.menuCategory());
         item.changeImage(product.imageUrl());
-        if (imageKey != null) {
+        if (item.getImageKey() == null && imageKey != null) {
             item.storeImage(imageKey);
         }
         item.moveToSection(shelf.section());
