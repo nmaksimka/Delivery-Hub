@@ -39,6 +39,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
@@ -119,6 +120,25 @@ class GatewaySecurityIT {
     }
 
     @Test
+    void ownerReachesCabinetWithOwnIdentityAndCannotPretendToBeAnotherOwner() {
+        client.put().uri("/api/cabinet/restaurants/3/stop-list/9")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token(55L, "RESTAURANT_OWNER", "owner@example.com")))
+                .header("X-User-Id", "56")
+                .exchange()
+                .expectStatus().isOk();
+        client.get().uri("/api/cabinet/restaurants")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token(7L, "USER", "kate@example.com")))
+                .header("X-User-Role", "RESTAURANT_OWNER")
+                .exchange()
+                .expectStatus().isForbidden();
+
+        SERVICES.verify(putRequestedFor(urlEqualTo("/api/cabinet/restaurants/3/stop-list/9"))
+                .withHeader("X-User-Id", equalTo("55"))
+                .withHeader("X-User-Role", equalTo("RESTAURANT_OWNER")));
+        SERVICES.verify(0, getRequestedFor(urlEqualTo("/api/cabinet/restaurants")));
+    }
+
+    @Test
     void rejectsRequestWithoutToken() {
         client.get().uri("/api/orders").exchange().expectStatus().isUnauthorized();
 
@@ -156,6 +176,26 @@ class GatewaySecurityIT {
             "POST,  /api/admin/imports/meals,    USER,    403",
             "POST,  /api/admin/imports/meals,    ADMIN,   200",
             "GET,   /api/admin/imports,          COURIER, 403",
+            "GET,   /api/cabinet/restaurants,    ANON,    401",
+            "GET,   /api/cabinet/restaurants,    USER,    403",
+            "GET,   /api/cabinet/restaurants,    COURIER, 403",
+            "GET,   /api/cabinet/restaurants,    ADMIN,   403",
+            "GET,   /api/cabinet/restaurants,    RESTAURANT_OWNER, 200",
+            "PUT,   /api/cabinet/restaurants/1/hours, USER, 403",
+            "PUT,   /api/cabinet/restaurants/1/hours, RESTAURANT_OWNER, 200",
+            "PUT,   /api/cabinet/restaurants/1/stop-list/2, ANON, 401",
+            "PUT,   /api/cabinet/restaurants/1/stop-list/2, RESTAURANT_OWNER, 200",
+            "DELETE, /api/cabinet/restaurants/1/menu/2, COURIER, 403",
+            "DELETE, /api/cabinet/restaurants/1/menu/2, RESTAURANT_OWNER, 200",
+            "POST,  /api/restaurants,            RESTAURANT_OWNER, 403",
+            "PUT,   /api/restaurants/1/menu/2/image, RESTAURANT_OWNER, 403",
+            "PUT,   /api/admin/restaurants/1/owner, ANON, 401",
+            "PUT,   /api/admin/restaurants/1/owner, RESTAURANT_OWNER, 403",
+            "PUT,   /api/admin/restaurants/1/owner, ADMIN, 200",
+            "GET,   /api/admin/users,            ANON,    401",
+            "PUT,   /api/admin/users/5/role,     USER,    403",
+            "PUT,   /api/admin/users/5/role,     RESTAURANT_OWNER, 403",
+            "PUT,   /api/admin/users/5/role,     ADMIN,   200",
             "GET,   /api/orders,                 ANON,    401",
             "GET,   /api/orders,                 USER,    200",
             "GET,   /api/orders/all,             USER,    403",
