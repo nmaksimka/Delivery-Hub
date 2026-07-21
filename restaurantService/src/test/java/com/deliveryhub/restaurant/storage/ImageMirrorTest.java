@@ -7,6 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 import org.springframework.util.unit.DataSize;
 
+import java.net.InetAddress;
+import java.time.Duration;
+import java.util.Set;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
@@ -27,7 +31,12 @@ class ImageMirrorTest {
     void setUp() {
         images.start();
         StorageProperties properties = ImageIntakeTest.properties(DataSize.ofBytes(32));
-        mirror = new ImageMirror(storage, new ImageIntake(storage, properties), properties, RestClient.builder());
+        mirror = mirrorWith(properties, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
+    }
+
+    private ImageMirror mirrorWith(StorageProperties properties, ImageSources.HostResolver resolver) {
+        return new ImageMirror(storage, new ImageIntake(storage, properties), new ImageSources(properties, resolver),
+                properties, RestClient.builder());
     }
 
     @AfterEach
@@ -90,5 +99,49 @@ class ImageMirrorTest {
         images.stop();
 
         assertThat(mirror.mirror("k", url)).isEmpty();
+    }
+
+    @Test
+    void doesNotFollowRedirects() {
+        images.stubFor(get(urlEqualTo("/moved.jpg"))
+                .willReturn(aResponse().withStatus(302).withHeader("Location", images.baseUrl() + "/meal.jpg")));
+        images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
+
+        assertThat(mirror.mirror("k", images.baseUrl() + "/moved.jpg")).isEmpty();
+
+        images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
+        assertThat(storage.size()).isZero();
+    }
+
+    @Test
+    void refusesHostOutsideAllowlist() {
+        images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
+
+        assertThat(mirror.mirror("k", "http://127.0.0.1:" + images.port() + "/meal.jpg")).isEmpty();
+
+        images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
+    }
+
+    @Test
+    void refusesAllowedHostThatResolvesToInternalAddress() {
+        images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
+        ImageMirror strict = mirrorWith(ImageIntakeTest.properties(DataSize.ofBytes(32)), InetAddress::getAllByName);
+
+        assertThat(strict.mirror("k", images.baseUrl() + "/meal.jpg")).isEmpty();
+
+        images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
+    }
+
+    @Test
+    void refusesPlainHttpWhenOnlyHttpsIsAllowed() {
+        images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
+        StorageProperties httpsOnly = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
+                "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofBytes(32), Duration.ofSeconds(1),
+                Duration.ofSeconds(2), new StorageProperties.Mirror(Set.of("https"), Set.of("localhost")));
+        ImageMirror strict = mirrorWith(httpsOnly, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
+
+        assertThat(strict.mirror("k", images.baseUrl() + "/meal.jpg")).isEmpty();
+
+        images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
     }
 }
