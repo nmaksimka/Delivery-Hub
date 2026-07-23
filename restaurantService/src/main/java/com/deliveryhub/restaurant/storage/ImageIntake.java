@@ -6,10 +6,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.List;
+
 @Component
 public class ImageIntake {
 
     private static final Logger log = LoggerFactory.getLogger(ImageIntake.class);
+    private static final List<String> UPLOAD_PREFIXES = List.of("restaurants/", "menu/");
 
     private final ImageStorage imageStorage;
     private final StorageProperties properties;
@@ -39,7 +42,7 @@ public class ImageIntake {
     }
 
     public void discardAfterCommit(String key) {
-        if (key == null) {
+        if (key == null || !isUpload(key)) {
             return;
         }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -52,6 +55,10 @@ public class ImageIntake {
                 deleteQuietly(key);
             }
         });
+    }
+
+    private static boolean isUpload(String key) {
+        return UPLOAD_PREFIXES.stream().anyMatch(key::startsWith);
     }
 
     private void deleteQuietly(String key) {
