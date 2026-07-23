@@ -1,6 +1,5 @@
 package com.deliveryhub.restaurant.mealdb;
 
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalFunction;
@@ -15,8 +14,9 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.net.http.HttpClient;
@@ -30,27 +30,22 @@ public class MealDbConfig {
     public static final String NAME = "mealdb";
 
     @Bean
-    public MealDbHttp mealDbHttp(RestClient.Builder builder, MealDbProperties properties) {
+    public MealDbHttp mealDbHttp(RestClient.Builder builder, MealDbProperties properties,
+                                 MeterRegistry meterRegistry) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build());
         requestFactory.setReadTimeout(properties.readTimeout());
-        return new MealDbHttp(builder.baseUrl(properties.baseUrl()).requestFactory(requestFactory).build());
+        CircuitBreakerRegistry breakers = CircuitBreakerRegistry.of(circuitBreakerConfig());
+        TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(breakers).bindTo(meterRegistry);
+        return new MealDbHttp(builder.baseUrl(properties.baseUrl()).requestFactory(requestFactory).build(),
+                rateLimiter(properties), breakers.circuitBreaker(NAME), retry(properties));
     }
 
     @Bean
-    public MealDbClient mealDbClient(MealDbHttp http, JsonMapper jsonMapper, MealDbProperties properties,
-                                     MeterRegistry meterRegistry) {
-        CircuitBreakerRegistry breakers = CircuitBreakerRegistry.of(CircuitBreakerConfig.custom()
-                .slidingWindowSize(10)
-                .minimumNumberOfCalls(5)
-                .failureRateThreshold(50)
-                .waitDurationInOpenState(Duration.ofSeconds(30))
-                .recordExceptions(RestClientException.class)
-                .build());
-        TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(breakers).bindTo(meterRegistry);
-        return new MealDbClient(http, jsonMapper, rateLimiter(properties), breakers.circuitBreaker(NAME),
-                retry(properties));
+    public MealDbClient mealDbClient(MealDbHttp http, JsonMapper jsonMapper) {
+        return new MealDbClient(http, jsonMapper);
     }
+
 
     static RateLimiter rateLimiter(MealDbProperties properties) {
         return RateLimiter.of(NAME, RateLimiterConfig.custom()
@@ -64,11 +59,17 @@ public class MealDbConfig {
         return Retry.of(NAME, RetryConfig.custom()
                 .maxAttempts(properties.maxAttempts())
                 .intervalFunction(IntervalFunction.ofExponentialBackoff(properties.retryBackoff(), 2.0))
-                .retryExceptions(RestClientException.class)
+                .retryExceptions(ResourceAccessException.class, HttpServerErrorException.class)
                 .build());
     }
 
-    static CircuitBreaker circuitBreaker() {
-        return CircuitBreaker.ofDefaults(NAME);
+    private static CircuitBreakerConfig circuitBreakerConfig() {
+        return CircuitBreakerConfig.custom()
+                .slidingWindowSize(10)
+                .minimumNumberOfCalls(5)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .recordExceptions(ResourceAccessException.class, HttpServerErrorException.class)
+                .build();
     }
 }

@@ -1,10 +1,7 @@
 package com.deliveryhub.restaurant.mealdb;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
-import io.github.resilience4j.retry.Retry;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -13,23 +10,15 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 public class MealDbClient {
 
     private final MealDbHttp http;
     private final JsonMapper jsonMapper;
-    private final RateLimiter rateLimiter;
-    private final CircuitBreaker circuitBreaker;
-    private final Retry retry;
 
-    public MealDbClient(MealDbHttp http, JsonMapper jsonMapper, RateLimiter rateLimiter,
-                        CircuitBreaker circuitBreaker, Retry retry) {
+    public MealDbClient(MealDbHttp http, JsonMapper jsonMapper) {
         this.http = http;
         this.jsonMapper = jsonMapper;
-        this.rateLimiter = rateLimiter;
-        this.circuitBreaker = circuitBreaker;
-        this.retry = retry;
     }
 
     public List<MealDbCategory> categories() {
@@ -55,10 +44,8 @@ public class MealDbClient {
     }
 
     private <T> T fetch(String pathAndQuery, Class<T> type) {
-        Supplier<String> limited = RateLimiter.decorateSupplier(rateLimiter, () -> http.get(pathAndQuery));
-        Supplier<String> guarded = CircuitBreaker.decorateSupplier(circuitBreaker, limited);
         try {
-            String body = Retry.decorateSupplier(retry, guarded).get();
+            String body = http.get(pathAndQuery);
             return jsonMapper.readValue(body, type);
         } catch (RestClientException | CallNotPermittedException | RequestNotPermitted e) {
             throw new MealDbUnavailableException("TheMealDB did not answer " + pathAndQuery, e);
