@@ -65,6 +65,7 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
         ignore-exceptions:
           - jakarta.persistence.EntityNotFoundException
+          - com.deliveryhub.order.client.InvalidRestaurantRequestException
   retry:
     instances:
       restaurantService:

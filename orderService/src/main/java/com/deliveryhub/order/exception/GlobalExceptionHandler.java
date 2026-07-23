@@ -1,5 +1,6 @@
 package com.deliveryhub.order.exception;
 
+import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({InvalidStatusTransitionException.class, OrderRejectedException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRestaurantRequestException.class)
+    public ProblemDetail handleInvalidRestaurantRequest(InvalidRestaurantRequestException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(ForbiddenException.class)
