@@ -17,8 +17,8 @@ x-json-logs: &json-logs
   LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
 
 x-storage-credentials: &storage-credentials
-  STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-GK0123456789abcdef01234567}
-  STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+  STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY is required, see .env.example}
+  STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY is required, see .env.example}
   STORAGE_BUCKET: ${STORAGE_BUCKET:-images}
 
 services:
@@ -101,8 +101,8 @@ services:
       - "127.0.0.1:3900:3900"
       - "127.0.0.1:3903:3903"
     environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-4f3c9a1e7b2d58606e1a9c34d7f0b2a85c61e93d4a7f208b1c5e6d9a3f4b7c10}
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-local-dev-garage-admin-token}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET is required, see .env.example}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required, see .env.example}
     volumes:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
@@ -119,7 +119,7 @@ services:
     entrypoint: ["sh", "/init.sh"]
     environment:
       <<: *storage-credentials
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-local-dev-garage-admin-token}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required, see .env.example}
     volumes:
       - ./garage/init.sh:/init.sh:ro
     depends_on:

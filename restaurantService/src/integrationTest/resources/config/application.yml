@@ -9,3 +9,8 @@ management:
   health:
     redis:
       enabled: false
+
+app:
+  storage:
+    access-key: it-access-key
+    secret-key: it-secret-key
