@@ -149,6 +149,19 @@ class MenuItemServiceTest {
     }
 
     @Test
+    @DisplayName("удаление блюда убирает его фото из хранилища после коммита")
+    void removalDiscardsStoredImage() {
+        MenuItem item = menuItem();
+        item.storeImage("menu/1/2/photo");
+        when(menuItemRepository.findByIdAndRestaurantId(MENU_ITEM_ID, RESTAURANT_ID))
+                .thenReturn(Optional.of(item));
+
+        menuItemService.removeMenuItem(RESTAURANT_ID, MENU_ITEM_ID);
+
+        verify(imageIntake).discardAfterCommit("menu/1/2/photo");
+    }
+
+    @Test
     @DisplayName("бросает EntityNotFoundException при добавлении блюда в несуществующий ресторан")
     void failsWhenRestaurantMissing() {
         when(restaurantRepository.findById(404L)).thenReturn(Optional.empty());

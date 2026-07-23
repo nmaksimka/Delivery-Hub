@@ -84,14 +84,25 @@ class ImageIntakeTest {
 
     @Test
     void deletesReplacedImageOnlyAfterCommit() {
-        storage.put("old", PNG, "image/png");
+        storage.put("menu/1/2/old", PNG, "image/png");
         TransactionSynchronizationManager.initSynchronization();
-        intake.discardAfterCommit("old");
+        intake.discardAfterCommit("menu/1/2/old");
 
-        assertThat(storage.exists("old")).isTrue();
+        assertThat(storage.exists("menu/1/2/old")).isTrue();
         TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
 
-        assertThat(storage.exists("old")).isFalse();
+        assertThat(storage.exists("menu/1/2/old")).isFalse();
+    }
+
+    @Test
+    void keepsSharedMirroredImage() {
+        storage.put("mealdb/meals/52772", PNG, "image/png");
+        TransactionSynchronizationManager.initSynchronization();
+        intake.discardAfterCommit("mealdb/meals/52772");
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(storage.exists("mealdb/meals/52772")).isTrue();
     }
 
     @Test
@@ -104,7 +115,7 @@ class ImageIntakeTest {
         }, properties(DataSize.ofBytes(16)));
         boolean[] nextHookRan = {false};
         TransactionSynchronizationManager.initSynchronization();
-        failing.discardAfterCommit("old");
+        failing.discardAfterCommit("restaurants/1/old");
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
