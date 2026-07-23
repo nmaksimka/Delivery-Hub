@@ -10,8 +10,8 @@ import io.github.resilience4j.retry.Retry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -39,7 +39,7 @@ class MealDbClientTest {
     @BeforeEach
     void setUp() {
         mealDb.start();
-        client = clientWith(MealDbConfig.rateLimiter(PROPERTIES), MealDbConfig.circuitBreaker());
+        client = clientWith(MealDbConfig.rateLimiter(PROPERTIES), CircuitBreaker.ofDefaults("test"));
     }
 
     @AfterEach
@@ -123,6 +123,14 @@ class MealDbClientTest {
     }
 
     @Test
+    void doesNotRepeatOnClientError() {
+        mealDb.stubFor(get("/categories.php").willReturn(aResponse().withStatus(404)));
+
+        assertThatThrownBy(() -> client.categories()).isInstanceOf(MealDbUnavailableException.class);
+        mealDb.verify(1, getRequestedFor(urlEqualTo("/categories.php")));
+    }
+
+    @Test
     void unreadableBodyIsReportedAsUnavailable() {
         mealDb.stubFor(get("/categories.php").willReturn(aResponse().withStatus(200).withBody("<html>oops</html>")));
 
@@ -137,7 +145,7 @@ class MealDbClientTest {
                 .slidingWindowSize(3)
                 .minimumNumberOfCalls(3)
                 .failureRateThreshold(50)
-                .recordExceptions(RestClientException.class)
+                .recordExceptions(HttpServerErrorException.class)
                 .build());
         client = clientWith(MealDbConfig.rateLimiter(PROPERTIES), breaker);
         mealDb.stubFor(get("/categories.php").willReturn(aResponse().withStatus(500)));
@@ -158,7 +166,7 @@ class MealDbClientTest {
                 .limitRefreshPeriod(Duration.ofMinutes(1))
                 .timeoutDuration(Duration.ZERO)
                 .build());
-        client = clientWith(onePerMinute, MealDbConfig.circuitBreaker());
+        client = clientWith(onePerMinute, CircuitBreaker.ofDefaults("test"));
         mealDb.stubFor(get("/categories.php").willReturn(okJson("{\"categories\": []}")));
 
         client.categories();
@@ -168,8 +176,9 @@ class MealDbClientTest {
     }
 
     private MealDbClient clientWith(RateLimiter rateLimiter, CircuitBreaker circuitBreaker) {
-        MealDbHttp http = new MealDbHttp(RestClient.builder().baseUrl(mealDb.baseUrl()).build());
         Retry retry = MealDbConfig.retry(PROPERTIES);
-        return new MealDbClient(http, JsonMapper.builder().build(), rateLimiter, circuitBreaker, retry);
+        MealDbHttp http = new MealDbHttp(RestClient.builder().baseUrl(mealDb.baseUrl()).build(),
+                rateLimiter, circuitBreaker, retry);
+        return new MealDbClient(http, JsonMapper.builder().build());
     }
 }

@@ -10,8 +10,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -39,7 +39,7 @@ class FoodFactsClientTest {
     @BeforeEach
     void setUp() {
         foodFacts.start();
-        client = clientWith(FoodFactsConfig.rateLimiter(PROPERTIES), FoodFactsConfig.circuitBreaker());
+        client = clientWith(FoodFactsConfig.rateLimiter(PROPERTIES), CircuitBreaker.ofDefaults("test"));
     }
 
     @AfterEach
@@ -121,12 +121,21 @@ class FoodFactsClientTest {
     }
 
     @Test
+    void doesNotRepeatOnClientError() {
+        foodFacts.stubFor(get(urlPathEqualTo("/api/v2/search")).willReturn(aResponse().withStatus(400)));
+
+        assertThatThrownBy(() -> client.popularInCategory("waters", 3))
+                .isInstanceOf(FoodFactsUnavailableException.class);
+        foodFacts.verify(1, getRequestedFor(urlPathEqualTo("/api/v2/search")));
+    }
+
+    @Test
     void openCircuitStopsCallingApi() {
         CircuitBreaker breaker = CircuitBreaker.of("test", CircuitBreakerConfig.custom()
                 .slidingWindowSize(3)
                 .minimumNumberOfCalls(3)
                 .failureRateThreshold(50)
-                .recordExceptions(RestClientException.class)
+                .recordExceptions(HttpServerErrorException.class)
                 .build());
         client = clientWith(FoodFactsConfig.rateLimiter(PROPERTIES), breaker);
         foodFacts.stubFor(get(urlPathEqualTo("/api/v2/search")).willReturn(aResponse().withStatus(500)));
@@ -149,7 +158,7 @@ class FoodFactsClientTest {
                 .limitRefreshPeriod(Duration.ofMinutes(1))
                 .timeoutDuration(Duration.ZERO)
                 .build());
-        client = clientWith(onePerMinute, FoodFactsConfig.circuitBreaker());
+        client = clientWith(onePerMinute, CircuitBreaker.ofDefaults("test"));
         foodFacts.stubFor(get(urlPathEqualTo("/api/v2/search")).willReturn(okJson("{\"products\": []}")));
 
         client.popularInCategory("waters", 1);
@@ -163,8 +172,7 @@ class FoodFactsClientTest {
         FoodFactsHttp http = new FoodFactsHttp(RestClient.builder()
                 .baseUrl(foodFacts.baseUrl())
                 .defaultHeader(HttpHeaders.USER_AGENT, PROPERTIES.userAgent())
-                .build());
-        return new FoodFactsClient(http, JsonMapper.builder().build(), rateLimiter, circuitBreaker,
-                FoodFactsConfig.retry(PROPERTIES));
+                .build(), rateLimiter, circuitBreaker, FoodFactsConfig.retry(PROPERTIES));
+        return new FoodFactsClient(http, JsonMapper.builder().build());
     }
 }
