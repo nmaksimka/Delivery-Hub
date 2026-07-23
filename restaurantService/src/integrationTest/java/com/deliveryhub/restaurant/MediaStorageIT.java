@@ -53,20 +53,21 @@ class MediaStorageIT {
     }
 
     @Test
-    void uploadedRestaurantImageIsServedThroughShortLivedSignedUrl() throws Exception {
+    void uploadedRestaurantImageIsServedThroughStableSignedUrl() throws Exception {
         Restaurant restaurant = restaurantRepository.save(new Restaurant("Photo", null, null));
 
         MvcResult uploaded = upload("/api/restaurants/" + restaurant.getId() + "/image", "image/png", PNG);
 
         String imageUrl = JsonPath.read(uploaded.getResponse().getContentAsString(), "$.imageUrl");
         assertThat(imageUrl).contains("/images/restaurants/" + restaurant.getId() + "/")
-                .contains("X-Amz-Expires=600").contains("X-Amz-Signature=");
+                .contains("X-Amz-Expires=43200").contains("X-Amz-Signature=");
         HttpResponse<byte[]> fetched = fetch(imageUrl);
         assertThat(fetched.statusCode()).isEqualTo(200);
         assertThat(fetched.body()).containsExactly(PNG);
         assertThat(fetched.headers().firstValue("Content-Type")).contains("image/png");
-        assertThat(mvc.perform(get("/api/restaurants/" + restaurant.getId())).andReturn().getResponse()
-                .getContentAsString()).contains("X-Amz-Signature=");
+        String servedUrl = JsonPath.read(mvc.perform(get("/api/restaurants/" + restaurant.getId())).andReturn()
+                .getResponse().getContentAsString(), "$.imageUrl");
+        assertThat(servedUrl).isEqualTo(imageUrl);
     }
 
     @Test
