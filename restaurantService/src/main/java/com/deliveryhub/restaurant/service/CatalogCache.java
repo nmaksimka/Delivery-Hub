@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.List;
 
 @Component
-@Transactional(readOnly = true)
 public class CatalogCache {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogCache.class);
@@ -47,6 +46,7 @@ public class CatalogCache {
         this.cacheManager = cacheManager;
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = RESTAURANTS, key = "#activeOnly")
     public List<RestaurantView> restaurants(boolean activeOnly) {
         return (activeOnly ? restaurantRepository.findByActiveTrue() : restaurantRepository.findAll()).stream()
@@ -54,6 +54,7 @@ public class CatalogCache {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = RESTAURANT, key = "#id")
     public RestaurantView restaurant(Long id) {
         return restaurantRepository.findById(id)
@@ -61,6 +62,7 @@ public class CatalogCache {
                 .orElseThrow(() -> new EntityNotFoundException("Restaurant with ID: " + id + " was not found"));
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = MENU,
             key = "#restaurantId + ':' + #availableOnly + ':' + (#section == null ? 'all' : #section.name())")
     public List<MenuItemView> menu(Long restaurantId, boolean availableOnly, MenuSection section) {
