@@ -15,7 +15,7 @@ public record StorageProperties(
         @DefaultValue("images") String bucket,
         @DefaultValue("GK0123456789abcdef01234567") String accessKey,
         @DefaultValue("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef") String secretKey,
-        @DefaultValue("10m") Duration presignTtl,
+        @DefaultValue("12h") Duration presignTtl,
         @DefaultValue("5MB") DataSize maxImageSize,
         @DefaultValue("2s") Duration downloadConnectTimeout,
         @DefaultValue("10s") Duration downloadReadTimeout,
