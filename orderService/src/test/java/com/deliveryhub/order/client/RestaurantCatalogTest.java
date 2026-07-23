@@ -56,7 +56,7 @@ class RestaurantCatalogTest {
                 .minimumNumberOfCalls(4)
                 .failureRateThreshold(50)
                 .waitDurationInOpenState(Duration.ofMinutes(1))
-                .ignoreExceptions(EntityNotFoundException.class)
+                .ignoreExceptions(EntityNotFoundException.class, InvalidRestaurantRequestException.class)
                 .build();
         RetryConfig retry = RetryConfig.custom()
                 .maxAttempts(3)
@@ -127,6 +127,28 @@ class RestaurantCatalogTest {
 
         assertThatThrownBy(() -> catalog.quote(1L, List.of(10L))).isInstanceOf(EntityNotFoundException.class);
         assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void turnsInvalidArgumentIntoBadRequestWithoutRetry() {
+        behaviour = answer -> answer.onError(Status.INVALID_ARGUMENT.withDescription("bad id").asRuntimeException());
+
+        assertThatThrownBy(() -> catalog.quote(-1L, List.of(10L)))
+                .isExactlyInstanceOf(InvalidRestaurantRequestException.class);
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void invalidRequestsDoNotOpenCircuit() {
+        behaviour = answer -> answer.onError(Status.INVALID_ARGUMENT.asRuntimeException());
+        for (int call = 0; call < 6; call++) {
+            assertThatThrownBy(() -> catalog.quote(-1L, List.of(10L)))
+                    .isExactlyInstanceOf(InvalidRestaurantRequestException.class);
+        }
+        behaviour = answer -> reply(answer,
+                QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantActive(true).build());
+
+        assertThat(catalog.quote(1L, List.of(10L)).restaurant().active()).isTrue();
     }
 
     @Test
