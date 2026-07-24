@@ -22,11 +22,14 @@ public class UserRoles {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final RefreshTokens refreshTokens;
     private final Clock clock;
 
-    public UserRoles(UserRepository userRepository, UserMapper userMapper, Clock clock) {
+    public UserRoles(UserRepository userRepository, UserMapper userMapper, RefreshTokens refreshTokens,
+                     Clock clock) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
+        this.refreshTokens = refreshTokens;
         this.clock = clock;
     }
 
@@ -45,7 +48,11 @@ public class UserRoles {
         User user = userRepository.findById(userId).orElseThrow(() -> UserNotFoundException.byId(userId));
         Role previous = user.getRole();
         user.changeRole(role, clock.instant());
-        log.info("Role of user id={} changed from {} to {} by admin id={}", userId, previous, role, adminId);
+        if (previous != role) {
+            int revoked = refreshTokens.revokeAllOf(userId);
+            log.info("Role of user id={} changed from {} to {} by admin id={}, {} refresh tokens revoked",
+                    userId, previous, role, adminId, revoked);
+        }
         return userMapper.toDto(user);
     }
 }
