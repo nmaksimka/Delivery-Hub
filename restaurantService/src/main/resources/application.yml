@@ -58,6 +58,8 @@ app:
       allowed-hosts: www.themealdb.com,images.openfoodfacts.org
   catalog-cache:
     ttl: 5m
+  import:
+    stale-after: 10m
   working-hours:
     zone: Asia/Tomsk
   mealdb:

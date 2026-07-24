@@ -12,5 +12,7 @@ public interface ImportJobRepository extends JpaRepository<ImportJob, UUID> {
 
     List<ImportJob> findByStatusIn(Collection<ImportStatus> statuses);
 
+    List<ImportJob> findBySourceAndStatusIn(ImportSource source, Collection<ImportStatus> statuses);
+
     List<ImportJob> findTop20ByOrderByCreatedAtDesc();
 }
