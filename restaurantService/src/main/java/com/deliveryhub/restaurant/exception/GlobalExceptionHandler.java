@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.exception;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.deliveryhub.restaurant.importer.ImportAlreadyRunningException;
+import com.deliveryhub.restaurant.security.AdminOnlyException;
 import com.deliveryhub.restaurant.security.OwnerOnlyException;
 import com.deliveryhub.restaurant.storage.ImageTooLargeException;
 import com.deliveryhub.restaurant.storage.UnsupportedImageException;
@@ -36,8 +37,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    @ExceptionHandler(OwnerOnlyException.class)
-    public ProblemDetail handleOwnerOnly(OwnerOnlyException ex) {
+    @ExceptionHandler({OwnerOnlyException.class, AdminOnlyException.class})
+    public ProblemDetail handleForbidden(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
