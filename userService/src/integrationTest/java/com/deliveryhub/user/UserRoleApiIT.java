@@ -28,7 +28,7 @@ class UserRoleApiIT {
     private MockMvcTester mvc;
 
     @Test
-    void adminMakesUserRestaurantOwnerAndNextTokensCarryNewRole() throws ParseException {
+    void adminMakesUserRestaurantOwnerAndOldSessionsEnd() throws ParseException {
         String email = UUID.randomUUID() + "@example.com";
         int userId = register(email);
         String refreshToken = JsonPath.read(bodyOf(login(email)), "$.refreshToken");
@@ -37,8 +37,8 @@ class UserRoleApiIT {
 
         assertThat(changed).hasStatusOk().bodyJson().extractingPath("$.role").isEqualTo("RESTAURANT_OWNER");
         assertThat(roleInToken(login(email))).isEqualTo("RESTAURANT_OWNER");
-        assertThat(roleInToken(postJson("/api/auth/refresh", "{\"refreshToken\": \"" + refreshToken + "\"}")))
-                .isEqualTo("RESTAURANT_OWNER");
+        assertThat(postJson("/api/auth/refresh", "{\"refreshToken\": \"" + refreshToken + "\"}"))
+                .hasStatus(401);
     }
 
     @Test
