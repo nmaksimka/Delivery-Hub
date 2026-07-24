@@ -58,7 +58,7 @@ class RestaurantClientResilienceIT {
     static void restaurantServiceAddress(DynamicPropertyRegistry registry) {
         registry.add("spring.grpc.client.channels.restaurant.address",
                 () -> "static://localhost:" + RESTAURANT_SERVICE.getPort());
-        registry.add("app.restaurant-grpc.deadline", () -> "400ms");
+        registry.add("app.restaurant-grpc.deadline", () -> "1500ms");
         registry.add("resilience4j.retry.instances.restaurantService.wait-duration", () -> "20ms");
     }
 
@@ -144,7 +144,7 @@ class RestaurantClientResilienceIT {
     void givesUpOnAnswerSlowerThanDeadlineWithoutRepeating() {
         behaviour = answer -> {
             try {
-                Thread.sleep(900);
+                Thread.sleep(2500);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
