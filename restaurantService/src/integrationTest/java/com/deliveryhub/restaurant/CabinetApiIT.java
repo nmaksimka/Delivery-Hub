@@ -73,16 +73,18 @@ class CabinetApiIT {
         Restaurant foreign = restaurantOf(OTHER_OWNER, "Foreign " + System.nanoTime());
         String ownerUri = "/api/admin/restaurants/" + mine.getId() + "/owner";
 
-        mvc.perform(put(ownerUri).contentType(MediaType.APPLICATION_JSON).content("{\"ownerId\": " + OWNER + "}"))
+        mvc.perform(put(ownerUri).header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ownerId\": " + OWNER + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ownerId").value(OWNER));
-        mvc.perform(get(ownerUri)).andExpect(status().isOk()).andExpect(jsonPath("$.ownerId").value(OWNER));
+        mvc.perform(get(ownerUri).header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ownerId").value(OWNER));
 
         String listed = body(asOwner(get(CABINET), OWNER));
         assertThat(listed).contains(mine.getName()).doesNotContain(foreign.getName()).doesNotContain("ownerId");
         mvc.perform(asOwner(get(CABINET + "/" + mine.getId()), OWNER)).andExpect(status().isOk());
 
-        mvc.perform(delete(ownerUri)).andExpect(status().isNoContent());
+        mvc.perform(delete(ownerUri).header("X-User-Role", "ADMIN")).andExpect(status().isNoContent());
 
         mvc.perform(asOwner(get(CABINET + "/" + mine.getId()), OWNER)).andExpect(status().isNotFound());
         assertThat(body(asOwner(get(CABINET), OWNER))).doesNotContain(mine.getName());
@@ -92,10 +94,10 @@ class CabinetApiIT {
     void ownerAssignmentIsValidated() throws Exception {
         Restaurant restaurant = restaurantRepository.save(new Restaurant("Validated", null, null));
 
-        mvc.perform(put("/api/admin/restaurants/" + restaurant.getId() + "/owner")
+        mvc.perform(put("/api/admin/restaurants/" + restaurant.getId() + "/owner").header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ownerId\": 0}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(put("/api/admin/restaurants/" + MISSING_RESTAURANT + "/owner")
+        mvc.perform(put("/api/admin/restaurants/" + MISSING_RESTAURANT + "/owner").header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ownerId\": 5}"))
                 .andExpect(status().isNotFound());
     }

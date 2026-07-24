@@ -68,12 +68,27 @@ class RestaurantApiIT {
 
     @Test
     void keepsStandardStatusesForMalformedRequests() {
-        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.APPLICATION_JSON).content("{oops"))
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "ADMIN")
+                .contentType(MediaType.APPLICATION_JSON).content("{oops"))
                 .hasStatus(400).bodyJson().extractingPath("$.title").isEqualTo("Bad Request");
         assertThat(mvc.patch().uri("/api/restaurants")).hasStatus(405);
-        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.TEXT_PLAIN).content("pizza"))
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "ADMIN")
+                .contentType(MediaType.TEXT_PLAIN).content("pizza"))
                 .hasStatus(415);
         assertThat(mvc.get().uri("/api/restaurants/not-a-number")).hasStatus(400);
+    }
+
+    @Test
+    void onlyAdminChangesCatalogAndReachesAdminApi() {
+        String json = "{\"name\": \"Sneaky\"}";
+
+        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.APPLICATION_JSON).content(json))
+                .hasStatus(403).bodyJson().extractingPath("$.detail").asString().contains("administrators");
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "RESTAURANT_OWNER")
+                .contentType(MediaType.APPLICATION_JSON).content(json)).hasStatus(403);
+        assertThat(mvc.delete().uri("/api/restaurants/1").header("X-User-Role", "USER")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/admin/imports").header("X-User-Role", "COURIER")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/restaurants")).hasStatusOk();
     }
 
     @Test
@@ -103,7 +118,8 @@ class RestaurantApiIT {
     }
 
     private MvcTestResult postJson(String uri, String json) {
-        return mvc.post().uri(uri).contentType(MediaType.APPLICATION_JSON).content(json).exchange();
+        return mvc.post().uri(uri).header("X-User-Role", "ADMIN")
+                .contentType(MediaType.APPLICATION_JSON).content(json).exchange();
     }
 
     private static String bodyOf(MvcTestResult result) {

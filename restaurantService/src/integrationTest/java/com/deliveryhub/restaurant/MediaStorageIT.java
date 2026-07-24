@@ -106,6 +106,7 @@ class MediaStorageIT {
         Restaurant restaurant = restaurantRepository.save(new Restaurant("Fake", null, null));
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", "<html>".getBytes())))
                 .andExpect(status().isUnsupportedMediaType());
 
@@ -119,23 +120,26 @@ class MediaStorageIT {
         System.arraycopy(PNG, 0, big, 0, PNG.length);
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", big)))
                 .andExpect(status().isContentTooLarge());
     }
 
     @Test
     void answersNotFoundForUnknownRestaurantAndMissingFile() throws Exception {
-        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/999999/image")
+        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/999999/image").header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", PNG)))
                 .andExpect(status().isNotFound());
         Restaurant restaurant = restaurantRepository.save(new Restaurant("No file", null, null));
 
-        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image"))
+        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isBadRequest());
     }
 
     private MvcResult upload(String uri, String contentType, byte[] content) throws Exception {
-        return mvc.perform(multipart(HttpMethod.PUT, uri).file(new MockMultipartFile("file", "photo", contentType,
+        return mvc.perform(multipart(HttpMethod.PUT, uri)
+                .header("X-User-Role", "ADMIN").file(new MockMultipartFile("file", "photo", contentType,
                 content))).andExpect(status().isOk()).andReturn();
     }
 

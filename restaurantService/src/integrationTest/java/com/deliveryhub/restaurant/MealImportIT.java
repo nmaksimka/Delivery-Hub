@@ -160,27 +160,29 @@ class MealImportIT {
 
         assertThat(finished).bodyJson().extractingPath("$.status").isEqualTo("FAILED");
         assertThat(finished).bodyJson().extractingPath("$.error").asString().contains("TheMealDB");
-        assertThat(mvc.get().uri("/api/admin/imports")).hasStatusOk()
+        assertThat(mvc.get().uri("/api/admin/imports").header("X-User-Role", "ADMIN")).hasStatusOk()
                 .bodyJson().extractingPath("$[0].status").isEqualTo("FAILED");
     }
 
     @Test
     void unknownJobIsNotFound() {
-        assertThat(mvc.get().uri("/api/admin/imports/00000000-0000-0000-0000-000000000000")).hasStatus(404);
+        assertThat(mvc.get().uri("/api/admin/imports/00000000-0000-0000-0000-000000000000")
+                .header("X-User-Role", "ADMIN")).hasStatus(404);
     }
 
     private String startImport() {
-        MvcTestResult started = mvc.post().uri("/api/admin/imports/meals").exchange();
+        MvcTestResult started = mvc.post().uri("/api/admin/imports/meals").header("X-User-Role", "ADMIN").exchange();
         assertThat(started).hasStatus(202);
         return JsonPath.read(bodyOf(started), "$.id");
     }
 
     private MvcTestResult awaitFinished(String jobId) {
         await().atMost(TIMEOUT).until(() -> {
-            String status = JsonPath.read(bodyOf(mvc.get().uri("/api/admin/imports/" + jobId).exchange()), "$.status");
+            String status = JsonPath.read(bodyOf(mvc.get().uri("/api/admin/imports/" + jobId)
+                    .header("X-User-Role", "ADMIN").exchange()), "$.status");
             return status.equals("COMPLETED") || status.equals("FAILED");
         });
-        return mvc.get().uri("/api/admin/imports/" + jobId).exchange();
+        return mvc.get().uri("/api/admin/imports/" + jobId).header("X-User-Role", "ADMIN").exchange();
     }
 
     private static void stubMeal(String id, String name, String category, String area) {
