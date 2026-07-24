@@ -77,6 +77,22 @@ class RefreshTokenRepositoryIT {
     }
 
     @Test
+    void revokesAllLiveTokensOfOneUserOnly() {
+        Long otherUser = userRepository.saveAndFlush(
+                User.register("other@example.com", "hash", "Other", null, NOW)).getId();
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "phone", NOW, LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "laptop", NOW, LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(otherUser, "foreign", NOW, LIFETIME));
+
+        int revoked = refreshTokenRepository.revokeAllOfUser(userId, NOW.plusSeconds(5));
+
+        assertThat(revoked).isEqualTo(2);
+        assertThat(refreshTokenRepository.findByTokenHash("phone").orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshTokenRepository.findByTokenHash("laptop").orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshTokenRepository.findByTokenHash("foreign").orElseThrow().isRevoked()).isFalse();
+    }
+
+    @Test
     void deletesOnlyExpiredTokens() {
         refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "expired", NOW.minus(Duration.ofDays(60)), LIFETIME));
         refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "live", NOW, LIFETIME));

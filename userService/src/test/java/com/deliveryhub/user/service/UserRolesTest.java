@@ -35,12 +35,14 @@ class UserRolesTest {
     private UserRepository userRepository;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private RefreshTokens refreshTokens;
 
     private UserRoles userRoles;
 
     @BeforeEach
     void setUp() {
-        userRoles = new UserRoles(userRepository, userMapper, Clock.fixed(NOW, ZoneOffset.UTC));
+        userRoles = new UserRoles(userRepository, userMapper, refreshTokens, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -55,6 +57,17 @@ class UserRolesTest {
         assertThat(changed).isEqualTo(dto);
         assertThat(user.getRole()).isEqualTo(Role.RESTAURANT_OWNER);
         assertThat(user.getUpdatedAt()).isEqualTo(NOW);
+        verify(refreshTokens).revokeAllOf(7L);
+    }
+
+    @Test
+    void keepsSessionsWhenRoleStaysTheSame() {
+        User user = UserFixtures.persistedUser(7L, "owner@example.com", Role.COURIER);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user));
+
+        userRoles.changeRole(7L, Role.COURIER, ADMIN_ID);
+
+        verify(refreshTokens, never()).revokeAllOf(7L);
     }
 
     @Test
