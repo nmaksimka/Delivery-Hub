@@ -5,6 +5,8 @@ app:
   jwt:
     jwk-set-uri: ${JWT_JWK_SET_URI:http://userService/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:deliveryhub}
+  request-body:
+    max-size: 7MB
   rate-limit:
     common:
       replenish-rate: 20
