@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+case "${STORAGE_ACCESS_KEY}" in
+  GK0123456789abcdef01234567) echo "STORAGE_ACCESS_KEY is the old example value, generate a new one" >&2; exit 1 ;;
+esac
+case "${GARAGE_ADMIN_TOKEN}" in
+  change-me*) echo "GARAGE_ADMIN_TOKEN is a placeholder, generate a new one" >&2; exit 1 ;;
+esac
+case "${STORAGE_SECRET_KEY}" in
+  0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef) echo "STORAGE_SECRET_KEY is the old example value, generate a new one" >&2; exit 1 ;;
+esac
+
 admin="http://${GARAGE_HOST:-garage}:3903/v2"
 auth="Authorization: Bearer ${GARAGE_ADMIN_TOKEN}"
 
