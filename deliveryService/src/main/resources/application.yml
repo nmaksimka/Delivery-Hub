@@ -45,6 +45,7 @@ spring:
       avro.use.logical.type.converters: true
 
 app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   outbox:
     poll-interval: 1s
     batch-size: 50

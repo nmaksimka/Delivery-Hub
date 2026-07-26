@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, KafkaContainerConfig.class})
 class DeliveryApiIT {
 
     @Autowired
