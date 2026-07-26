@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, KafkaContainerConfig.class})
 class RestaurantClientResilienceIT {
 
     private static final AtomicInteger CALLS = new AtomicInteger();
