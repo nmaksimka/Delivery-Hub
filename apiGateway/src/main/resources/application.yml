@@ -5,6 +5,7 @@ app:
   jwt:
     jwk-set-uri: ${JWT_JWK_SET_URI:http://userService/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:deliveryhub}
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   request-body:
     max-size: 7MB
   rate-limit:

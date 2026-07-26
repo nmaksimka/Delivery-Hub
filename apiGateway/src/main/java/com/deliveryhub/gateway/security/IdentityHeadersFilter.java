@@ -6,6 +6,7 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.util.Assert;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
@@ -18,6 +19,14 @@ public class IdentityHeadersFilter implements WebFilter {
     public static final String HEADER_USER_ID = "X-User-Id";
     public static final String HEADER_USER_EMAIL = "X-User-Email";
     public static final String HEADER_USER_ROLE = "X-User-Role";
+    public static final String HEADER_INTERNAL_TOKEN = "X-Internal-Token";
+
+    private final String internalToken;
+
+    public IdentityHeadersFilter(String internalToken) {
+        Assert.hasText(internalToken, "Internal token is required");
+        this.internalToken = internalToken;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -26,10 +35,10 @@ public class IdentityHeadersFilter implements WebFilter {
                 .filter(JwtAuthenticationToken.class::isInstance)
                 .cast(JwtAuthenticationToken.class)
                 .map(authentication -> withHeaders(exchange, headers -> {
-                    removeIdentity(headers);
+                    replaceInternalToken(headers);
                     addIdentity(headers, authentication);
                 }))
-                .switchIfEmpty(Mono.fromSupplier(() -> withHeaders(exchange, IdentityHeadersFilter::removeIdentity)))
+                .switchIfEmpty(Mono.fromSupplier(() -> withHeaders(exchange, this::replaceInternalToken)))
                 .flatMap(chain::filter);
     }
 
@@ -37,10 +46,11 @@ public class IdentityHeadersFilter implements WebFilter {
         return exchange.mutate().request(request -> request.headers(change)).build();
     }
 
-    private static void removeIdentity(HttpHeaders headers) {
+    private void replaceInternalToken(HttpHeaders headers) {
         headers.remove(HEADER_USER_ID);
         headers.remove(HEADER_USER_EMAIL);
         headers.remove(HEADER_USER_ROLE);
+        headers.set(HEADER_INTERNAL_TOKEN, internalToken);
     }
 
     private static void addIdentity(HttpHeaders headers, JwtAuthenticationToken authentication) {

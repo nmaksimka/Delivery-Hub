@@ -3,6 +3,7 @@ package com.deliveryhub.gateway.config;
 import com.deliveryhub.gateway.security.IdentityHeadersFilter;
 import com.deliveryhub.gateway.security.ProblemResponses;
 import com.deliveryhub.gateway.security.RoleFromTokenConverter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,7 +34,8 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http,
                                                             ReactiveJwtDecoder jwtDecoder,
-                                                            JsonMapper jsonMapper) {
+                                                            JsonMapper jsonMapper,
+                                                            @Value("${app.internal-token}") String internalToken) {
         ProblemResponses problems = new ProblemResponses(jsonMapper);
         ServerAuthenticationEntryPoint unauthorized = (exchange, ex) -> problems.write(
                 exchange, HttpStatus.UNAUTHORIZED, "Access token is missing, expired or invalid");
@@ -68,7 +70,7 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt
                                 .jwtDecoder(jwtDecoder)
                                 .jwtAuthenticationConverter(new RoleFromTokenConverter())))
-                .addFilterAfter(new IdentityHeadersFilter(), SecurityWebFiltersOrder.AUTHORIZATION)
+                .addFilterAfter(new IdentityHeadersFilter(internalToken), SecurityWebFiltersOrder.AUTHORIZATION)
                 .exceptionHandling(spec -> spec
                         .authenticationEntryPoint(unauthorized)
                         .accessDeniedHandler((exchange, ex) -> problems.write(
