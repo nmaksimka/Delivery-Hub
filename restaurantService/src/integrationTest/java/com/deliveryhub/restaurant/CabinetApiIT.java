@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "spring.cache.type=redis")
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, RedisContainerConfig.class, GarageContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, RedisContainerConfig.class, GarageContainerConfig.class})
 class CabinetApiIT {
 
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 9, 8, 7, 6, 5};

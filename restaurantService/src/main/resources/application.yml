@@ -42,6 +42,7 @@ spring:
       max-request-size: 7MB
 
 app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   storage:
     endpoint: ${STORAGE_ENDPOINT:http://localhost:3900}
     public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:3900}
