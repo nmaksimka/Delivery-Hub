@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 public record MenuItemRequest(
         @NotBlank(message = "Name is required") @Size(max = 255) String name,
-        String description,
+        @Size(max = 2000) String description,
         @NotNull(message = "Price is required")
         @DecimalMin(value = "0.0", inclusive = false, message = "Price must be positive") BigDecimal price,
         @Size(max = 100) String category,
