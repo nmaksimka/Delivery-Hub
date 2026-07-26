@@ -53,20 +53,21 @@ class MediaStorageIT {
     }
 
     @Test
-    void uploadedRestaurantImageIsServedThroughShortLivedSignedUrl() throws Exception {
+    void uploadedRestaurantImageIsServedThroughStableSignedUrl() throws Exception {
         Restaurant restaurant = restaurantRepository.save(new Restaurant("Photo", null, null));
 
         MvcResult uploaded = upload("/api/restaurants/" + restaurant.getId() + "/image", "image/png", PNG);
 
         String imageUrl = JsonPath.read(uploaded.getResponse().getContentAsString(), "$.imageUrl");
         assertThat(imageUrl).contains("/images/restaurants/" + restaurant.getId() + "/")
-                .contains("X-Amz-Expires=600").contains("X-Amz-Signature=");
+                .contains("X-Amz-Expires=43200").contains("X-Amz-Signature=");
         HttpResponse<byte[]> fetched = fetch(imageUrl);
         assertThat(fetched.statusCode()).isEqualTo(200);
         assertThat(fetched.body()).containsExactly(PNG);
         assertThat(fetched.headers().firstValue("Content-Type")).contains("image/png");
-        assertThat(mvc.perform(get("/api/restaurants/" + restaurant.getId())).andReturn().getResponse()
-                .getContentAsString()).contains("X-Amz-Signature=");
+        String servedUrl = JsonPath.read(mvc.perform(get("/api/restaurants/" + restaurant.getId())).andReturn()
+                .getResponse().getContentAsString(), "$.imageUrl");
+        assertThat(servedUrl).isEqualTo(imageUrl);
     }
 
     @Test
@@ -105,6 +106,7 @@ class MediaStorageIT {
         Restaurant restaurant = restaurantRepository.save(new Restaurant("Fake", null, null));
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", "<html>".getBytes())))
                 .andExpect(status().isUnsupportedMediaType());
 
@@ -118,23 +120,26 @@ class MediaStorageIT {
         System.arraycopy(PNG, 0, big, 0, PNG.length);
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", big)))
                 .andExpect(status().isContentTooLarge());
     }
 
     @Test
     void answersNotFoundForUnknownRestaurantAndMissingFile() throws Exception {
-        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/999999/image")
+        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/999999/image").header("X-User-Role", "ADMIN")
                         .file(new MockMultipartFile("file", "a.png", "image/png", PNG)))
                 .andExpect(status().isNotFound());
         Restaurant restaurant = restaurantRepository.save(new Restaurant("No file", null, null));
 
-        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image"))
+        mvc.perform(multipart(HttpMethod.PUT, "/api/restaurants/" + restaurant.getId() + "/image")
+                .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isBadRequest());
     }
 
     private MvcResult upload(String uri, String contentType, byte[] content) throws Exception {
-        return mvc.perform(multipart(HttpMethod.PUT, uri).file(new MockMultipartFile("file", "photo", contentType,
+        return mvc.perform(multipart(HttpMethod.PUT, uri)
+                .header("X-User-Role", "ADMIN").file(new MockMultipartFile("file", "photo", contentType,
                 content))).andExpect(status().isOk()).andReturn();
     }
 

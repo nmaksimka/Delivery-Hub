@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -112,6 +113,20 @@ class RestaurantServiceTest {
 
         verify(restaurantRepository).delete(existing);
         verify(catalogCache).evictAll();
+    }
+
+    @Test
+    @DisplayName("удаление ресторана убирает из хранилища его фото и фото блюд")
+    void removalDiscardsStoredImages() {
+        Restaurant existing = restaurant();
+        existing.storeImage("restaurants/1/photo");
+        existing.addMenuItem("Soup", null, new BigDecimal("250.00"), "soup").storeImage("menu/1/2/photo");
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        restaurantService.removeRestaurant(1L);
+
+        verify(imageIntake).discardAfterCommit("restaurants/1/photo");
+        verify(imageIntake).discardAfterCommit("menu/1/2/photo");
     }
 
     @Test

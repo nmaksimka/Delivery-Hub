@@ -55,18 +55,38 @@ public class ImportJob {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    @Column(name = "instance_id", length = 128)
+    private String instanceId;
+
+    @Column(name = "heartbeat_at")
+    private Instant heartbeatAt;
+
     protected ImportJob() {
     }
 
-    private ImportJob(ImportSource source, Instant createdAt) {
+    private ImportJob(ImportSource source, Instant createdAt, String instanceId) {
         this.id = UUID.randomUUID();
         this.source = Objects.requireNonNull(source, "source");
         this.status = ImportStatus.PENDING;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
+        this.heartbeatAt = createdAt;
     }
 
-    public static ImportJob queued(ImportSource source, Instant createdAt) {
-        return new ImportJob(source, createdAt);
+    public static ImportJob queued(ImportSource source, Instant createdAt, String instanceId) {
+        return new ImportJob(source, createdAt, instanceId);
+    }
+
+    public void beat(Instant at) {
+        heartbeatAt = at;
+    }
+
+    public boolean belongsTo(String instance) {
+        return instance.equals(instanceId);
+    }
+
+    public boolean isSilentSince(Instant moment) {
+        return heartbeatAt == null || heartbeatAt.isBefore(moment);
     }
 
     public void start(Instant at) {
@@ -162,5 +182,13 @@ public class ImportJob {
 
     public Instant getFinishedAt() {
         return finishedAt;
+    }
+
+    public String getInstanceId() {
+        return instanceId;
+    }
+
+    public Instant getHeartbeatAt() {
+        return heartbeatAt;
     }
 }

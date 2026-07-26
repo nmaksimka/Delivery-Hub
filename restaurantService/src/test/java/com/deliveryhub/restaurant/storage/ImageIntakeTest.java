@@ -1,9 +1,14 @@
 package com.deliveryhub.restaurant.storage;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronizationUtils;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,6 +19,13 @@ class ImageIntakeTest {
 
     private final InMemoryImageStorage storage = new InMemoryImageStorage();
     private final ImageIntake intake = new ImageIntake(storage, properties(DataSize.ofBytes(16)));
+
+    @AfterEach
+    void clearTransaction() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     void storesValidImageWithDetectedContentType() {
@@ -49,8 +61,81 @@ class ImageIntakeTest {
         assertThat(storage.exists("text")).isFalse();
     }
 
+    @Test
+    void removesUploadedImageWhenTransactionRollsBack() {
+        TransactionSynchronizationManager.initSynchronization();
+        intake.save("fresh", PNG);
+
+        complete(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+        assertThat(storage.exists("fresh")).isFalse();
+    }
+
+    @Test
+    void keepsUploadedImageWhenTransactionCommits() {
+        TransactionSynchronizationManager.initSynchronization();
+        intake.save("fresh", PNG);
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+        complete(TransactionSynchronization.STATUS_COMMITTED);
+
+        assertThat(storage.exists("fresh")).isTrue();
+    }
+
+    @Test
+    void deletesReplacedImageOnlyAfterCommit() {
+        storage.put("menu/1/2/old", PNG, "image/png");
+        TransactionSynchronizationManager.initSynchronization();
+        intake.discardAfterCommit("menu/1/2/old");
+
+        assertThat(storage.exists("menu/1/2/old")).isTrue();
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(storage.exists("menu/1/2/old")).isFalse();
+    }
+
+    @Test
+    void keepsSharedMirroredImage() {
+        storage.put("mealdb/meals/52772", PNG, "image/png");
+        TransactionSynchronizationManager.initSynchronization();
+        intake.discardAfterCommit("mealdb/meals/52772");
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(storage.exists("mealdb/meals/52772")).isTrue();
+    }
+
+    @Test
+    void failedDeleteAfterCommitDoesNotBreakFollowingHooks() {
+        ImageIntake failing = new ImageIntake(new InMemoryImageStorage() {
+            @Override
+            public void delete(String key) {
+                throw new IllegalStateException("storage is down");
+            }
+        }, properties(DataSize.ofBytes(16)));
+        boolean[] nextHookRan = {false};
+        TransactionSynchronizationManager.initSynchronization();
+        failing.discardAfterCommit("restaurants/1/old");
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                nextHookRan[0] = true;
+            }
+        });
+
+        TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations());
+
+        assertThat(nextHookRan[0]).isTrue();
+    }
+
+    private static void complete(int status) {
+        TransactionSynchronizationUtils.invokeAfterCompletion(
+                TransactionSynchronizationManager.getSynchronizations(), status);
+    }
+
     static StorageProperties properties(DataSize maxImageSize) {
         return new StorageProperties("http://localhost:1", "http://localhost:1", "garage", "images", "key", "secret",
-                Duration.ofMinutes(10), maxImageSize, Duration.ofSeconds(1), Duration.ofSeconds(2));
+                Duration.ofMinutes(10), maxImageSize, Duration.ofSeconds(1), Duration.ofSeconds(2),
+                new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
     }
 }

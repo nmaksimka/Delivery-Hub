@@ -47,14 +47,19 @@ app:
     public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:3900}
     region: garage
     bucket: ${STORAGE_BUCKET:images}
-    access-key: ${STORAGE_ACCESS_KEY:GK0123456789abcdef01234567}
-    secret-key: ${STORAGE_SECRET_KEY:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
-    presign-ttl: 10m
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    presign-ttl: 12h
     max-image-size: 5MB
     download-connect-timeout: 2s
     download-read-timeout: 10s
+    mirror:
+      allowed-schemes: https
+      allowed-hosts: www.themealdb.com,images.openfoodfacts.org
   catalog-cache:
     ttl: 5m
+  import:
+    stale-after: 10m
   working-hours:
     zone: Asia/Tomsk
   mealdb:

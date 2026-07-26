@@ -13,7 +13,7 @@ class ImportJobTest {
 
     @Test
     void countsProgressInPercent() {
-        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW);
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
         job.start(NOW);
         job.plan(4);
 
@@ -29,7 +29,7 @@ class ImportJobTest {
 
     @Test
     void completedJobIsAlwaysHundredPercent() {
-        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW);
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
         job.start(NOW);
 
         job.complete(NOW.plusSeconds(5));
@@ -41,7 +41,7 @@ class ImportJobTest {
 
     @Test
     void failureKeepsShortenedReason() {
-        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW);
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
 
         job.fail("x".repeat(3000), NOW);
 
@@ -51,9 +51,26 @@ class ImportJobTest {
 
     @Test
     void cannotBeStartedTwice() {
-        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW);
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
         job.start(NOW);
 
         assertThatThrownBy(() -> job.start(NOW)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void knowsWhichInstanceRunsIt() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+
+        assertThat(job.belongsTo("node-a")).isTrue();
+        assertThat(job.belongsTo("node-b")).isFalse();
+    }
+
+    @Test
+    void heartbeatKeepsJobAlive() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+        job.beat(NOW.plusSeconds(600));
+
+        assertThat(job.isSilentSince(NOW.plusSeconds(300))).isFalse();
+        assertThat(job.isSilentSince(NOW.plusSeconds(900))).isTrue();
     }
 }

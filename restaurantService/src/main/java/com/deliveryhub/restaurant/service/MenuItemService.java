@@ -110,7 +110,9 @@ public class MenuItemService {
 
     @Transactional
     public void removeMenuItem(Long restaurantId, Long menuItemId) {
-        menuItemRepository.delete(findInRestaurantOrThrow(restaurantId, menuItemId));
+        MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
+        imageIntake.discardAfterCommit(menuItem.getImageKey());
+        menuItemRepository.delete(menuItem);
         catalogCache.evictMenus();
     }
 

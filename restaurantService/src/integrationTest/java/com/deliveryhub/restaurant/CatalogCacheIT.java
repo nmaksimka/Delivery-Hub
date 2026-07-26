@@ -102,7 +102,8 @@ class CatalogCacheIT {
         assertThat(read(uri)).contains("Old name");
         assertThat(read("/api/restaurants")).contains("Old name");
 
-        mvc.perform(put(uri).contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"New name\"}"))
+        mvc.perform(put(uri).header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"New name\"}"))
                 .andExpect(status().isOk());
 
         assertThat(read(uri)).contains("New name").doesNotContain("Old name");
@@ -126,7 +127,7 @@ class CatalogCacheIT {
         assertThat(read(menuUri)).contains("Soup");
         assertThat(read("/api/restaurants/" + id)).contains("Doomed");
 
-        mvc.perform(delete("/api/restaurants/" + id)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/restaurants/" + id).header("X-User-Role", "ADMIN")).andExpect(status().isNoContent());
 
         mvc.perform(get("/api/restaurants/" + id)).andExpect(status().isNotFound());
         assertThat(read(menuUri)).isEqualTo("[]");
@@ -149,7 +150,7 @@ class CatalogCacheIT {
 
         assertThat(read(menuUri)).contains("Borsch", "Tea", "Soup");
 
-        mvc.perform(delete(menuUri + "/" + soupId)).andExpect(status().isNoContent());
+        mvc.perform(delete(menuUri + "/" + soupId).header("X-User-Role", "ADMIN")).andExpect(status().isNoContent());
 
         assertThat(read(menuUri)).doesNotContain("Soup");
         assertThat(read(menuUri + "?section=DRINK")).contains("Tea");
@@ -161,10 +162,10 @@ class CatalogCacheIT {
         String uri = "/api/restaurants/" + id;
         assertThat(read(uri)).doesNotContain("X-Amz-Signature");
 
-        mvc.perform(multipart(HttpMethod.PUT, uri + "/image").file(new MockMultipartFile("file", "a.png",
-                "image/png", PNG))).andExpect(status().isOk());
+        mvc.perform(multipart(HttpMethod.PUT, uri + "/image").header("X-User-Role", "ADMIN")
+                .file(new MockMultipartFile("file", "a.png", "image/png", PNG))).andExpect(status().isOk());
 
-        assertThat(read(uri)).contains("X-Amz-Expires=600").contains("X-Amz-Signature=");
+        assertThat(read(uri)).contains("X-Amz-Expires=43200").contains("X-Amz-Signature=");
         assertThat(read(uri)).contains("X-Amz-Signature=");
         assertThat(redis.opsForValue().get("restaurant:catalog-restaurant::" + id))
                 .contains("\"imageKey\":\"restaurants/" + id + "/").doesNotContain("X-Amz");
@@ -192,14 +193,15 @@ class CatalogCacheIT {
     }
 
     private Integer createRestaurant(String name) throws Exception {
-        String body = mvc.perform(post("/api/restaurants").contentType(MediaType.APPLICATION_JSON)
+        String body = mvc.perform(post("/api/restaurants")
+                .header("X-User-Role", "ADMIN").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"" + name + "\", \"address\": \"Lenina 1\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.id");
     }
 
     private Integer createMenuItem(String menuUri, String name) throws Exception {
-        String body = mvc.perform(post(menuUri).contentType(MediaType.APPLICATION_JSON)
+        String body = mvc.perform(post(menuUri).header("X-User-Role", "ADMIN").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"" + name + "\", \"price\": 100.00}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.id");

@@ -93,6 +93,12 @@ public class Restaurant {
         this.imageUrl = imageUrl;
     }
 
+    public void useImportedImage(String imageUrl) {
+        if (this.imageUrl == null) {
+            this.imageUrl = imageUrl;
+        }
+    }
+
     public void storeImage(String imageKey) {
         this.imageKey = imageKey;
     }
@@ -121,6 +127,10 @@ public class Restaurant {
 
     public void removeOwner() {
         ownerId = null;
+    }
+
+    public boolean hasOwner() {
+        return ownerId != null;
     }
 
     public boolean isOwnedBy(Long userId) {

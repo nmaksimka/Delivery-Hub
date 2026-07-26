@@ -39,7 +39,7 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, GarageContainerConfig.class})
+@Import({PostgresContainerConfig.class, GarageContainerConfig.class, LocalImageSourceConfig.class})
 class FoodFactsImportIT {
 
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
@@ -191,17 +191,18 @@ class FoodFactsImportIT {
     }
 
     private String startImport() {
-        MvcTestResult started = mvc.post().uri("/api/admin/imports/products").exchange();
+        MvcTestResult started = mvc.post().uri("/api/admin/imports/products").header("X-User-Role", "ADMIN").exchange();
         assertThat(started).hasStatus(202);
         return JsonPath.read(bodyOf(started), "$.id");
     }
 
     private MvcTestResult awaitFinished(String jobId) {
         await().atMost(TIMEOUT).until(() -> {
-            String status = JsonPath.read(bodyOf(mvc.get().uri("/api/admin/imports/" + jobId).exchange()), "$.status");
+            String status = JsonPath.read(bodyOf(mvc.get().uri("/api/admin/imports/" + jobId)
+                    .header("X-User-Role", "ADMIN").exchange()), "$.status");
             return status.equals("COMPLETED") || status.equals("FAILED");
         });
-        return mvc.get().uri("/api/admin/imports/" + jobId).exchange();
+        return mvc.get().uri("/api/admin/imports/" + jobId).header("X-User-Role", "ADMIN").exchange();
     }
 
     private static String bodyOf(MvcTestResult result) {

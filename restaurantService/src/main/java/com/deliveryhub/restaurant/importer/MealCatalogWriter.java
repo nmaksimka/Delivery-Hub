@@ -35,10 +35,12 @@ public class MealCatalogWriter {
         String area = TomskRestaurants.areaKey(meal.strArea());
 
         Optional<Restaurant> known = restaurantRepository.findByExternalSourceAndExternalId(source, area);
-        Restaurant restaurant = known.orElseGet(() -> restaurantRepository.save(newRestaurant(source, area)));
-        if (restaurant.getImageUrl() == null) {
-            restaurant.describe(restaurant.getCuisine(), restaurant.getCity(), meal.strMealThumb());
+        if (known.isPresent() && known.get().hasOwner()) {
+            progress.change(jobId, ImportJob::recordSkipped);
+            return;
         }
+        Restaurant restaurant = known.orElseGet(() -> restaurantRepository.save(newRestaurant(source, area)));
+        restaurant.useImportedImage(meal.strMealThumb());
         if (restaurant.getImageKey() == null && imageKey != null) {
             restaurant.storeImage(imageKey);
         }
@@ -53,7 +55,7 @@ public class MealCatalogWriter {
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, description, price, category));
         item.changeDetails(name, description, price, category);
         item.changeImage(meal.strMealThumb());
-        if (imageKey != null) {
+        if (item.getImageKey() == null && imageKey != null) {
             item.storeImage(imageKey);
         }
         if (existing.isEmpty()) {

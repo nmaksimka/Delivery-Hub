@@ -71,6 +71,10 @@ public class RestaurantCatalog {
         if (code == Status.Code.NOT_FOUND) {
             return new EntityNotFoundException("Restaurant with ID: " + restaurantId + " was not found");
         }
+        if (code == Status.Code.INVALID_ARGUMENT) {
+            return new InvalidRestaurantRequestException("Restaurant service rejected the request: "
+                    + e.getStatus().getDescription(), e);
+        }
         if (code == Status.Code.UNAVAILABLE) {
             return new RestaurantUnreachableException(e);
         }

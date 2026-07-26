@@ -104,7 +104,10 @@ public class RestaurantService {
 
     @Transactional
     public void removeRestaurant(Long id) {
-        restaurantRepository.delete(findByIdOrThrow(id));
+        Restaurant restaurant = findByIdOrThrow(id);
+        imageIntake.discardAfterCommit(restaurant.getImageKey());
+        restaurant.getMenuItems().forEach(item -> imageIntake.discardAfterCommit(item.getImageKey()));
+        restaurantRepository.delete(restaurant);
         catalogCache.evictAll();
     }
 

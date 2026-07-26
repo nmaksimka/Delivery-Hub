@@ -10,9 +10,10 @@ import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.net.InetAddress;
 import java.net.URI;
+import java.time.Clock;
 
 @Configuration
 @EnableConfigurationProperties(StorageProperties.class)
@@ -30,19 +31,14 @@ public class StorageConfig {
                 .build();
     }
 
-    @Bean(destroyMethod = "close")
-    public S3Presigner s3Presigner(StorageProperties properties) {
-        return S3Presigner.builder()
-                .endpointOverride(URI.create(properties.publicEndpoint()))
-                .region(Region.of(properties.region()))
-                .credentialsProvider(credentials(properties))
-                .serviceConfiguration(pathStyle())
-                .build();
+    @Bean
+    public ImageStorage imageStorage(S3Client client, StorageProperties properties, Clock clock) {
+        return new S3ImageStorage(client, credentials(properties).resolveCredentials(), properties, clock);
     }
 
     @Bean
-    public ImageStorage imageStorage(S3Client client, S3Presigner presigner, StorageProperties properties) {
-        return new S3ImageStorage(client, presigner, properties);
+    public ImageSources.HostResolver hostResolver() {
+        return InetAddress::getAllByName;
     }
 
     private static S3Configuration pathStyle() {

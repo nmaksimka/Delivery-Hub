@@ -46,7 +46,9 @@ public class ImportProgress {
 
     @Transactional
     public void change(UUID jobId, Consumer<ImportJob> change) {
-        change.accept(importJobRepository.findById(jobId)
-                .orElseThrow(() -> new EntityNotFoundException("Import job " + jobId + " was not found")));
+        ImportJob job = importJobRepository.findById(jobId)
+                .orElseThrow(() -> new EntityNotFoundException("Import job " + jobId + " was not found"));
+        change.accept(job);
+        job.beat(clock.instant());
     }
 }

@@ -36,6 +36,10 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     int revokeSuccessorsOf(@Param("tokenId") UUID tokenId, @Param("revokedAt") Instant revokedAt);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE RefreshToken t SET t.revokedAt = :revokedAt WHERE t.userId = :userId AND t.revokedAt IS NULL")
+    int revokeAllOfUser(@Param("userId") Long userId, @Param("revokedAt") Instant revokedAt);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM RefreshToken t WHERE t.expiresAt < :before")
     int deleteExpiredBefore(@Param("before") Instant before);
 }
