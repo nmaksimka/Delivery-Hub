@@ -12,11 +12,13 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Component
 public class FoodFactsImport implements CatalogImport {
 
     private static final Logger log = LoggerFactory.getLogger(FoodFactsImport.class);
+    private static final Pattern BARCODE = Pattern.compile("\\d{8,14}");
 
     private final FoodFactsClient foodFactsClient;
     private final ProductCatalogWriter writer;
@@ -49,7 +51,7 @@ public class FoodFactsImport implements CatalogImport {
             for (ProductShelves.Group group : ProductShelves.groups()) {
                 for (FoodFactsProduct product : foodFactsClient
                         .popularInCategory(group.categoryTag(), properties.productsPerCategory())) {
-                    if (product.code() != null) {
+                    if (product.code() != null && BARCODE.matcher(product.code()).matches()) {
                         candidates.putIfAbsent(product.code(), new Candidate(group, product));
                     }
                 }
@@ -61,11 +63,7 @@ public class FoodFactsImport implements CatalogImport {
                 if (name == null || name.isBlank()) {
                     progress.skipped(jobId);
                 } else {
-                    String imageKey = imageMirror
-                            .mirror("openfoodfacts/products/" + candidate.product().code(),
-                                    candidate.product().imageUrl())
-                            .orElse(null);
-                    writer.store(jobId, candidate.group(), candidate.product(), imageKey);
+                    store(jobId, candidate);
                 }
             }
             progress.completed(jobId);
@@ -75,6 +73,18 @@ public class FoodFactsImport implements CatalogImport {
             progress.failed(jobId, e.getMessage());
         } finally {
             catalogCache.evictAll();
+        }
+    }
+
+    private void store(UUID jobId, Candidate candidate) {
+        FoodFactsProduct product = candidate.product();
+        try {
+            String imageKey = imageMirror.mirror("openfoodfacts/products/" + product.code(), product.imageUrl())
+                    .orElse(null);
+            writer.store(jobId, candidate.group(), product, imageKey);
+        } catch (RuntimeException e) {
+            log.warn("Import job {} skipped product {}: {}", jobId, product.code(), e.toString());
+            progress.skipped(jobId);
         }
     }
 

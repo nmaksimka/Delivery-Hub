@@ -32,11 +32,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, GarageContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, GarageContainerConfig.class})
 class MediaStorageIT {
 
-    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 9, 8, 7, 6, 5};
-    private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 4, 3, 2, 1};
+    private static final byte[] PNG = TestImages.png(1, 1);
+    private static final byte[] JPEG = TestImages.jpeg(1, 1);
 
     @Autowired
     private MockMvc mvc;
@@ -63,7 +63,7 @@ class MediaStorageIT {
                 .contains("X-Amz-Expires=43200").contains("X-Amz-Signature=");
         HttpResponse<byte[]> fetched = fetch(imageUrl);
         assertThat(fetched.statusCode()).isEqualTo(200);
-        assertThat(fetched.body()).containsExactly(PNG);
+        assertThat(TestImages.decode(fetched.body()).getWidth()).isEqualTo(1);
         assertThat(fetched.headers().firstValue("Content-Type")).contains("image/png");
         String servedUrl = JsonPath.read(mvc.perform(get("/api/restaurants/" + restaurant.getId())).andReturn()
                 .getResponse().getContentAsString(), "$.imageUrl");
@@ -97,7 +97,7 @@ class MediaStorageIT {
 
         String imageUrl = JsonPath.read(uploaded.getResponse().getContentAsString(), "$.imageUrl");
         assertThat(imageUrl).contains("/images/menu/" + restaurant.getId() + "/" + itemId + "/");
-        assertThat(fetch(imageUrl).body()).containsExactly(JPEG);
+        assertThat(TestImages.decode(fetch(imageUrl).body()).getWidth()).isEqualTo(1);
         assertThat(item.getName()).isEqualTo("Soup");
     }
 

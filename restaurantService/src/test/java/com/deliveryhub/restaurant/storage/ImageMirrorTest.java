@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ImageMirrorTest {
 
-    private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+    private static final byte[] JPEG = TestImages.jpeg(1, 1);
 
     private final WireMockServer images = new WireMockServer(options().dynamicPort());
     private final InMemoryImageStorage storage = new InMemoryImageStorage();
@@ -30,7 +30,7 @@ class ImageMirrorTest {
     @BeforeEach
     void setUp() {
         images.start();
-        StorageProperties properties = ImageIntakeTest.properties(DataSize.ofBytes(32));
+        StorageProperties properties = ImageIntakeTest.properties(DataSize.ofKilobytes(4));
         mirror = mirrorWith(properties, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
     }
 
@@ -50,7 +50,7 @@ class ImageMirrorTest {
 
         assertThat(mirror.mirror("mealdb/meals/1", images.baseUrl() + "/meal.jpg")).contains("mealdb/meals/1");
 
-        assertThat(storage.contentOf("mealdb/meals/1")).containsExactly(JPEG);
+        assertThat(TestImages.decode(storage.contentOf("mealdb/meals/1")).getWidth()).isEqualTo(1);
         assertThat(storage.contentTypeOf("mealdb/meals/1")).isEqualTo("image/jpeg");
     }
 
@@ -73,7 +73,7 @@ class ImageMirrorTest {
 
     @Test
     void givesUpOnOversizedImage() {
-        images.stubFor(get(urlEqualTo("/big.jpg")).willReturn(aResponse().withStatus(200).withBody(new byte[1000])));
+        images.stubFor(get(urlEqualTo("/big.jpg")).willReturn(aResponse().withStatus(200).withBody(new byte[5000])));
 
         assertThat(mirror.mirror("k", images.baseUrl() + "/big.jpg")).isEmpty();
         assertThat(storage.size()).isZero();
@@ -125,7 +125,7 @@ class ImageMirrorTest {
     @Test
     void refusesAllowedHostThatResolvesToInternalAddress() {
         images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
-        ImageMirror strict = mirrorWith(ImageIntakeTest.properties(DataSize.ofBytes(32)), InetAddress::getAllByName);
+        ImageMirror strict = mirrorWith(ImageIntakeTest.properties(DataSize.ofKilobytes(4)), InetAddress::getAllByName);
 
         assertThat(strict.mirror("k", images.baseUrl() + "/meal.jpg")).isEmpty();
 
@@ -136,12 +136,26 @@ class ImageMirrorTest {
     void refusesPlainHttpWhenOnlyHttpsIsAllowed() {
         images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
         StorageProperties httpsOnly = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
-                "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofBytes(32), Duration.ofSeconds(1),
-                Duration.ofSeconds(2), new StorageProperties.Mirror(Set.of("https"), Set.of("localhost")));
+                "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofKilobytes(4), Duration.ofSeconds(1),
+                Duration.ofSeconds(2), Duration.ofSeconds(30), new StorageProperties.Mirror(Set.of("https"), Set.of("localhost")));
         ImageMirror strict = mirrorWith(httpsOnly, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
 
         assertThat(strict.mirror("k", images.baseUrl() + "/meal.jpg")).isEmpty();
 
         images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
+    }
+
+    @Test
+    void givesUpWhenImageDribblesPastTheDeadline() {
+        images.stubFor(get(urlEqualTo("/slow.jpg"))
+                .willReturn(aResponse().withStatus(200).withBody(JPEG).withChunkedDribbleDelay(8, 2000)));
+        StorageProperties shortDeadline = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
+                "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofKilobytes(4), Duration.ofSeconds(1),
+                Duration.ofSeconds(2), Duration.ofMillis(500),
+                new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
+        ImageMirror strict = mirrorWith(shortDeadline, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
+
+        assertThat(strict.mirror("k", images.baseUrl() + "/slow.jpg")).isEmpty();
+        assertThat(storage.size()).isZero();
     }
 }

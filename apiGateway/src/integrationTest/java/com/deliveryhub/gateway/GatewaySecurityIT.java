@@ -94,7 +94,8 @@ class GatewaySecurityIT {
         SERVICES.verify(getRequestedFor(urlEqualTo("/api/orders"))
                 .withHeader("X-User-Id", equalTo("7"))
                 .withHeader("X-User-Email", equalTo("kate@example.com"))
-                .withHeader("X-User-Role", equalTo("USER")));
+                .withHeader("X-User-Role", equalTo("USER"))
+                .withHeader("X-Internal-Token", equalTo("local-dev-internal-token")));
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mealdb.MealDbMeal;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageSources;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,13 +21,16 @@ public class MealCatalogWriter {
     private final RestaurantRepository restaurantRepository;
     private final MenuItemRepository menuItemRepository;
     private final ImportProgress progress;
+    private final ImageSources imageSources;
 
     public MealCatalogWriter(RestaurantRepository restaurantRepository,
                              MenuItemRepository menuItemRepository,
-                             ImportProgress progress) {
+                             ImportProgress progress,
+                             ImageSources imageSources) {
         this.restaurantRepository = restaurantRepository;
         this.menuItemRepository = menuItemRepository;
         this.progress = progress;
+        this.imageSources = imageSources;
     }
 
     @Transactional
@@ -40,7 +44,8 @@ public class MealCatalogWriter {
             return;
         }
         Restaurant restaurant = known.orElseGet(() -> restaurantRepository.save(newRestaurant(source, area)));
-        restaurant.useImportedImage(meal.strMealThumb());
+        String imageUrl = imageSources.trusted(meal.strMealThumb()).orElse(null);
+        restaurant.useImportedImage(imageUrl);
         if (restaurant.getImageKey() == null && imageKey != null) {
             restaurant.storeImage(imageKey);
         }
@@ -54,7 +59,7 @@ public class MealCatalogWriter {
                 .findByRestaurantIdAndExternalSourceAndExternalId(restaurant.getId(), source, meal.idMeal());
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, description, price, category));
         item.changeDetails(name, description, price, category);
-        item.changeImage(meal.strMealThumb());
+        item.changeImage(imageUrl);
         if (item.getImageKey() == null && imageKey != null) {
             item.storeImage(imageKey);
         }

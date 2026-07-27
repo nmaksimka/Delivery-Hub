@@ -39,10 +39,10 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, GarageContainerConfig.class, LocalImageSourceConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, GarageContainerConfig.class, LocalImageSourceConfig.class})
 class FoodFactsImportIT {
 
-    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
+    private static final byte[] PNG = TestImages.png(1, 1);
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final WireMockServer FOOD_FACTS = new WireMockServer(options().dynamicPort());
@@ -88,7 +88,8 @@ class FoodFactsImportIT {
                   {"code": "5449000000996", "product_name": "Coca-Cola", "brands": "Coca-Cola, Other",
                    "quantity": "330 ml", "nutriscore_grade": "e", "image_front_url": "IMG_HOST/images/cola.jpg",
                    "nutriments": {"energy-kcal_100g": 42, "proteins_100g": 0, "fat_100g": 0, "carbohydrates_100g": 10.6}},
-                  {"code": "no-name", "product_name": " "}]}
+                  {"code": "4000000000001", "product_name": " "},
+                  {"code": "../../etc", "product_name": "Bad barcode"}]}
                 """.replace("IMG_HOST", FOOD_FACTS.baseUrl()));
         stubCategory("waters", """
                 {"products": [{"code": "3068320055008", "product_name": "Evian", "product_name_ru": "Эвиан",

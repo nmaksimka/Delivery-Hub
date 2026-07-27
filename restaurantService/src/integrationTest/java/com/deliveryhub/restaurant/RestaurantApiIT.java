@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresContainerConfig.class)
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class})
 class RestaurantApiIT {
 
     @Autowired

@@ -6,20 +6,26 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Optional;
 
 @Component
 public class ImageMirror {
 
     private static final Logger log = LoggerFactory.getLogger(ImageMirror.class);
+    private static final int CHUNK_SIZE = 8192;
 
     private final ImageStorage imageStorage;
     private final ImageIntake imageIntake;
     private final ImageSources sources;
     private final StorageProperties properties;
     private final RestClient http;
+    private final Duration deadline;
 
     public ImageMirror(ImageStorage imageStorage, ImageIntake imageIntake, ImageSources sources,
                        StorageProperties properties, RestClient.Builder builder) {
@@ -33,6 +39,7 @@ public class ImageMirror {
                 .build());
         requestFactory.setReadTimeout(properties.downloadReadTimeout());
         this.http = builder.requestFactory(requestFactory).build();
+        this.deadline = properties.downloadDeadline();
     }
 
     public Optional<String> mirror(String key, String sourceUrl) {
@@ -67,7 +74,21 @@ public class ImageMirror {
                 log.warn("Image {} answered with status {}", source, response.getStatusCode().value());
                 return null;
             }
-            return response.getBody().readNBytes(limit + 1);
+            return readBefore(response.getBody(), limit + 1, System.nanoTime() + deadline.toNanos());
         });
+    }
+
+    private static byte[] readBefore(InputStream body, int maxBytes, long deadlineNanos) throws IOException {
+        ByteArrayOutputStream content = new ByteArrayOutputStream();
+        byte[] chunk = new byte[CHUNK_SIZE];
+        int read;
+        while (content.size() < maxBytes
+                && (read = body.read(chunk, 0, Math.min(chunk.length, maxBytes - content.size()))) != -1) {
+            if (System.nanoTime() - deadlineNanos > 0) {
+                throw new IOException("Image download took longer than allowed");
+            }
+            content.write(chunk, 0, read);
+        }
+        return content.toByteArray();
     }
 }

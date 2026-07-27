@@ -5,6 +5,7 @@ import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.foodfacts.FoodFactsProduct;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
+import com.deliveryhub.restaurant.storage.ImageSources;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +23,16 @@ public class ProductCatalogWriter {
     private final RestaurantRepository restaurantRepository;
     private final MenuItemRepository menuItemRepository;
     private final ImportProgress progress;
+    private final ImageSources imageSources;
 
     public ProductCatalogWriter(RestaurantRepository restaurantRepository,
                                 MenuItemRepository menuItemRepository,
-                                ImportProgress progress) {
+                                ImportProgress progress,
+                                ImageSources imageSources) {
         this.restaurantRepository = restaurantRepository;
         this.menuItemRepository = menuItemRepository;
         this.progress = progress;
+        this.imageSources = imageSources;
     }
 
     @Transactional
@@ -50,7 +54,7 @@ public class ProductCatalogWriter {
                 .findByRestaurantIdAndExternalSourceAndExternalId(restaurant.getId(), source, product.code());
         MenuItem item = existing.orElseGet(() -> restaurant.addMenuItem(name, null, price, group.menuCategory()));
         item.changeDetails(name, describe(product), price, group.menuCategory());
-        item.changeImage(product.imageUrl());
+        item.changeImage(imageSources.trusted(product.imageUrl()).orElse(null));
         if (item.getImageKey() == null && imageKey != null) {
             item.storeImage(imageKey);
         }

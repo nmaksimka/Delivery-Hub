@@ -28,7 +28,7 @@ public class ImageIntake {
             throw new ImageTooLargeException(limit);
         }
         ImageFormat format = ImageFormat.detect(content).orElseThrow(UnsupportedImageException::new);
-        imageStorage.put(key, content, format.contentType());
+        imageStorage.put(key, ImageReencoder.withoutMetadata(content, format), format.contentType());
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

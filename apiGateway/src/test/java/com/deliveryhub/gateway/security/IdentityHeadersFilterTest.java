@@ -21,7 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class IdentityHeadersFilterTest {
 
-    private final IdentityHeadersFilter filter = new IdentityHeadersFilter();
+    private static final String INTERNAL_TOKEN = "gateway-secret";
+
+    private final IdentityHeadersFilter filter = new IdentityHeadersFilter(INTERNAL_TOKEN);
     private final RoleFromTokenConverter converter = new RoleFromTokenConverter();
 
     private AtomicReference<ServerWebExchange> forwarded;
@@ -74,6 +76,27 @@ class IdentityHeadersFilterTest {
         assertThat(headers.getFirst(IdentityHeadersFilter.HEADER_USER_ID)).isNull();
         assertThat(headers.getFirst(IdentityHeadersFilter.HEADER_USER_EMAIL)).isNull();
         assertThat(headers.getFirst(IdentityHeadersFilter.HEADER_USER_ROLE)).isNull();
+    }
+
+    @Test
+    void replacesInternalTokenSentByClientWithGatewaySecret() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/restaurants")
+                .header(IdentityHeadersFilter.HEADER_INTERNAL_TOKEN, "guessed"));
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(forwarded.get().getRequest().getHeaders().get(IdentityHeadersFilter.HEADER_INTERNAL_TOKEN))
+                .containsExactly(INTERNAL_TOKEN);
+    }
+
+    @Test
+    void addsInternalTokenToAuthenticatedRequest() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/orders"));
+
+        filterAs(exchange, authenticated(jwt(7L, "USER", "user@example.com")));
+
+        assertThat(forwarded.get().getRequest().getHeaders().get(IdentityHeadersFilter.HEADER_INTERNAL_TOKEN))
+                .containsExactly(INTERNAL_TOKEN);
     }
 
     @Test

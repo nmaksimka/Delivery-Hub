@@ -32,6 +32,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   cache:
     type: redis
     redis:
@@ -42,6 +43,7 @@ spring:
       max-request-size: 7MB
 
 app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   storage:
     endpoint: ${STORAGE_ENDPOINT:http://localhost:3900}
     public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:3900}
@@ -53,6 +55,7 @@ app:
     max-image-size: 5MB
     download-connect-timeout: 2s
     download-read-timeout: 10s
+    download-deadline: 30s
     mirror:
       allowed-schemes: https
       allowed-hosts: www.themealdb.com,images.openfoodfacts.org

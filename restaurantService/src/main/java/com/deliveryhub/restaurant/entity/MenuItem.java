@@ -27,6 +27,7 @@ public class MenuItem {
     @Column(nullable = false)
     private String name;
 
+    @Column(length = 2000)
     private String description;
 
     @Column(nullable = false, precision = 10, scale = 2)

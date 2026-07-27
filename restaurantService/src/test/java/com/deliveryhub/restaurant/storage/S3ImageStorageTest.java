@@ -17,7 +17,7 @@ class S3ImageStorageTest {
     private static final StorageProperties PROPERTIES = new StorageProperties("http://garage:3900",
             "http://localhost:3900", "garage", "images", "GKtest", "secret", Duration.ofHours(12),
             DataSize.ofMegabytes(5), Duration.ofSeconds(1), Duration.ofSeconds(2),
-            new StorageProperties.Mirror(Set.of("https"), Set.of("www.themealdb.com")));
+            Duration.ofSeconds(30), new StorageProperties.Mirror(Set.of("https"), Set.of("www.themealdb.com")));
 
     @Test
     void signsUrlForPublicEndpointWithConfiguredTtl() {

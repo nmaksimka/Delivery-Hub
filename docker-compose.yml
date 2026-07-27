@@ -12,6 +12,10 @@ x-platform-credentials: &platform-credentials
   CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
   EUREKA_USER: ${EUREKA_USER:-eureka}
   EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required, see .env.example}
+
+x-redis-credentials: &redis-credentials
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
 
 x-json-logs: &json-logs
   LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
@@ -87,7 +91,10 @@ services:
   redis:
     image: redis:8.6.3-alpine
     container_name: redis
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -220,7 +227,7 @@ services:
     expose:
       - "9331"
     environment:
-      <<: [*platform-credentials, *json-logs, *storage-credentials]
+      <<: [*platform-credentials, *json-logs, *storage-credentials, *redis-credentials]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
       STORAGE_ENDPOINT: http://garage:3900
@@ -331,7 +338,7 @@ services:
     ports:
       - "3335:3335"
     environment:
-      <<: [*platform-credentials, *json-logs]
+      <<: [*platform-credentials, *json-logs, *redis-credentials]
       SPRING_PROFILES_ACTIVE: docker
     depends_on:
       redis:

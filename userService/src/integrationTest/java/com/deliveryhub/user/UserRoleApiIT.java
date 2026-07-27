@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresContainerConfig.class)
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class})
 class UserRoleApiIT {
 
     private static final String ADMIN_ID = "1000000";

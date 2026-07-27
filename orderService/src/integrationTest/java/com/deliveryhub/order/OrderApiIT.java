@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, KafkaContainerConfig.class})
 class OrderApiIT {
 
     private static final long RESTAURANT_ID = 1L;

@@ -25,8 +25,8 @@ public class MealDbHttp {
     }
 
     @Cacheable(cacheNames = CACHE, unless = "#result == null")
-    public String get(String pathAndQuery) {
-        Supplier<String> call = () -> restClient.get().uri(pathAndQuery).retrieve().body(String.class);
+    public String get(String uriTemplate, Object... uriVariables) {
+        Supplier<String> call = () -> restClient.get().uri(uriTemplate, uriVariables).retrieve().body(String.class);
         Supplier<String> limited = RateLimiter.decorateSupplier(rateLimiter, call);
         return Retry.decorateSupplier(retry, CircuitBreaker.decorateSupplier(circuitBreaker, limited)).get();
     }
