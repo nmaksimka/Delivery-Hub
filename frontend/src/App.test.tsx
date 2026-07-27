@@ -139,6 +139,22 @@ describe('protected routes', () => {
     });
   });
 
+  it('revokesRefreshTokenOnLogout', async () => {
+    sessionStore.set(session);
+    const fetchMock = stubApi({
+      'GET /api/restaurants': { body: [] },
+      'POST /api/auth/logout': { status: 204, body: null },
+    });
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await user.click(await screen.findByRole('button', { name: 'Выйти из аккаунта Максим' }));
+
+    expect(sessionStore.get()).toBeNull();
+    const logout = fetchMock.mock.calls.find(([url]) => url === '/api/auth/logout');
+    expect(JSON.parse(String(logout?.[1]?.body))).toEqual({ refreshToken: 'refresh-token' });
+  });
+
   it('showsNotFoundPageForUnknownAddress', async () => {
     stubApi({});
     renderApp('/no-such-page');
