@@ -14,11 +14,13 @@ import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Component
 public class MealImport implements CatalogImport {
 
     private static final Logger log = LoggerFactory.getLogger(MealImport.class);
+    private static final Pattern MEAL_ID = Pattern.compile("\\d{1,12}");
 
     private final MealDbClient mealDbClient;
     private final MealCatalogWriter writer;
@@ -59,10 +61,7 @@ public class MealImport implements CatalogImport {
             for (String mealId : mealIds) {
                 Optional<MealDbMeal> meal = mealDbClient.meal(mealId);
                 if (meal.isPresent() && isComplete(meal.get())) {
-                    String imageKey = imageMirror
-                            .mirror("mealdb/meals/" + meal.get().idMeal(), meal.get().strMealThumb())
-                            .orElse(null);
-                    writer.store(jobId, meal.get(), imageKey);
+                    store(jobId, meal.get());
                 } else {
                     progress.skipped(jobId);
                 }
@@ -77,7 +76,18 @@ public class MealImport implements CatalogImport {
         }
     }
 
+    private void store(UUID jobId, MealDbMeal meal) {
+        try {
+            String imageKey = imageMirror.mirror("mealdb/meals/" + meal.idMeal(), meal.strMealThumb()).orElse(null);
+            writer.store(jobId, meal, imageKey);
+        } catch (RuntimeException e) {
+            log.warn("Import job {} skipped meal {}: {}", jobId, meal.idMeal(), e.toString());
+            progress.skipped(jobId);
+        }
+    }
+
     private static boolean isComplete(MealDbMeal meal) {
-        return meal.idMeal() != null && meal.strMeal() != null && !meal.strMeal().isBlank();
+        return meal.idMeal() != null && MEAL_ID.matcher(meal.idMeal()).matches()
+                && meal.strMeal() != null && !meal.strMeal().isBlank();
     }
 }
