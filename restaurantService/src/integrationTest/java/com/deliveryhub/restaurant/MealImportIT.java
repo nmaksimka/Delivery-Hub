@@ -41,7 +41,7 @@ import static org.awaitility.Awaitility.await;
 @Import({PostgresContainerConfig.class, GatewayTokenConfig.class, GarageContainerConfig.class, LocalImageSourceConfig.class})
 class MealImportIT {
 
-    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
+    private static final byte[] PNG = TestImages.png(1, 1);
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final WireMockServer MEAL_DB = new WireMockServer(options().dynamicPort());
