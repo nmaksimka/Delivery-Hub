@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod';
-import { sessionStore } from '../auth/sessionStore';
+import { sessionStore, type Session } from '../auth/sessionStore';
+import { sessionFrom, tokenResponseSchema } from './tokens';
 
 type QueryValue = string | number | boolean | undefined;
 
@@ -71,19 +72,54 @@ function messageFor(status: number) {
   return statusMessages[status] ?? 'Запрос не выполнен, попробуйте ещё раз';
 }
 
-export async function request<T>(path: string, options: RequestOptions<T>): Promise<T> {
-  const session = sessionStore.get();
+const authPathPrefix = '/api/auth/';
+
+let pendingRefresh: Promise<Session | null> | null = null;
+
+async function exchangeRefreshToken(refreshToken: string): Promise<Session | null> {
+  try {
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const parsed = tokenResponseSchema.safeParse(await response.json());
+    return parsed.success ? sessionFrom(parsed.data) : null;
+  } catch {
+    return null;
+  }
+}
+
+function refreshSession(expired: Session): Promise<Session | null> {
+  const latest = sessionStore.get();
+  if (latest && latest.accessToken !== expired.accessToken) {
+    return Promise.resolve(latest);
+  }
+  pendingRefresh ??= exchangeRefreshToken(expired.refreshToken).then((renewed) => {
+    pendingRefresh = null;
+    if (renewed) {
+      sessionStore.set(renewed);
+    } else {
+      sessionStore.clear();
+    }
+    return renewed;
+  });
+  return pendingRefresh;
+}
+
+async function send<T>(path: string, options: RequestOptions<T>, session: Session | null) {
   const headers = new Headers({ Accept: 'application/json' });
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
   }
   if (session) {
-    headers.set('Authorization', `Bearer ${session.token}`);
+    headers.set('Authorization', `Bearer ${session.accessToken}`);
   }
-
-  let response: Response;
   try {
-    response = await fetch(buildUrl(path, options.query), {
+    return await fetch(buildUrl(path, options.query), {
       method: options.method ?? 'GET',
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -95,9 +131,20 @@ export async function request<T>(path: string, options: RequestOptions<T>): Prom
     }
     throw new ApiError(0, 'Нет связи с сервером, проверьте интернет');
   }
+}
 
-  if (response.status === 401 && session) {
-    sessionStore.clear();
+export async function request<T>(path: string, options: RequestOptions<T>): Promise<T> {
+  const session = sessionStore.get();
+  let response = await send(path, options, session);
+
+  if (response.status === 401 && session && !path.startsWith(authPathPrefix)) {
+    const renewed = await refreshSession(session);
+    if (renewed) {
+      response = await send(path, options, renewed);
+      if (response.status === 401) {
+        sessionStore.clear();
+      }
+    }
   }
   if (!response.ok) {
     throw new ApiError(response.status, messageFor(response.status), await readDetail(response));

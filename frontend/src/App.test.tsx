@@ -22,7 +22,8 @@ const menu = [
 ].map((item) => ({ ...item, available: true, restaurantId: 1 }));
 
 const session = {
-  token: 'jwt-token',
+  accessToken: 'jwt-token',
+  refreshToken: 'refresh-token',
   user: { id: 5, email: 'max@example.com', name: 'Максим', role: 'USER' },
 };
 
