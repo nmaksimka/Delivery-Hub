@@ -9,7 +9,8 @@ import { RestaurantCard } from '../components/RestaurantCard';
 import { StateMessage } from '../components/StateMessage';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
-import { allFilterId, filterRestaurants, isOpenAt, quickFilters } from '../lib/restaurantFilters';
+import { allFilterId, filterRestaurants, quickFilters } from '../lib/restaurantFilters';
+import { isOpenAt } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import styles from './HomePage.module.css';
 

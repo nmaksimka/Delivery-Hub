@@ -14,7 +14,7 @@ import { StateMessage } from '../components/StateMessage';
 import { formatClock } from '../lib/format';
 import { groupMenu } from '../lib/menuGroups';
 import { placeholderEta, placeholderRating } from '../lib/placeholders';
-import { isOpenAt } from '../lib/restaurantFilters';
+import { isOpenAt } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './RestaurantPage.module.css';
