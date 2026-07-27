@@ -7,6 +7,9 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.Retry;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -173,6 +176,25 @@ class MealDbClientTest {
 
         assertThatThrownBy(() -> client.categories()).isInstanceOf(MealDbUnavailableException.class);
         mealDb.verify(1, getRequestedFor(urlEqualTo("/categories.php")));
+    }
+
+    @Test
+    void reportsUriTemplateInsteadOfConcreteUrlToMetrics() {
+        mealDb.stubFor(get(urlPathEqualTo("/filter.php")).willReturn(okJson("{\"meals\": []}")));
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ObservationRegistry observations = ObservationRegistry.create();
+        observations.observationConfig().observationHandler(new DefaultMeterObservationHandler(meters));
+        MealDbHttp http = new MealDbHttp(RestClient.builder().baseUrl(mealDb.baseUrl())
+                .observationRegistry(observations).build(),
+                MealDbConfig.rateLimiter(PROPERTIES), CircuitBreaker.ofDefaults("metrics"), MealDbConfig.retry(PROPERTIES));
+        MealDbClient observed = new MealDbClient(http, JsonMapper.builder().build());
+
+        observed.mealsOfCategory("Beef");
+        observed.mealsOfCategory("Sea food");
+
+        assertThat(meters.find("http.client.requests").timers())
+                .extracting(timer -> timer.getId().getTag("uri"))
+                .containsExactly("/filter.php?c={category}");
     }
 
     private MealDbClient clientWith(RateLimiter rateLimiter, CircuitBreaker circuitBreaker) {
