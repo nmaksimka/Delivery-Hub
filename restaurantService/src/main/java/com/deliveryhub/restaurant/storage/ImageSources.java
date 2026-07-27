@@ -5,14 +5,18 @@ import org.springframework.stereotype.Component;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
 public class ImageSources {
+
+    private static final int MAX_URL_LENGTH = 512;
 
     private final Set<String> schemes;
     private final Set<String> hosts;
@@ -22,6 +26,17 @@ public class ImageSources {
         this.schemes = lowerCase(properties.mirror().allowedSchemes());
         this.hosts = lowerCase(properties.mirror().allowedHosts());
         this.resolver = resolver;
+    }
+
+    public Optional<String> trusted(String url) {
+        if (url == null || url.length() > MAX_URL_LENGTH) {
+            return Optional.empty();
+        }
+        try {
+            return permits(new URI(url)) ? Optional.of(url) : Optional.empty();
+        } catch (URISyntaxException e) {
+            return Optional.empty();
+        }
     }
 
     public boolean permits(URI uri) {
