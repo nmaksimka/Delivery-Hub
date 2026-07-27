@@ -11,9 +11,25 @@ const restaurantSchema = z.object({
   name: z.string(),
   address: optionalText,
   phone: optionalText,
+  cuisine: optionalText,
+  city: optionalText,
+  imageUrl: optionalText,
   openTime: optionalText,
   closeTime: optionalText,
   active: z.boolean(),
+});
+
+const optionalAmount = z.coerce
+  .number()
+  .nullish()
+  .transform((value) => value ?? null);
+
+const nutritionSchema = z.object({
+  energyKcal: optionalAmount,
+  proteinGrams: optionalAmount,
+  fatGrams: optionalAmount,
+  carbsGrams: optionalAmount,
+  nutriScore: optionalText,
 });
 
 const menuItemSchema = z.object({
@@ -23,10 +39,17 @@ const menuItemSchema = z.object({
   price: z.coerce.number(),
   category: optionalText,
   available: z.boolean(),
+  imageUrl: optionalText,
+  section: z
+    .enum(['DISH', 'PRODUCT', 'DRINK'])
+    .nullish()
+    .transform((value) => value ?? 'DISH'),
+  nutrition: nutritionSchema.nullish().transform((value) => value ?? null),
 });
 
 export type Restaurant = z.infer<typeof restaurantSchema>;
 export type MenuItem = z.infer<typeof menuItemSchema>;
+export type Nutrition = z.infer<typeof nutritionSchema>;
 
 export const restaurantsApi = {
   list(options: { activeOnly?: boolean; signal?: AbortSignal } = {}) {
@@ -41,6 +64,7 @@ export const restaurantsApi = {
   },
   menu(restaurantId: number, signal?: AbortSignal) {
     return request(`/api/restaurants/${restaurantId}/menu`, {
+      query: { availableOnly: false },
       schema: z.array(menuItemSchema),
       signal,
     });
