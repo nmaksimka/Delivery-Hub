@@ -88,7 +88,8 @@ class FoodFactsImportIT {
                   {"code": "5449000000996", "product_name": "Coca-Cola", "brands": "Coca-Cola, Other",
                    "quantity": "330 ml", "nutriscore_grade": "e", "image_front_url": "IMG_HOST/images/cola.jpg",
                    "nutriments": {"energy-kcal_100g": 42, "proteins_100g": 0, "fat_100g": 0, "carbohydrates_100g": 10.6}},
-                  {"code": "no-name", "product_name": " "}]}
+                  {"code": "4000000000001", "product_name": " "},
+                  {"code": "../../etc", "product_name": "Bad barcode"}]}
                 """.replace("IMG_HOST", FOOD_FACTS.baseUrl()));
         stubCategory("waters", """
                 {"products": [{"code": "3068320055008", "product_name": "Evian", "product_name_ru": "Эвиан",
