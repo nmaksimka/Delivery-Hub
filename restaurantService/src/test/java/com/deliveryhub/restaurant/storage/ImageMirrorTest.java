@@ -137,11 +137,25 @@ class ImageMirrorTest {
         images.stubFor(get(urlEqualTo("/meal.jpg")).willReturn(aResponse().withStatus(200).withBody(JPEG)));
         StorageProperties httpsOnly = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
                 "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofKilobytes(4), Duration.ofSeconds(1),
-                Duration.ofSeconds(2), new StorageProperties.Mirror(Set.of("https"), Set.of("localhost")));
+                Duration.ofSeconds(2), Duration.ofSeconds(30), new StorageProperties.Mirror(Set.of("https"), Set.of("localhost")));
         ImageMirror strict = mirrorWith(httpsOnly, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
 
         assertThat(strict.mirror("k", images.baseUrl() + "/meal.jpg")).isEmpty();
 
         images.verify(0, getRequestedFor(urlEqualTo("/meal.jpg")));
+    }
+
+    @Test
+    void givesUpWhenImageDribblesPastTheDeadline() {
+        images.stubFor(get(urlEqualTo("/slow.jpg"))
+                .willReturn(aResponse().withStatus(200).withBody(JPEG).withChunkedDribbleDelay(8, 2000)));
+        StorageProperties shortDeadline = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
+                "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofKilobytes(4), Duration.ofSeconds(1),
+                Duration.ofSeconds(2), Duration.ofMillis(500),
+                new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
+        ImageMirror strict = mirrorWith(shortDeadline, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
+
+        assertThat(strict.mirror("k", images.baseUrl() + "/slow.jpg")).isEmpty();
+        assertThat(storage.size()).isZero();
     }
 }

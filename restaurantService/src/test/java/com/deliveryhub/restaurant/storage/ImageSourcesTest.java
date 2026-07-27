@@ -47,7 +47,7 @@ class ImageSourcesTest {
     private static ImageSources publicSources() {
         StorageProperties properties = new StorageProperties("http://localhost:1", "http://localhost:1", "garage",
                 "images", "key", "secret", Duration.ofMinutes(10), DataSize.ofMegabytes(1), Duration.ofSeconds(1),
-                Duration.ofSeconds(2), new StorageProperties.Mirror(Set.of("https"), Set.of("www.themealdb.com")));
+                Duration.ofSeconds(2), Duration.ofSeconds(30), new StorageProperties.Mirror(Set.of("https"), Set.of("www.themealdb.com")));
         return new ImageSources(properties, host -> new InetAddress[]{InetAddress.getByName("93.184.216.34")});
     }
 }

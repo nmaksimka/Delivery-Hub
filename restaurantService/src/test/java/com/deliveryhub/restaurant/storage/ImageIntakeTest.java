@@ -174,6 +174,6 @@ class ImageIntakeTest {
     static StorageProperties properties(DataSize maxImageSize) {
         return new StorageProperties("http://localhost:1", "http://localhost:1", "garage", "images", "key", "secret",
                 Duration.ofMinutes(10), maxImageSize, Duration.ofSeconds(1), Duration.ofSeconds(2),
-                new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
+                Duration.ofSeconds(30), new StorageProperties.Mirror(Set.of("http"), Set.of("localhost")));
     }
 }

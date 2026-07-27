@@ -22,6 +22,7 @@ public record StorageProperties(
         @DefaultValue("5MB") DataSize maxImageSize,
         @DefaultValue("2s") Duration downloadConnectTimeout,
         @DefaultValue("10s") Duration downloadReadTimeout,
+        @DefaultValue("30s") Duration downloadDeadline,
         @DefaultValue Mirror mirror) {
 
     public record Mirror(

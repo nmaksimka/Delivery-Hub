@@ -55,6 +55,7 @@ app:
     max-image-size: 5MB
     download-connect-timeout: 2s
     download-read-timeout: 10s
+    download-deadline: 30s
     mirror:
       allowed-schemes: https
       allowed-hosts: www.themealdb.com,images.openfoodfacts.org
