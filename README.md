@@ -105,9 +105,22 @@ graph TB
 ```bash
 git clone https://github.com/nmaksimka/Delivery-Hub.git
 cd Delivery-Hub
-cp .env.example .env      # обязательно: задайте пароли eureka / config / grafana
+cp .env.example .env      # обязательно: задайте пароли eureka / config / grafana и секреты ниже
 docker compose up --build
 ```
+
+Секреты Garage, S3, Redis и внутренний токен шлюза в `.env.example` пустые — сгенерируйте свои:
+
+```bash
+echo "GARAGE_RPC_SECRET=$(openssl rand -hex 32)" >> .env
+echo "GARAGE_ADMIN_TOKEN=$(openssl rand -hex 32)" >> .env
+echo "STORAGE_ACCESS_KEY=GK$(openssl rand -hex 12)" >> .env
+echo "STORAGE_SECRET_KEY=$(openssl rand -hex 32)" >> .env
+echo "REDIS_PASSWORD=$(openssl rand -hex 32)" >> .env
+echo "INTERNAL_TOKEN=$(openssl rand -hex 32)" >> .env
+```
+
+Пустые строки с этими именами из `.env.example` перед этим удалите, иначе compose возьмёт пустое значение.
 
 `JWT_PRIVATE_KEY` можно не задавать: тогда User Service при старте сгенерирует временный RSA-ключ,
 и после перезапуска все выданные токены перестанут приниматься. Постоянный ключ (PKCS#8, одной строкой):
