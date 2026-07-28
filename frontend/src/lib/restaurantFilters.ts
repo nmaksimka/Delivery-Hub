@@ -1,4 +1,5 @@
 import type { Restaurant } from '../api/restaurants';
+import { isOpenAt } from './workingHours';
 
 export type QuickFilter = {
   id: string;
@@ -12,39 +13,13 @@ export const openFilterId = 'open';
 export const quickFilters: QuickFilter[] = [
   { id: allFilterId, label: 'Все' },
   { id: openFilterId, label: 'Открыто сейчас' },
-  { id: 'pizza', label: 'Пицца', stems: ['пицц', 'pizz'] },
-  { id: 'sushi', label: 'Суши и роллы', stems: ['суши', 'ролл', 'sushi'] },
-  { id: 'burger', label: 'Бургеры', stems: ['бургер', 'burger'] },
+  { id: 'pizza', label: 'Пицца', stems: ['пицц', 'pizz', 'итальян'] },
+  { id: 'sushi', label: 'Суши и роллы', stems: ['суши', 'ролл', 'sushi', 'японск'] },
+  { id: 'burger', label: 'Бургеры', stems: ['бургер', 'burger', 'американ'] },
   { id: 'grill', label: 'Шашлык и гриль', stems: ['шашлы', 'гриль', 'мангал', 'grill'] },
-  { id: 'asia', label: 'Азия', stems: ['вок', 'wok', 'рамен', 'лапш', 'азия'] },
+  { id: 'asia', label: 'Азия', stems: ['вок', 'wok', 'рамен', 'лапш', 'азия', 'китайск', 'тайск', 'вьетнам'] },
   { id: 'coffee', label: 'Кофе и выпечка', stems: ['коф', 'пекарн', 'булоч', 'coffee'] },
 ];
-
-function minutesOf(time: string | null) {
-  if (!time) {
-    return null;
-  }
-  const [hours, minutes] = time.split(':').map(Number);
-  if (hours === undefined || minutes === undefined || Number.isNaN(hours + minutes)) {
-    return null;
-  }
-  return hours * 60 + minutes;
-}
-
-export function isOpenAt(restaurant: Restaurant, now: Date) {
-  if (!restaurant.active) {
-    return false;
-  }
-  const opens = minutesOf(restaurant.openTime);
-  const closes = minutesOf(restaurant.closeTime);
-  if (opens === null || closes === null || opens === closes) {
-    return true;
-  }
-  const current = now.getHours() * 60 + now.getMinutes();
-  return opens < closes
-    ? current >= opens && current < closes
-    : current >= opens || current < closes;
-}
 
 type Criteria = {
   query: string;
@@ -58,16 +33,17 @@ export function filterRestaurants(restaurants: Restaurant[], criteria: Criteria)
 
   return restaurants.filter((restaurant) => {
     const name = restaurant.name.toLowerCase();
-    const address = restaurant.address?.toLowerCase() ?? '';
+    const cuisine = restaurant.cuisine?.toLowerCase() ?? '';
+    const searchable = [name, cuisine, restaurant.address?.toLowerCase() ?? ''];
 
-    if (query && !name.includes(query) && !address.includes(query)) {
+    if (query && !searchable.some((text) => text.includes(query))) {
       return false;
     }
     if (criteria.filterId === openFilterId) {
       return isOpenAt(restaurant, criteria.now);
     }
     if (filter?.stems) {
-      return filter.stems.some((stem) => name.includes(stem));
+      return filter.stems.some((stem) => name.includes(stem) || cuisine.includes(stem));
     }
     return true;
   });
