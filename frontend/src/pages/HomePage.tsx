@@ -10,7 +10,7 @@ import { StateMessage } from '../components/StateMessage';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
 import { allFilterId, filterRestaurants, quickFilters } from '../lib/restaurantFilters';
-import { isOpenAt } from '../lib/workingHours';
+import { closedBadge } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import styles from './HomePage.module.css';
 
@@ -138,7 +138,7 @@ export function HomePage() {
           <ul className={styles.grid}>
             {visible.map((restaurant) => (
               <li key={restaurant.id}>
-                <RestaurantCard restaurant={restaurant} open={isOpenAt(restaurant, now)} />
+                <RestaurantCard restaurant={restaurant} closedBadge={closedBadge(restaurant, now)} />
               </li>
             ))}
           </ul>

@@ -1,7 +1,6 @@
 import { Link } from 'react-router';
 import type { Restaurant } from '../api/restaurants';
 import { cx } from '../lib/cx';
-import { formatClock } from '../lib/format';
 import { placeholderEta, placeholderRating } from '../lib/placeholders';
 import { Cover } from './Cover';
 import { ClockIcon, StarIcon } from './icons';
@@ -9,11 +8,11 @@ import styles from './RestaurantCard.module.css';
 
 type RestaurantCardProps = {
   restaurant: Restaurant;
-  open: boolean;
+  closedBadge: string | null;
 };
 
-export function RestaurantCard({ restaurant, open }: RestaurantCardProps) {
-  const opensAt = formatClock(restaurant.openTime);
+export function RestaurantCard({ restaurant, closedBadge }: RestaurantCardProps) {
+  const place = [restaurant.address, restaurant.city].filter(Boolean).join(', ');
 
   return (
     <Link to={`/restaurants/${restaurant.id}`} className={styles.card}>
@@ -21,11 +20,11 @@ export function RestaurantCard({ restaurant, open }: RestaurantCardProps) {
         <Cover
           title={restaurant.name}
           seed={restaurant.id}
-          className={cx(styles.cover, !open && styles.dimmed)}
+          imageUrl={restaurant.imageUrl}
+          className={cx(styles.cover, closedBadge && styles.dimmed)}
         />
-        {!open && (
-          <span className={styles.closed}>{opensAt ? `Закрыто до ${opensAt}` : 'Закрыто'}</span>
-        )}
+        {closedBadge && <span className={styles.closed}>{closedBadge}</span>}
+        {restaurant.cuisine && <span className={styles.cuisine}>{restaurant.cuisine}</span>}
       </span>
       <div>
         <h3 className={styles.name}>{restaurant.name}</h3>
@@ -39,7 +38,7 @@ export function RestaurantCard({ restaurant, open }: RestaurantCardProps) {
             {placeholderEta(restaurant.id)}
           </span>
         </div>
-        {restaurant.address && <p className={styles.address}>{restaurant.address}</p>}
+        {place && <p className={styles.address}>{place}</p>}
       </div>
     </Link>
   );
