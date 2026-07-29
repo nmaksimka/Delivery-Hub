@@ -17,7 +17,11 @@ export const quickFilters: QuickFilter[] = [
   { id: 'sushi', label: 'Суши и роллы', stems: ['суши', 'ролл', 'sushi', 'японск'] },
   { id: 'burger', label: 'Бургеры', stems: ['бургер', 'burger', 'американ'] },
   { id: 'grill', label: 'Шашлык и гриль', stems: ['шашлы', 'гриль', 'мангал', 'grill'] },
-  { id: 'asia', label: 'Азия', stems: ['вок', 'wok', 'рамен', 'лапш', 'азия', 'китайск', 'тайск', 'вьетнам'] },
+  {
+    id: 'asia',
+    label: 'Азия',
+    stems: ['вок', 'wok', 'рамен', 'лапш', 'азия', 'китайск', 'тайск', 'вьетнам'],
+  },
   { id: 'coffee', label: 'Кофе и выпечка', stems: ['коф', 'пекарн', 'булоч', 'coffee'] },
 ];
 
