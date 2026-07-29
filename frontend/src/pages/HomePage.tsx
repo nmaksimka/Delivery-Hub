@@ -138,7 +138,10 @@ export function HomePage() {
           <ul className={styles.grid}>
             {visible.map((restaurant) => (
               <li key={restaurant.id}>
-                <RestaurantCard restaurant={restaurant} closedBadge={closedBadge(restaurant, now)} />
+                <RestaurantCard
+                  restaurant={restaurant}
+                  closedBadge={closedBadge(restaurant, now)}
+                />
               </li>
             ))}
           </ul>

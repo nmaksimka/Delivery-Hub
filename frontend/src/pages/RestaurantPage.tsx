@@ -11,10 +11,9 @@ import { Cover } from '../components/Cover';
 import { ArrowLeftIcon, ClockIcon, PinIcon, StarIcon } from '../components/icons';
 import { MenuItemCard } from '../components/MenuItemCard';
 import { StateMessage } from '../components/StateMessage';
-import { formatClock } from '../lib/format';
 import { groupMenu } from '../lib/menuGroups';
 import { placeholderEta, placeholderRating } from '../lib/placeholders';
-import { isOpenAt } from '../lib/workingHours';
+import { closedBadge, workingHoursLabel } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './RestaurantPage.module.css';
@@ -63,9 +62,9 @@ export function RestaurantPage() {
   }
 
   const current = restaurant.data;
-  const open = isOpenAt(current, now);
-  const opensAt = formatClock(current.openTime);
-  const closesAt = formatClock(current.closeTime);
+  const closedLabel = closedBadge(current, now);
+  const hours = workingHoursLabel(current);
+  const place = [current.address, current.city].filter(Boolean).join(', ');
   const otherRestaurant =
     cart.restaurant && cart.restaurant.id !== current.id ? cart.restaurant : null;
 
@@ -97,8 +96,17 @@ export function RestaurantPage() {
       </Link>
 
       <header className={styles.head}>
-        <Cover title={current.name} seed={current.id} className={styles.headCover} />
+        <span className={styles.headMedia}>
+          <Cover
+            title={current.name}
+            seed={current.id}
+            imageUrl={current.imageUrl}
+            className={styles.headCover}
+          />
+          {closedLabel && <span className={styles.closedBadge}>{closedLabel}</span>}
+        </span>
         <div>
+          {current.cuisine && <p className={styles.cuisine}>{current.cuisine}</p>}
           <h1 className={styles.title}>{current.name}</h1>
           <ul className={styles.meta}>
             <li className={styles.metaItem}>
@@ -109,24 +117,24 @@ export function RestaurantPage() {
               <ClockIcon size={16} />
               {placeholderEta(current.id)}
             </li>
-            {opensAt && closesAt && (
-              <li className={styles.metaItem}>
-                {opensAt}–{closesAt}
+            {hours && (
+              <li className={styles.metaItem} aria-label={`Часы работы ${hours}`}>
+                {hours}
               </li>
             )}
-            {current.address && (
+            {place && (
               <li className={styles.metaItem}>
                 <PinIcon size={16} />
-                {current.address}
+                {place}
               </li>
             )}
           </ul>
           {!current.active && (
             <p className={styles.notice}>Ресторан временно не принимает заказы.</p>
           )}
-          {current.active && !open && (
+          {current.active && closedLabel && (
             <p className={styles.notice}>
-              Сейчас закрыто{opensAt ? `, откроется в ${opensAt}` : ''}.
+              Сейчас закрыто. Меню можно посмотреть, заказ — после открытия.
             </p>
           )}
         </div>
@@ -182,7 +190,7 @@ export function RestaurantPage() {
                 <MenuItemCard
                   item={item}
                   quantity={otherRestaurant ? 0 : cart.quantityOf(item.id)}
-                  orderable={current.active && item.available}
+                  orderable={!closedLabel}
                   onAdd={() => {
                     requestAdd(item);
                   }}
