@@ -14,7 +14,9 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.ItemNotFoundException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
@@ -103,22 +105,24 @@ public class OrderService {
         Map<Long, Integer> quantities = createRequest.quantitiesByMenuItem();
         MenuQuote quote = restaurantCatalog.quote(restaurantId, quantities.keySet());
         if (!quote.restaurant().active()) {
-            throw new OrderRejectedException("Restaurant " + restaurantId + " is not active");
+            throw new OrderRejectedException(ErrorCode.RESTAURANT_INACTIVE,
+                    "Restaurant " + restaurantId + " is not active");
         }
         if (quote.restaurant().closed()) {
-            throw new OrderRejectedException(closedMessage(quote.restaurant()));
+            throw new OrderRejectedException(ErrorCode.RESTAURANT_CLOSED, closedMessage(quote.restaurant()));
         }
 
         Order order = Order.place(userId, restaurantId, clock.instant());
         quantities.forEach((menuItemId, quantity) -> {
-            MenuItemDto menuItem = quote.item(menuItemId).orElseThrow(() -> new EntityNotFoundException(
+            MenuItemDto menuItem = quote.item(menuItemId).orElseThrow(() -> new ItemNotFoundException(ErrorCode.ITEM_NOT_FOUND,
                     "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId));
             if (!menuItem.available()) {
-                throw new OrderRejectedException("Menu item " + menuItemId + " is not available");
+                throw new OrderRejectedException(ErrorCode.ITEM_UNAVAILABLE,
+                        "Menu item " + menuItemId + " is not available");
             }
             if (quantity > OrderItemRequest.MAX_QUANTITY) {
-                throw new OrderRejectedException("Quantity of menu item " + menuItemId + " exceeds "
-                        + OrderItemRequest.MAX_QUANTITY);
+                throw new OrderRejectedException(ErrorCode.QUANTITY_LIMIT, "Quantity of menu item " + menuItemId
+                        + " exceeds " + OrderItemRequest.MAX_QUANTITY);
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
