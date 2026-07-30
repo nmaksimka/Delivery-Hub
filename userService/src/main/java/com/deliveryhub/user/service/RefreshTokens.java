@@ -71,6 +71,11 @@ public class RefreshTokens {
                 .ifPresent(token -> token.revoke(clock.instant()));
     }
 
+    @Transactional
+    public int revokeAllOf(Long userId) {
+        return refreshTokenRepository.revokeAllOfUser(userId, clock.instant());
+    }
+
     static String hash(String token) {
         try {
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");

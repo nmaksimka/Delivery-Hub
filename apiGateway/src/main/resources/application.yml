@@ -5,6 +5,9 @@ app:
   jwt:
     jwk-set-uri: ${JWT_JWK_SET_URI:http://userService/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:deliveryhub}
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  request-body:
+    max-size: 7MB
   rate-limit:
     common:
       replenish-rate: 20
@@ -23,6 +26,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   cloud:
     config:
       username: ${CONFIG_USER:config}
@@ -67,6 +71,22 @@ spring:
               uri: lb://restaurantService
               predicates:
                 - Path=/api/restaurants/**
+            - id: catalog-import
+              uri: lb://restaurantService
+              predicates:
+                - Path=/api/admin/imports/**
+            - id: restaurant-owners
+              uri: lb://restaurantService
+              predicates:
+                - Path=/api/admin/restaurants/**
+            - id: restaurant-cabinet
+              uri: lb://restaurantService
+              predicates:
+                - Path=/api/cabinet/**
+            - id: user-admin
+              uri: lb://userService
+              predicates:
+                - Path=/api/admin/users/**
             - id: order-service
               uri: lb://orderService
               predicates:

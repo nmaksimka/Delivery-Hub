@@ -1,3 +1,15 @@
+app:
+  mealdb:
+    requests-per-second: 5
+    max-attempts: 3
+    cache-ttl: 6h
+    meals-per-category: 12
+  foodfacts:
+    requests-per-second: 2
+    max-attempts: 3
+    cache-ttl: 12h
+    products-per-category: 10
+
 management:
   endpoints:
     web:

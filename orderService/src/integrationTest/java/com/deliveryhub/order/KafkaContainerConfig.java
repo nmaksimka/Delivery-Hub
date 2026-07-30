@@ -19,6 +19,9 @@ public class KafkaContainerConfig {
 
     @Bean
     DynamicPropertyRegistrar inMemorySchemaRegistry() {
-        return registry -> registry.add("spring.kafka.properties.schema.registry.url", () -> SCHEMA_REGISTRY_URL);
+        return registry -> {
+            registry.add("spring.kafka.properties.schema.registry.url", () -> SCHEMA_REGISTRY_URL);
+            registry.add("app.kafka.topics.partitions", () -> 1);
+        };
     }
 }

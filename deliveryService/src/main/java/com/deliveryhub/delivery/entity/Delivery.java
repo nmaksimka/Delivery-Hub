@@ -1,6 +1,8 @@
 package com.deliveryhub.delivery.entity;
 
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.delivery.exception.DeliveryFinishedException;
+import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -9,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -23,6 +26,9 @@ public class Delivery {
 
     @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
+
+    @Column(name = "user_id")
+    private Long userId;
 
     @Column(name = "courier_id")
     private Long courierId;
@@ -40,11 +46,22 @@ public class Delivery {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "event_sequence", nullable = false)
+    private long eventSequence;
+
+    @Column(name = "last_order_sequence", nullable = false)
+    private long lastOrderSequence;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     protected Delivery() {
     }
 
-    private Delivery(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
+    private Delivery(Long orderId, Long userId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
+        this.userId = userId;
         this.courierId = courierId;
         this.estimatedDeliveryTime = estimatedDeliveryTime;
         this.status = DeliveryStatus.ASSIGNED;
@@ -52,42 +69,66 @@ public class Delivery {
         this.updatedAt = createdAt;
     }
 
-    public static Delivery forOrder(Long orderId, Instant createdAt) {
-        return new Delivery(orderId, null, null, createdAt);
+    public static Delivery forOrder(Long orderId, Long userId, Instant createdAt) {
+        return new Delivery(orderId, userId, null, null, createdAt);
     }
 
-    public static Delivery forOrder(Long orderId, Long courierId, Instant estimatedDeliveryTime, Instant createdAt) {
-        return new Delivery(orderId, courierId, estimatedDeliveryTime, createdAt);
+    public static Delivery forOrder(Long orderId, Long userId, Long courierId, Instant estimatedDeliveryTime,
+                                    Instant createdAt) {
+        return new Delivery(orderId, userId, courierId, estimatedDeliveryTime, createdAt);
     }
 
-    public void changeStatus(DeliveryStatus next, Instant at) {
+    public boolean changeStatus(DeliveryStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
         Objects.requireNonNull(at, "at");
         if (next == status) {
-            return;
+            return false;
         }
-        if (isFinished() || !isForward(next)) {
-            throw new IllegalStateException(
-                    "Delivery " + id + " cannot change status from " + status + " to " + next);
+        if (!isAllowed(next)) {
+            throw new InvalidStatusTransitionException(id, status, next);
         }
         status = next;
         updatedAt = at;
+        return true;
     }
 
     public void assignCourier(Long courierId, Instant at) {
         if (isFinished()) {
-            throw new IllegalStateException("Delivery " + id + " is already " + status);
+            throw new DeliveryFinishedException(id, status);
         }
         this.courierId = Objects.requireNonNull(courierId, "courierId");
         this.updatedAt = Objects.requireNonNull(at, "at");
+    }
+
+    public long nextEventSequence() {
+        eventSequence++;
+        return eventSequence;
+    }
+
+    public boolean acceptOrderEvent(long sequence) {
+        if (sequence <= 0) {
+            return true;
+        }
+        if (sequence <= lastOrderSequence) {
+            return false;
+        }
+        lastOrderSequence = sequence;
+        return true;
+    }
+
+    public boolean belongsTo(Long userId) {
+        return this.userId != null && this.userId.equals(userId);
     }
 
     public boolean isFinished() {
         return status == DeliveryStatus.DELIVERED || status == DeliveryStatus.CANCELLED;
     }
 
-    private boolean isForward(DeliveryStatus next) {
-        return next == DeliveryStatus.CANCELLED || next.ordinal() > status.ordinal();
+    private boolean isAllowed(DeliveryStatus next) {
+        if (isFinished()) {
+            return false;
+        }
+        return next == DeliveryStatus.CANCELLED || next.ordinal() == status.ordinal() + 1;
     }
 
     public Long getId() {
@@ -96,6 +137,10 @@ public class Delivery {
 
     public Long getOrderId() {
         return orderId;
+    }
+
+    public Long getUserId() {
+        return userId;
     }
 
     public Long getCourierId() {

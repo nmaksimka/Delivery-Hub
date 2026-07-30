@@ -1,0 +1,2 @@
+ALTER TABLE deliveries
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0;

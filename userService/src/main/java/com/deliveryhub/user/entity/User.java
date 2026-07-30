@@ -8,18 +8,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 @Entity
 @Table(name = "users")
-public class User implements UserDetails {
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,7 +58,16 @@ public class User implements UserDetails {
 
     public static User register(String email, String passwordHash, String name, String phone,
                                 Instant registeredAt) {
-        return new User(email, passwordHash, name, phone, Role.USER, registeredAt);
+        return new User(normalizeEmail(email), passwordHash, name, phone, Role.USER, registeredAt);
+    }
+
+    public void changeRole(Role role, Instant changedAt) {
+        this.role = Objects.requireNonNull(role, "role");
+        this.updatedAt = Objects.requireNonNull(changedAt, "changedAt");
+    }
+
+    public static String normalizeEmail(String email) {
+        return Objects.requireNonNull(email, "email").strip().toLowerCase(Locale.ROOT);
     }
 
     public Long getId() {
@@ -93,18 +98,7 @@ public class User implements UserDetails {
         return updatedAt;
     }
 
-    @Override
     public String getPassword() {
         return password;
-    }
-
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
-    }
-
-    @Override
-    public String getUsername() {
-        return email;
     }
 }

@@ -2,6 +2,9 @@ app:
   jwt:
     access-token-ttl: 15m
     refresh-token-ttl: 30d
+  cleanup:
+    interval: 1h
+    refresh-token-retention: 7d
 
 management:
   endpoints:

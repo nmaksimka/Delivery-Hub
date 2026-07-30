@@ -1,12 +1,19 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.contracts.pricing.ItemStatus;
+import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
+import com.deliveryhub.contracts.pricing.QuoteRequest;
+import com.deliveryhub.contracts.pricing.QuoteResponse;
+import com.deliveryhub.contracts.pricing.QuotedItem;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.RestaurantCircuitOpenException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.grpc.Server;
+import io.grpc.Status;
+import io.grpc.netty.NettyServerBuilder;
+import io.grpc.stub.StreamObserver;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,31 +29,23 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.get;
-import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
-import static com.github.tomakehurst.wiremock.client.WireMock.serviceUnavailable;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, KafkaContainerConfig.class})
 class RestaurantClientResilienceIT {
 
-    private static final String RESTAURANT_URL = "/api/restaurants/1";
-    private static final String RESTAURANT_JSON = """
-            {"id": 1, "name": "Pizzeria", "active": true}
-            """;
-    private static final WireMockServer RESTAURANT_SERVICE = new WireMockServer(options().dynamicPort());
-
-    static {
-        RESTAURANT_SERVICE.start();
-    }
+    private static final AtomicInteger CALLS = new AtomicInteger();
+    private static volatile Consumer<StreamObserver<QuoteResponse>> behaviour = answer -> {
+    };
+    private static final Server RESTAURANT_SERVICE = startRestaurantService();
 
     @Autowired
     private RestaurantCatalog restaurantCatalog;
@@ -57,108 +56,154 @@ class RestaurantClientResilienceIT {
 
     @DynamicPropertySource
     static void restaurantServiceAddress(DynamicPropertyRegistry registry) {
-        registry.add("spring.cloud.discovery.client.simple.instances.restaurantService[0].uri",
-                RESTAURANT_SERVICE::baseUrl);
-        registry.add("resilience4j.timelimiter.configs.restaurantService.timeout-duration", () -> "700ms");
+        registry.add("spring.grpc.client.channels.restaurant.address",
+                () -> "static://localhost:" + RESTAURANT_SERVICE.getPort());
+        registry.add("app.restaurant-grpc.deadline", () -> "1500ms");
         registry.add("resilience4j.retry.instances.restaurantService.wait-duration", () -> "20ms");
     }
 
     @AfterAll
     static void stopRestaurantService() {
-        RESTAURANT_SERVICE.stop();
+        RESTAURANT_SERVICE.shutdownNow();
     }
 
     @BeforeEach
     void resetState() {
-        RESTAURANT_SERVICE.resetAll();
+        CALLS.set(0);
+        behaviour = answer -> reply(answer, pizzeria("12.50"));
         circuitBreakerRegistry.getAllCircuitBreakers().forEach(CircuitBreaker::reset);
     }
 
     @Test
-    void findsRestaurantServiceByNameAndReadsRestaurant() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).willReturn(okJson(RESTAURANT_JSON)));
-
-        assertThat(restaurantCatalog.restaurant(1L).name()).isEqualTo("Pizzeria");
-        assertThat(requestCount()).isEqualTo(1);
+    void readsQuoteFromRestaurantServiceOverNetwork() {
+        assertThat(restaurantCatalog.quote(1L, List.of(10L)).item(10L))
+                .hasValueSatisfying(pizza -> assertThat(pizza.price()).isEqualByComparingTo("12.50"));
+        assertThat(CALLS).hasValue(1);
     }
 
     @Test
-    void repeatsReadAfterServerErrorsUntilItSucceeds() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).inScenario("flaky")
-                .whenScenarioStateIs(Scenario.STARTED)
-                .willReturn(serviceUnavailable())
-                .willSetStateTo("second attempt"));
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).inScenario("flaky")
-                .whenScenarioStateIs("second attempt")
-                .willReturn(serverError())
-                .willSetStateTo("recovered"));
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).inScenario("flaky")
-                .whenScenarioStateIs("recovered")
-                .willReturn(okJson(RESTAURANT_JSON)));
+    void totalsOrderByPriceFromRestaurantServiceNotFromClient() {
+        MvcTestResult result = placeOrder();
 
-        assertThat(restaurantCatalog.restaurant(1L).active()).isTrue();
-        assertThat(requestCount()).isEqualTo(3);
+        assertThat(result).hasStatus(201).bodyJson().extractingPath("$.totalAmount").isEqualTo(25.0);
+    }
+
+    @Test
+    void rejectsOrderFromClosedRestaurantWithHoursInProblem() {
+        behaviour = answer -> reply(answer, pizzeria("12.50").toBuilder()
+                .setRestaurantClosed(true).setOpensAt("10:00").setClosesAt("22:00").setTimeZone("Asia/Tomsk").build());
+
+        MvcTestResult result = placeOrder();
+
+        assertThat(result).hasStatus(409).bodyJson().extractingPath("$.detail")
+                .isEqualTo("Restaurant 1 is closed now, working hours: 10:00-22:00 Asia/Tomsk");
+        assertThat(CALLS).hasValue(1);
+    }
+
+    @Test
+    void repeatsCallAfterUnavailableUntilItSucceeds() {
+        AtomicInteger attempt = new AtomicInteger();
+        behaviour = answer -> {
+            if (attempt.incrementAndGet() < 3) {
+                answer.onError(Status.UNAVAILABLE.asRuntimeException());
+            } else {
+                reply(answer, pizzeria("12.50"));
+            }
+        };
+
+        assertThat(restaurantCatalog.quote(1L, List.of(10L)).restaurant().active()).isTrue();
+        assertThat(CALLS).hasValue(3);
     }
 
     @Test
     void missingRestaurantIsNeitherRetriedNorCountedAsFailure() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).willReturn(aResponse().withStatus(404)));
+        behaviour = answer -> answer.onError(Status.NOT_FOUND.asRuntimeException());
 
         for (int call = 0; call < 6; call++) {
-            assertThatThrownBy(() -> restaurantCatalog.restaurant(1L)).isInstanceOf(EntityNotFoundException.class);
+            assertThatThrownBy(() -> restaurantCatalog.quote(1L, List.of(10L)))
+                    .isInstanceOf(EntityNotFoundException.class);
         }
 
-        assertThat(requestCount()).isEqualTo(6);
+        assertThat(CALLS).hasValue(6);
         assertThat(circuitBreakerRegistry.getAllCircuitBreakers())
                 .allSatisfy(breaker -> assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED));
     }
 
     @Test
-    void answersServiceUnavailableProblemWhenRestaurantServiceFails() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).willReturn(serverError()));
+    void answersServiceUnavailableProblemWhenRestaurantServiceStaysDown() {
+        behaviour = answer -> answer.onError(Status.UNAVAILABLE.asRuntimeException());
 
-        MvcTestResult result = mvc.post().uri("/api/orders")
+        MvcTestResult result = placeOrder();
+
+        assertThat(result).hasStatus(503).hasHeader(HttpHeaders.RETRY_AFTER, "10");
+        assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("Restaurant service unavailable");
+        assertThat(CALLS).hasValue(3);
+    }
+
+    @Test
+    void givesUpOnAnswerSlowerThanDeadlineWithoutRepeating() {
+        behaviour = answer -> {
+            try {
+                Thread.sleep(2500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        assertThatThrownBy(() -> restaurantCatalog.quote(1L, List.of(10L)))
+                .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
+        assertThat(CALLS).hasValue(1);
+    }
+
+    @Test
+    void opensCircuitAfterRepeatedFailuresAndStopsCallingRestaurantService() {
+        behaviour = answer -> answer.onError(Status.INTERNAL.asRuntimeException());
+        for (int call = 0; call < 5; call++) {
+            assertThatThrownBy(() -> restaurantCatalog.quote(1L, List.of(10L)))
+                    .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
+        }
+        int callsBeforeOpenCircuit = CALLS.get();
+
+        assertThatThrownBy(() -> restaurantCatalog.quote(1L, List.of(10L)))
+                .isInstanceOf(RestaurantCircuitOpenException.class);
+
+        assertThat(callsBeforeOpenCircuit).isEqualTo(5);
+        assertThat(CALLS).hasValue(callsBeforeOpenCircuit);
+    }
+
+    private MvcTestResult placeOrder() {
+        return mvc.post().uri("/api/orders")
                 .header("X-User-Id", "42")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}]}
                         """)
                 .exchange();
-
-        assertThat(result).hasStatus(503).hasHeader(HttpHeaders.RETRY_AFTER, "10");
-        assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("Restaurant service unavailable");
-        assertThat(result).bodyJson().extractingPath("$.status").isEqualTo(503);
-        assertThat(requestCount()).isEqualTo(3);
     }
 
-    @Test
-    void opensCircuitAfterRepeatedFailuresAndStopsCallingRestaurantService() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL).willReturn(serverError()));
-
-        assertThatThrownBy(() -> restaurantCatalog.restaurant(1L))
-                .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
-        assertThatThrownBy(() -> restaurantCatalog.restaurant(1L))
-                .isInstanceOf(RestaurantServiceUnavailableException.class);
-        int requestsBeforeOpenCircuit = requestCount();
-
-        assertThatThrownBy(() -> restaurantCatalog.restaurant(1L))
-                .isInstanceOf(RestaurantCircuitOpenException.class);
-
-        assertThat(requestsBeforeOpenCircuit).isEqualTo(5);
-        assertThat(requestCount()).isEqualTo(requestsBeforeOpenCircuit);
+    private static QuoteResponse pizzeria(String price) {
+        return QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantName("Pizzeria").setRestaurantActive(true)
+                .addItems(QuotedItem.newBuilder().setMenuItemId(10L).setStatus(ItemStatus.ITEM_STATUS_AVAILABLE)
+                        .setName("Pizza").setPrice(price))
+                .build();
     }
 
-    @Test
-    void givesUpOnResponseSlowerThanTimeLimit() {
-        RESTAURANT_SERVICE.stubFor(get(RESTAURANT_URL)
-                .willReturn(okJson(RESTAURANT_JSON).withFixedDelay(900)));
-
-        assertThatThrownBy(() -> restaurantCatalog.restaurant(1L))
-                .isExactlyInstanceOf(RestaurantServiceUnavailableException.class)
-                .hasRootCauseInstanceOf(java.util.concurrent.TimeoutException.class);
+    private static void reply(StreamObserver<QuoteResponse> answer, QuoteResponse response) {
+        answer.onNext(response);
+        answer.onCompleted();
     }
 
-    private static int requestCount() {
-        return RESTAURANT_SERVICE.findAll(getRequestedFor(urlEqualTo(RESTAURANT_URL))).size();
+    private static Server startRestaurantService() {
+        try {
+            return NettyServerBuilder.forPort(0).addService(new MenuPricingGrpc.MenuPricingImplBase() {
+                @Override
+                public void quote(QuoteRequest request, StreamObserver<QuoteResponse> responseObserver) {
+                    CALLS.incrementAndGet();
+                    behaviour.accept(responseObserver);
+                }
+            }).build().start();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

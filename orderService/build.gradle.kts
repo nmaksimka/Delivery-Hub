@@ -9,7 +9,7 @@ dependencies {
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.validation)
-    implementation(libs.spring.cloud.starter.openfeign)
+    implementation(libs.spring.grpc.client.starter)
     implementation(libs.spring.cloud.starter.circuitbreaker.resilience4j)
     implementation(libs.spring.boot.starter.kafka)
     implementation(libs.kafka.avro.serializer)
@@ -24,5 +24,6 @@ dependencies {
     annotationProcessor(libs.mapstruct.processor)
 
     integrationTestImplementation(libs.testcontainers.kafka)
-    integrationTestImplementation(libs.wiremock)
+    testImplementation(libs.grpc.inprocess)
+    integrationTestImplementation(libs.grpc.inprocess)
 }

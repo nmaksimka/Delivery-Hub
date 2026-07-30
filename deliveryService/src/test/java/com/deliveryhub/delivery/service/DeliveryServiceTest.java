@@ -3,11 +3,14 @@ package com.deliveryhub.delivery.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
+import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -91,6 +95,7 @@ class DeliveryServiceTest {
             assertThat(published.getDeliveryId()).isEqualTo(7L);
             assertThat(published.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
             assertThat(published.getUpdatedAt()).isEqualTo(NOW);
+            assertThat(published.getSequence()).isEqualTo(1L);
         }
 
         @Test
@@ -119,6 +124,71 @@ class DeliveryServiceTest {
     }
 
     @Nested
+    @DisplayName("cancelDeliveryOfOrder")
+    class CancelDeliveryOfOrder {
+
+        @Test
+        @DisplayName("отменяет доставку и сообщает об этом событием")
+        void cancelsDeliveryAndAppendsEvent() {
+            Delivery delivery = existingDelivery();
+            delivery.acceptOrderEvent(1L);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
+            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("устаревшая отмена отбрасывается")
+        void dropsStaleCancellation() {
+            Delivery delivery = existingDelivery();
+            delivery.acceptOrderEvent(5L);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("завершённая доставка не меняется")
+        void finishedDeliveryStaysAsIs() {
+            Delivery delivery = existingDelivery();
+            ReflectionTestUtils.setField(delivery, "status", DeliveryStatus.DELIVERED);
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("отмена раньше создания доставки — ошибка, которую стоит повторить")
+        void failsWhenDeliveryIsNotCreatedYet() {
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.cancelDeliveryOfOrder(event))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        private OrderCancelledEvent orderCancelled(long sequence) {
+            return new OrderCancelledEvent(UUID.randomUUID(), ORDER_ID, 42L, NOW, sequence);
+        }
+    }
+
+    @Nested
     @DisplayName("updateDeliveryStatus")
     class UpdateStatus {
 
@@ -129,10 +199,34 @@ class DeliveryServiceTest {
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
             when(deliveryMapper.toDto(delivery)).thenReturn(dto());
 
-            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null));
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, null));
 
-            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
-            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+            assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+        }
+
+        @Test
+        @DisplayName("повтор того же статуса не порождает событие")
+        void sameStatusAppendsNothing() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.ASSIGNED, null));
+
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("курьера можно назначить, не меняя статус")
+        void assignsCourierWithoutStatus() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 55L));
+
+            assertThat(delivery.getCourierId()).isEqualTo(55L);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            verifyNoInteractions(outbox);
         }
 
         @Test
@@ -165,12 +259,11 @@ class DeliveryServiceTest {
         @DisplayName("недопустимый переход не оставляет события в outbox")
         void rejectedTransitionAppendsNothing() {
             Delivery delivery = existingDelivery();
-            delivery.changeStatus(DeliveryStatus.DELIVERED, NOW);
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
 
             assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(1L,
-                    new UpdateDeliveryStatusRequest(DeliveryStatus.IN_TRANSIT, null)))
-                    .isInstanceOf(IllegalStateException.class);
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null)))
+                    .isInstanceOf(InvalidStatusTransitionException.class);
             verifyNoInteractions(outbox);
         }
 
@@ -194,9 +287,27 @@ class DeliveryServiceTest {
         void rejectsDuplicate() {
             when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
 
-            assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, null, null)))
-                    .isInstanceOf(IllegalStateException.class)
+            assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, null, null, null)))
+                    .isInstanceOf(DeliveryAlreadyExistsException.class)
                     .hasMessageContaining("already exists");
+        }
+    }
+
+    @Nested
+    @DisplayName("createDelivery при гонке")
+    class CreateDeliveryRace {
+
+        @Test
+        @DisplayName("нарушение уникальности order_id превращается в доменное исключение")
+        void translatesUniqueViolation() {
+            when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenThrow(new DataIntegrityViolationException("deliveries_order_id_key"));
+
+            assertThatThrownBy(() -> deliveryService.createDelivery(
+                    new CreateDeliveryRequest(ORDER_ID, null, null, null)))
+                    .isInstanceOf(DeliveryAlreadyExistsException.class);
+            verifyNoInteractions(outbox);
         }
     }
 
@@ -208,16 +319,16 @@ class DeliveryServiceTest {
     }
 
     private static OrderCreatedEvent orderCreated() {
-        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of());
+        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of(), 1L);
     }
 
     private static Delivery existingDelivery() {
-        Delivery delivery = Delivery.forOrder(ORDER_ID, NOW);
+        Delivery delivery = Delivery.forOrder(ORDER_ID, 42L, NOW);
         ReflectionTestUtils.setField(delivery, "id", 1L);
         return delivery;
     }
 
     private static DeliveryDto dto() {
-        return new DeliveryDto(1L, ORDER_ID, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
+        return new DeliveryDto(1L, ORDER_ID, 42L, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
     }
 }

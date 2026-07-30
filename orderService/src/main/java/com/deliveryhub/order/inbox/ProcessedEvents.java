@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -34,5 +35,12 @@ public class ProcessedEvents {
                 .param("processedAt", Timestamp.from(clock.instant()))
                 .update();
         return inserted == 1;
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int deleteProcessedBefore(Instant before) {
+        return jdbcClient.sql("DELETE FROM processed_events WHERE processed_at < :before")
+                .param("before", Timestamp.from(before))
+                .update();
     }
 }

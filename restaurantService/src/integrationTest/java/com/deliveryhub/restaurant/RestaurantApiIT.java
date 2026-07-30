@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresContainerConfig.class)
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class})
 class RestaurantApiIT {
 
     @Autowired
@@ -38,6 +38,23 @@ class RestaurantApiIT {
     }
 
     @Test
+    void returnsRequestedMenuItemsInOneCallIncludingUnavailable() {
+        String restaurantUri = "/api/restaurants/" + createRestaurant("Batch");
+        Integer soup = JsonPath.read(bodyOf(postJson(restaurantUri + "/menu", """
+                {"name": "Soup", "price": 250.00}
+                """)), "$.id");
+        Integer stopped = JsonPath.read(bodyOf(postJson(restaurantUri + "/menu", """
+                {"name": "Stopped", "price": 300.00, "available": false}
+                """)), "$.id");
+        postJson(restaurantUri + "/menu", """
+                {"name": "Other", "price": 100.00}
+                """);
+
+        assertThat(mvc.get().uri(restaurantUri + "/menu?ids=" + soup + "," + stopped + ",999999")).hasStatusOk()
+                .bodyJson().extractingPath("$[*].name").asArray().containsExactlyInAnyOrder("Soup", "Stopped");
+    }
+
+    @Test
     void rejectsMenuItemWithoutPrice() {
         String restaurantUri = "/api/restaurants/" + createRestaurant("Bistro");
 
@@ -47,6 +64,31 @@ class RestaurantApiIT {
 
         assertThat(result).hasStatus(400)
                 .bodyJson().extractingPath("$.errors.price").isEqualTo("Price is required");
+    }
+
+    @Test
+    void keepsStandardStatusesForMalformedRequests() {
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "ADMIN")
+                .contentType(MediaType.APPLICATION_JSON).content("{oops"))
+                .hasStatus(400).bodyJson().extractingPath("$.title").isEqualTo("Bad Request");
+        assertThat(mvc.patch().uri("/api/restaurants")).hasStatus(405);
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "ADMIN")
+                .contentType(MediaType.TEXT_PLAIN).content("pizza"))
+                .hasStatus(415);
+        assertThat(mvc.get().uri("/api/restaurants/not-a-number")).hasStatus(400);
+    }
+
+    @Test
+    void onlyAdminChangesCatalogAndReachesAdminApi() {
+        String json = "{\"name\": \"Sneaky\"}";
+
+        assertThat(mvc.post().uri("/api/restaurants").contentType(MediaType.APPLICATION_JSON).content(json))
+                .hasStatus(403).bodyJson().extractingPath("$.detail").asString().contains("administrators");
+        assertThat(mvc.post().uri("/api/restaurants").header("X-User-Role", "RESTAURANT_OWNER")
+                .contentType(MediaType.APPLICATION_JSON).content(json)).hasStatus(403);
+        assertThat(mvc.delete().uri("/api/restaurants/1").header("X-User-Role", "USER")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/admin/imports").header("X-User-Role", "COURIER")).hasStatus(403);
+        assertThat(mvc.get().uri("/api/restaurants")).hasStatusOk();
     }
 
     @Test
@@ -76,7 +118,8 @@ class RestaurantApiIT {
     }
 
     private MvcTestResult postJson(String uri, String json) {
-        return mvc.post().uri(uri).contentType(MediaType.APPLICATION_JSON).content(json).exchange();
+        return mvc.post().uri(uri).header("X-User-Role", "ADMIN")
+                .contentType(MediaType.APPLICATION_JSON).content(json).exchange();
     }
 
     private static String bodyOf(MvcTestResult result) {

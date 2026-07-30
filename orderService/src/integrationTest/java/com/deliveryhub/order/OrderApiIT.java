@@ -1,15 +1,15 @@
 package com.deliveryhub.order;
 
 import com.deliveryhub.contracts.Topics;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
-import com.deliveryhub.order.client.RestaurantServiceClient;
+import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.jayway.jsonpath.JsonPath;
-import feign.FeignException;
-import feign.Request;
-import feign.RequestTemplate;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,15 +24,19 @@ import org.testcontainers.kafka.KafkaContainer;
 
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
+@Import({PostgresContainerConfig.class, GatewayTokenConfig.class, KafkaContainerConfig.class})
 class OrderApiIT {
 
     private static final long RESTAURANT_ID = 1L;
@@ -47,16 +51,14 @@ class OrderApiIT {
     @Autowired
     private KafkaContainer kafka;
     @MockitoBean
-    private RestaurantServiceClient restaurantServiceClient;
+    private RestaurantCatalog restaurantCatalog;
 
     @BeforeEach
     void stubRestaurantService() {
-        when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID))
-                .thenReturn(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true));
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 10L))
-                .thenReturn(new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true));
-        when(restaurantServiceClient.getMenuItemById(RESTAURANT_ID, 11L))
-                .thenReturn(new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
+        when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenReturn(new MenuQuote(
+                new RestaurantDto(RESTAURANT_ID, "Pizzeria", true),
+                Map.of(10L, new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true),
+                        11L, new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true))));
     }
 
     @Test
@@ -88,7 +90,8 @@ class OrderApiIT {
 
     @Test
     void returnsNotFoundWhenRestaurantDoesNotExist() {
-        when(restaurantServiceClient.getRestaurantById(RESTAURANT_ID)).thenThrow(notFound());
+        when(restaurantCatalog.quote(eq(RESTAURANT_ID), any()))
+                .thenThrow(new EntityNotFoundException("Restaurant with ID: 1 was not found"));
 
         assertThat(createOrder(42L)).hasStatus(404);
     }
@@ -108,11 +111,75 @@ class OrderApiIT {
     }
 
     @Test
+    void ownerCancelsOwnOrderAndOrderCancelledEventIsPublished() {
+        Integer orderId = JsonPath.read(bodyOf(createOrder(88L)), "$.id");
+
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "89")).hasStatus(403);
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "88")).hasStatusOk()
+                .bodyJson().extractingPath("$.status").isEqualTo("CANCELLED");
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "88")).hasStatus(409);
+
+        Optional<OrderCancelledEvent> published = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.ORDER_CANCELLED, OrderCancelledEvent.class, event -> event.getOrderId() == orderId);
+
+        assertThat(published).isPresent();
+        assertThat(published.get().getUserId()).isEqualTo(88L);
+        assertThat(published.get().getSequence()).isEqualTo(2L);
+    }
+
+    @Test
+    void ownerCannotCancelOrderThatIsAlreadyOnItsWay() {
+        Integer orderId = JsonPath.read(bodyOf(createOrder(90L)), "$.id");
+        patchStatus(orderId, "CONFIRMED");
+        patchStatus(orderId, "IN_DELIVERY");
+
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "90")).hasStatus(409);
+        assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel")
+                .header("X-User-Id", "1").header("X-User-Role", "ADMIN")).hasStatusOk();
+    }
+
+    @Test
     void refusesToMoveDeliveredOrderBack() {
         Integer orderId = JsonPath.read(bodyOf(createOrder(42L)), "$.id");
 
+        assertThat(patchStatus(orderId, "DELIVERED")).hasStatus(409);
+        assertThat(patchStatus(orderId, "CONFIRMED")).hasStatusOk();
+        assertThat(patchStatus(orderId, "IN_DELIVERY")).hasStatusOk();
         assertThat(patchStatus(orderId, "DELIVERED")).hasStatusOk();
         assertThat(patchStatus(orderId, "CONFIRMED")).hasStatus(409);
+    }
+
+    @Test
+    void rejectsTooBigQuantityAndTooManyLines() {
+        MvcTestResult tooMany = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": [{\"menuItemId\": 10, \"quantity\": 101}]}")
+                .exchange();
+        String lines = String.join(",", Collections.nCopies(51, "{\"menuItemId\": 10, \"quantity\": 1}"));
+        MvcTestResult tooLong = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": [" + lines + "]}")
+                .exchange();
+
+        assertThat(tooMany).hasStatus(400).bodyJson().extractingPath("$.errors").asMap()
+                .containsKey("orderItemsRequest[0].quantity");
+        assertThat(tooLong).hasStatus(400).bodyJson().extractingPath("$.errors").asMap()
+                .containsKey("orderItemsRequest");
+    }
+
+    @Test
+    void duplicatedLinesBecomeOneOrderItem() {
+        MvcTestResult created = mvc.post().uri("/api/orders")
+                .header("X-User-Id", "42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"restaurantId\": 1, \"orderItemsRequest\": ["
+                        + "{\"menuItemId\": 10, \"quantity\": 1}, {\"menuItemId\": 10, \"quantity\": 2}]}")
+                .exchange();
+
+        assertThat(created).hasStatus(201).bodyJson().extractingPath("$.orderItems").asArray().hasSize(1);
+        assertThat(created).bodyJson().extractingPath("$.orderItems[0].quantity").isEqualTo(3);
     }
 
     private MvcTestResult createOrder(long userId) {
@@ -128,12 +195,6 @@ class OrderApiIT {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\": \"" + status + "\"}")
                 .exchange();
-    }
-
-    private static FeignException.NotFound notFound() {
-        Request request = Request.create(Request.HttpMethod.GET, "/api/restaurants/1",
-                Map.of(), null, new RequestTemplate());
-        return new FeignException.NotFound("not found", request, null, Map.of());
     }
 
     private static String bodyOf(MvcTestResult result) {

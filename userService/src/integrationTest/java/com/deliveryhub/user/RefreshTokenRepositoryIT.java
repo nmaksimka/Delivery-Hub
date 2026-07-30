@@ -77,6 +77,64 @@ class RefreshTokenRepositoryIT {
     }
 
     @Test
+    void revokesAllLiveTokensOfOneUserOnly() {
+        Long otherUser = userRepository.saveAndFlush(
+                User.register("other@example.com", "hash", "Other", null, NOW)).getId();
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "phone", NOW, LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "laptop", NOW, LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(otherUser, "foreign", NOW, LIFETIME));
+
+        int revoked = refreshTokenRepository.revokeAllOfUser(userId, NOW.plusSeconds(5));
+
+        assertThat(revoked).isEqualTo(2);
+        assertThat(refreshTokenRepository.findByTokenHash("phone").orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshTokenRepository.findByTokenHash("laptop").orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshTokenRepository.findByTokenHash("foreign").orElseThrow().isRevoked()).isFalse();
+    }
+
+    @Test
+    void deletesOnlyExpiredTokens() {
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "expired", NOW.minus(Duration.ofDays(60)), LIFETIME));
+        refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "live", NOW, LIFETIME));
+
+        int removed = refreshTokenRepository.deleteExpiredBefore(NOW.minus(Duration.ofDays(7)));
+
+        assertThat(removed).isEqualTo(1);
+        assertThat(refreshTokenRepository.findByTokenHash("expired")).isEmpty();
+        assertThat(refreshTokenRepository.findByTokenHash("live")).isPresent();
+    }
+
+    @Test
+    void revokedButUnexpiredTokenSurvivesCleanupHoweverLongAgoItWasRevoked() {
+        RefreshToken rotated = refreshTokenRepository.saveAndFlush(
+                RefreshToken.issue(userId, "rotated", NOW.minus(Duration.ofDays(20)), LIFETIME));
+        refreshTokenRepository.saveAndFlush(rotated.rotate("successor", NOW.minus(Duration.ofDays(19)), LIFETIME));
+        refreshTokenRepository.flush();
+
+        int removed = refreshTokenRepository.deleteExpiredBefore(NOW.minus(Duration.ofDays(7)));
+
+        assertThat(removed).isZero();
+        assertThat(refreshTokenRepository.findByTokenHash("rotated")).get()
+                .satisfies(token -> {
+                    assertThat(token.isRevoked()).isTrue();
+                    assertThat(token.getReplacedBy()).isNotNull();
+                });
+    }
+
+    @Test
+    void deletingSuccessorDoesNotBreakPredecessor() {
+        RefreshToken first = refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "first", NOW, LIFETIME));
+        RefreshToken second = refreshTokenRepository.saveAndFlush(first.rotate("second", NOW.plusSeconds(10), LIFETIME));
+        second.revoke(NOW.plusSeconds(20));
+        refreshTokenRepository.flush();
+
+        refreshTokenRepository.delete(second);
+        refreshTokenRepository.flush();
+
+        assertThat(refreshTokenRepository.findByTokenHash("first")).isPresent();
+    }
+
+    @Test
     void sameHashCannotBeStoredTwice() {
         refreshTokenRepository.saveAndFlush(RefreshToken.issue(userId, "same", NOW, LIFETIME));
 

@@ -7,6 +7,7 @@ import java.time.Instant;
 public record DeliveryDto(
         Long id,
         Long orderId,
+        Long userId,
         Long courierId,
         DeliveryStatus status,
         Instant estimatedDeliveryTime,

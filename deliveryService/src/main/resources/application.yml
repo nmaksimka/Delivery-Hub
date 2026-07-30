@@ -45,10 +45,24 @@ spring:
       avro.use.logical.type.converters: true
 
 app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   outbox:
     poll-interval: 1s
     batch-size: 50
     send-timeout: 5s
+    max-attempts: 5
+    retry-backoff: 2s
+    max-backoff: 1m
+  cleanup:
+    interval: 1h
+    outbox-retention: 7d
+    processed-events-retention: 14d
+  kafka:
+    topics:
+      partitions: 3
+      replicas: 1
+      retention: 7d
+      dead-letter-retention: 30d
 
 eureka:
   client:

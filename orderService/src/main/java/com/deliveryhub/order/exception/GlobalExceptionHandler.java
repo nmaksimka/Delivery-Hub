@@ -1,13 +1,17 @@
 package com.deliveryhub.order.exception;
 
+import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import feign.FeignException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,7 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String RETRY_AFTER_SECONDS = "10";
@@ -27,9 +31,14 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ProblemDetail handleConflict(IllegalStateException ex) {
+    @ExceptionHandler({InvalidStatusTransitionException.class, OrderRejectedException.class})
+    public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRestaurantRequestException.class)
+    public ProblemDetail handleInvalidRestaurantRequest(InvalidRestaurantRequestException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(ForbiddenException.class)
@@ -37,15 +46,27 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleConcurrentUpdate(ObjectOptimisticLockingFailureException ex) {
+        log.info("Concurrent update rejected: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "The record was changed by another request, reload it and try again");
+        problem.setTitle("Concurrent update");
+        return problem;
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
+                                                                  HttpHeaders headers,
+                                                                  HttpStatusCode status,
+                                                                  WebRequest request) {
         Map<String, String> errors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Validation failed");
         problem.setProperty("errors", errors);
-        return problem;
+        return handleExceptionInternal(ex, problem, headers, status, request);
     }
 
     @ExceptionHandler(RestaurantServiceUnavailableException.class)
@@ -57,12 +78,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
                 .body(problem);
-    }
-
-    @ExceptionHandler(FeignException.class)
-    public ProblemDetail handleDownstream(FeignException ex) {
-        log.error("Downstream call failed: {}", ex.getMessage());
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, "Restaurant service is unavailable");
     }
 
     @ExceptionHandler(Exception.class)

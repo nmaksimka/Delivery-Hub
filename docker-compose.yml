@@ -12,16 +12,25 @@ x-platform-credentials: &platform-credentials
   CONFIG_PASSWORD: ${CONFIG_PASSWORD:?CONFIG_PASSWORD is required, see .env.example}
   EUREKA_USER: ${EUREKA_USER:-eureka}
   EUREKA_PASSWORD: ${EUREKA_PASSWORD:?EUREKA_PASSWORD is required, see .env.example}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required, see .env.example}
+
+x-redis-credentials: &redis-credentials
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
 
 x-json-logs: &json-logs
   LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+
+x-storage-credentials: &storage-credentials
+  STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY is required, see .env.example}
+  STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY is required, see .env.example}
+  STORAGE_BUCKET: ${STORAGE_BUCKET:-images}
 
 services:
   kafka:
     image: apache/kafka:4.1.2
     container_name: kafka
     ports:
-      - "29092:29092"
+      - "127.0.0.1:29092:29092"
     environment:
       CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
       KAFKA_NODE_ID: 1
@@ -50,7 +59,7 @@ services:
     image: confluentinc/cp-schema-registry:8.1.4
     container_name: schema-registry
     ports:
-      - "8085:8081"
+      - "127.0.0.1:8085:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
@@ -68,7 +77,7 @@ services:
     image: kafbat/kafka-ui:v1.5.0
     container_name: kafka-ui
     ports:
-      - "8086:8080"
+      - "127.0.0.1:8086:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: deliveryhub
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -82,12 +91,48 @@ services:
   redis:
     image: redis:8.6.3-alpine
     container_name: redis
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, see .env.example}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: garage
+    ports:
+      - "127.0.0.1:3900:3900"
+      - "127.0.0.1:3903:3903"
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET is required, see .env.example}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required, see .env.example}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  garageInit:
+    image: curlimages/curl:8.14.1
+    container_name: garageInit
+    entrypoint: ["sh", "/init.sh"]
+    environment:
+      <<: *storage-credentials
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required, see .env.example}
+    volumes:
+      - ./garage/init.sh:/init.sh:ro
+    depends_on:
+      garage:
+        condition: service_healthy
+    restart: "no"
 
   postgres-restaurant:
     image: postgres:17.9-alpine
@@ -96,8 +141,6 @@ services:
       POSTGRES_DB: restaurant_db
       POSTGRES_USER: restaurant_user
       POSTGRES_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
-    ports:
-      - "5331:5432"
     volumes:
       - pg-restaurant-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -109,8 +152,6 @@ services:
       POSTGRES_DB: order_db
       POSTGRES_USER: order_user
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
-    ports:
-      - "5332:5432"
     volumes:
       - pg-order-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -122,8 +163,6 @@ services:
       POSTGRES_DB: delivery_db
       POSTGRES_USER: delivery_user
       POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:-delivery_pass}
-    ports:
-      - "5333:5432"
     volumes:
       - pg-delivery-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -135,8 +174,6 @@ services:
       POSTGRES_DB: user_db
       POSTGRES_USER: user_user
       POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
-    ports:
-      - "5334:5432"
     volumes:
       - pg-user-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
@@ -187,11 +224,19 @@ services:
       context: .
       dockerfile: ./restaurantService/Dockerfile
     container_name: restaurantService
+    expose:
+      - "9331"
     environment:
-      <<: [*platform-credentials, *json-logs]
+      <<: [*platform-credentials, *json-logs, *storage-credentials, *redis-credentials]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
+      STORAGE_ENDPOINT: http://garage:3900
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:3900}
     depends_on:
+      garageInit:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       configServer:
         condition: service_healthy
       discoveryServer:
@@ -293,7 +338,7 @@ services:
     ports:
       - "3335:3335"
     environment:
-      <<: [*platform-credentials, *json-logs]
+      <<: [*platform-credentials, *json-logs, *redis-credentials]
       SPRING_PROFILES_ACTIVE: docker
     depends_on:
       redis:
@@ -310,16 +355,22 @@ services:
         condition: service_healthy
       userService:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9335/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   prometheus:
     image: prom/prometheus:v3.12.0
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
-      - apiGateway
+      apiGateway:
+        condition: service_healthy
 
   loki:
     image: grafana/loki:3.7.3
@@ -367,6 +418,8 @@ volumes:
   loki-data:
   grafana-data:
   kafka-data:
+  garage-meta:
+  garage-data:
   pg-restaurant-data:
   pg-order-data:
   pg-delivery-data:

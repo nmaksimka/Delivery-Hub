@@ -3,6 +3,7 @@ package com.deliveryhub.delivery;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
@@ -88,12 +89,33 @@ class OrderCreatedListenerIT {
         assertThat(deliveryRepository.existsByOrderId(secondOrderId)).isFalse();
     }
 
+    @Test
+    void cancelsDeliveryWhenOrderIsCancelledAndReportsItBack() {
+        long orderId = 7010L;
+        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(orderId));
+        await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(orderId));
+
+        kafkaTemplate.send(Topics.ORDER_CANCELLED, Long.toString(orderId),
+                new OrderCancelledEvent(UUID.randomUUID(), orderId, 42L, Instant.now(), 2L));
+
+        await().atMost(TIMEOUT).untilAsserted(() ->
+                assertThat(deliveryRepository.findByOrderId(orderId)).get()
+                        .satisfies(delivery -> assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED)));
+
+        Optional<DeliveryStatusUpdatedEvent> statusUpdate = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.DELIVERY_STATUS_UPDATED, DeliveryStatusUpdatedEvent.class,
+                        event -> event.getOrderId() == orderId && event.getStatus() == DeliveryStatus.CANCELLED);
+
+        assertThat(statusUpdate).isPresent();
+        assertThat(statusUpdate.get().getSequence()).isEqualTo(2L);
+    }
+
     private static OrderCreatedEvent orderCreated(long orderId) {
         return orderCreated(UUID.randomUUID(), orderId);
     }
 
     private static OrderCreatedEvent orderCreated(UUID eventId, long orderId) {
         return new OrderCreatedEvent(eventId, orderId, 42L, 1L, new BigDecimal("34.00"), Instant.now(),
-                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))));
+                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))), 1L);
     }
 }

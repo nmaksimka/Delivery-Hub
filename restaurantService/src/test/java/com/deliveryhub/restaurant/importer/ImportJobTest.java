@@ -1,0 +1,76 @@
+package com.deliveryhub.restaurant.importer;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ImportJobTest {
+
+    private static final Instant NOW = Instant.parse("2026-07-20T10:00:00Z");
+
+    @Test
+    void countsProgressInPercent() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+        job.start(NOW);
+        job.plan(4);
+
+        job.recordItem(true);
+        job.recordItem(false);
+        job.recordSkipped();
+
+        assertThat(job.progressPercent()).isEqualTo(75);
+        assertThat(job.getItemsCreated()).isEqualTo(1);
+        assertThat(job.getItemsUpdated()).isEqualTo(1);
+        assertThat(job.getProcessed()).isEqualTo(3);
+    }
+
+    @Test
+    void completedJobIsAlwaysHundredPercent() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+        job.start(NOW);
+
+        job.complete(NOW.plusSeconds(5));
+
+        assertThat(job.progressPercent()).isEqualTo(100);
+        assertThat(job.getStatus()).isEqualTo(ImportStatus.COMPLETED);
+        assertThat(job.getFinishedAt()).isEqualTo(NOW.plusSeconds(5));
+    }
+
+    @Test
+    void failureKeepsShortenedReason() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+
+        job.fail("x".repeat(3000), NOW);
+
+        assertThat(job.getStatus()).isEqualTo(ImportStatus.FAILED);
+        assertThat(job.getError()).hasSize(1000);
+    }
+
+    @Test
+    void cannotBeStartedTwice() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+        job.start(NOW);
+
+        assertThatThrownBy(() -> job.start(NOW)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void knowsWhichInstanceRunsIt() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+
+        assertThat(job.belongsTo("node-a")).isTrue();
+        assertThat(job.belongsTo("node-b")).isFalse();
+    }
+
+    @Test
+    void heartbeatKeepsJobAlive() {
+        ImportJob job = ImportJob.queued(ImportSource.MEALDB, NOW, "node-a");
+        job.beat(NOW.plusSeconds(600));
+
+        assertThat(job.isSilentSince(NOW.plusSeconds(300))).isFalse();
+        assertThat(job.isSilentSince(NOW.plusSeconds(900))).isTrue();
+    }
+}

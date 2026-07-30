@@ -5,3 +5,8 @@ spring:
     bootstrap-servers: kafka:9092
     properties:
       schema.registry.url: http://schema-registry:8081
+  grpc:
+    client:
+      channels:
+        restaurant:
+          address: static://restaurantService:9331

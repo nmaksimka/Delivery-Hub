@@ -1,0 +1,16 @@
+spring:
+  cache:
+    type: simple
+  grpc:
+    server:
+      port: 0
+
+management:
+  health:
+    redis:
+      enabled: false
+
+app:
+  storage:
+    access-key: it-access-key
+    secret-key: it-secret-key

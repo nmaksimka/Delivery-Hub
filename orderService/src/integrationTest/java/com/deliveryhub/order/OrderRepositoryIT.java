@@ -10,12 +10,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(PostgresContainerConfig.class)
@@ -43,28 +48,64 @@ class OrderRepositoryIT {
     }
 
     @Test
-    void returnsOnlyOrdersOfRequestedUser() {
+    void pagesIdsOfRequestedUserOnly() {
         orderRepository.saveAndFlush(orderOf(501L));
         orderRepository.saveAndFlush(orderOf(501L));
         orderRepository.saveAndFlush(orderOf(502L));
         entityManager.clear();
 
-        Page<Order> page = orderRepository.findByUserId(501L, PageRequest.of(0, 10));
+        Page<Long> page = orderRepository.findIdsByUserId(501L, PageRequest.of(0, 10));
 
         assertThat(page.getTotalElements()).isEqualTo(2);
-        assertThat(page.getContent()).allSatisfy(order -> assertThat(order.belongsTo(501L)).isTrue());
+        assertThat(orderRepository.findWithItemsByIdIn(page.getContent()))
+                .allSatisfy(order -> assertThat(order.belongsTo(501L)).isTrue());
+    }
+
+    @Test
+    void limitsPageInDatabaseAndLoadsItemsWithSecondQuery() {
+        for (int i = 0; i < 5; i++) {
+            orderRepository.saveAndFlush(orderOf(601L));
+        }
+        entityManager.clear();
+
+        Page<Long> page = orderRepository.findIdsByUserId(
+                601L, PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "id")));
+        List<Order> orders = orderRepository.findWithItemsByIdIn(page.getContent());
+
+        assertThat(page.getTotalElements()).isEqualTo(5);
+        assertThat(page.getTotalPages()).isEqualTo(3);
+        assertThat(page.getContent()).hasSize(2).isSortedAccordingTo(Comparator.reverseOrder());
+        assertThat(orders).hasSize(2).allSatisfy(order -> {
+            assertThat(Hibernate.isInitialized(order.getOrderItems())).isTrue();
+            assertThat(order.getOrderItems()).hasSize(2);
+        });
     }
 
     @Test
     void persistsStatusChange() {
         Order order = orderRepository.saveAndFlush(orderOf(42L));
 
-        order.applyStatus(OrderStatus.CONFIRMED, NOW);
+        order.changeStatus(OrderStatus.CONFIRMED, NOW);
         orderRepository.flush();
         entityManager.clear();
 
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void rejectsUpdateBasedOnStaleVersion() {
+        Order stale = orderRepository.saveAndFlush(orderOf(42L));
+        entityManager.detach(stale);
+
+        Order fresh = orderRepository.findById(stale.getId()).orElseThrow();
+        fresh.changeStatus(OrderStatus.CONFIRMED, NOW);
+        orderRepository.flush();
+
+        stale.changeStatus(OrderStatus.CANCELLED, NOW);
+
+        assertThatThrownBy(() -> orderRepository.saveAndFlush(stale))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
     }
 
     private static Order orderOf(long userId) {

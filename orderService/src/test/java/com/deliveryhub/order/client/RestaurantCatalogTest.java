@@ -1,103 +1,223 @@
 package com.deliveryhub.order.client;
 
-import com.deliveryhub.order.client.dto.MenuItemDto;
-import com.deliveryhub.order.client.dto.RestaurantDto;
-import feign.FeignException;
-import feign.Request;
-import feign.RequestTemplate;
+import com.deliveryhub.contracts.pricing.ItemStatus;
+import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
+import com.deliveryhub.contracts.pricing.QuoteRequest;
+import com.deliveryhub.contracts.pricing.QuoteResponse;
+import com.deliveryhub.contracts.pricing.QuotedItem;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
+import io.grpc.ManagedChannel;
+import io.grpc.Server;
+import io.grpc.Status;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.StreamObserver;
 import jakarta.persistence.EntityNotFoundException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.time.Duration;
-import java.util.Map;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class RestaurantCatalogTest {
 
-    private static final RestaurantDto RESTAURANT = new RestaurantDto(1L, "Pizzeria", true);
-
-    @Mock
-    private RestaurantServiceClient client;
-
+    private final AtomicInteger calls = new AtomicInteger();
+    private volatile Consumer<StreamObserver<QuoteResponse>> behaviour = answer -> {
+    };
+    private Server server;
+    private ManagedChannel channel;
     private RestaurantCatalog catalog;
 
     @BeforeEach
-    void setUp() {
-        RetryConfig config = RetryConfig.custom()
+    void setUp() throws Exception {
+        String name = UUID.randomUUID().toString();
+        server = InProcessServerBuilder.forName(name).executor(Runnable::run)
+                .addService(new MenuPricingGrpc.MenuPricingImplBase() {
+                    @Override
+                    public void quote(QuoteRequest request, StreamObserver<QuoteResponse> responseObserver) {
+                        calls.incrementAndGet();
+                        behaviour.accept(responseObserver);
+                    }
+                }).build().start();
+        channel = InProcessChannelBuilder.forName(name).build();
+
+        CircuitBreakerConfig breaker = CircuitBreakerConfig.custom()
+                .slidingWindowSize(4)
+                .minimumNumberOfCalls(4)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .ignoreExceptions(EntityNotFoundException.class, InvalidRestaurantRequestException.class)
+                .build();
+        RetryConfig retry = RetryConfig.custom()
                 .maxAttempts(3)
                 .waitDuration(Duration.ofMillis(1))
-                .retryExceptions(RestaurantServiceUnavailableException.class)
-                .ignoreExceptions(RestaurantCircuitOpenException.class)
+                .retryExceptions(RestaurantUnreachableException.class)
                 .build();
-        catalog = new RestaurantCatalog(client, RetryRegistry.of(config));
+        catalog = new RestaurantCatalog(MenuPricingGrpc.newBlockingStub(channel),
+                new RestaurantGrpcProperties(Duration.ofMillis(200)),
+                CircuitBreakerRegistry.of(java.util.Map.of(RestaurantCatalog.RESILIENCE_NAME, breaker)),
+                RetryRegistry.of(retry));
+    }
+
+    @AfterEach
+    void tearDown() {
+        channel.shutdownNow();
+        server.shutdownNow();
     }
 
     @Test
-    void repeatsReadWhenServiceIsTemporarilyUnavailable() {
-        when(client.getRestaurantById(1L))
-                .thenThrow(unavailable())
-                .thenThrow(unavailable())
-                .thenReturn(RESTAURANT);
+    void keepsPricedItemsAndDropsMissingOnes() {
+        behaviour = answer -> reply(answer, QuoteResponse.newBuilder()
+                .setRestaurantId(1L).setRestaurantName("Pizzeria").setRestaurantActive(true)
+                .addItems(item(10L, ItemStatus.ITEM_STATUS_AVAILABLE, "Pizza", "12.50"))
+                .addItems(item(11L, ItemStatus.ITEM_STATUS_UNAVAILABLE, "Soup", "5.00"))
+                .addItems(item(12L, ItemStatus.ITEM_STATUS_NOT_FOUND, "", ""))
+                .addItems(item(13L, ItemStatus.ITEM_STATUS_OTHER_RESTAURANT, "", ""))
+                .build());
 
-        assertThat(catalog.restaurant(1L)).isEqualTo(RESTAURANT);
-        verify(client, times(3)).getRestaurantById(1L);
+        MenuQuote quote = catalog.quote(1L, List.of(10L, 11L, 12L, 13L));
+
+        assertThat(quote.restaurant().active()).isTrue();
+        assertThat(quote.item(10L)).hasValueSatisfying(pizza -> {
+            assertThat(pizza.price()).isEqualByComparingTo("12.50");
+            assertThat(pizza.available()).isTrue();
+        });
+        assertThat(quote.item(11L)).hasValueSatisfying(soup -> assertThat(soup.available()).isFalse());
+        assertThat(quote.item(12L)).isEmpty();
+        assertThat(quote.item(13L)).isEmpty();
+    }
+
+    @Test
+    void readsClosedRestaurantWithItsHours() {
+        behaviour = answer -> reply(answer, QuoteResponse.newBuilder()
+                .setRestaurantId(1L).setRestaurantName("Pizzeria").setRestaurantActive(true)
+                .setRestaurantClosed(true).setOpensAt("10:00").setClosesAt("22:00").setTimeZone("Asia/Tomsk")
+                .build());
+
+        MenuQuote quote = catalog.quote(1L, List.of(10L));
+
+        assertThat(quote.restaurant().closed()).isTrue();
+        assertThat(quote.restaurant().workingHours()).isEqualTo("10:00-22:00 Asia/Tomsk");
+    }
+
+    @Test
+    void answerWithoutHoursMeansOpenRestaurant() {
+        behaviour = answer -> reply(answer,
+                QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantActive(true).build());
+
+        MenuQuote quote = catalog.quote(1L, List.of(10L));
+
+        assertThat(quote.restaurant().closed()).isFalse();
+        assertThat(quote.restaurant().workingHours()).isEmpty();
+    }
+
+    @Test
+    void turnsNotFoundIntoMissingRestaurantWithoutRetry() {
+        behaviour = answer -> answer.onError(Status.NOT_FOUND.asRuntimeException());
+
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L))).isInstanceOf(EntityNotFoundException.class);
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void turnsInvalidArgumentIntoBadRequestWithoutRetry() {
+        behaviour = answer -> answer.onError(Status.INVALID_ARGUMENT.withDescription("bad id").asRuntimeException());
+
+        assertThatThrownBy(() -> catalog.quote(-1L, List.of(10L)))
+                .isExactlyInstanceOf(InvalidRestaurantRequestException.class);
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void invalidRequestsDoNotOpenCircuit() {
+        behaviour = answer -> answer.onError(Status.INVALID_ARGUMENT.asRuntimeException());
+        for (int call = 0; call < 6; call++) {
+            assertThatThrownBy(() -> catalog.quote(-1L, List.of(10L)))
+                    .isExactlyInstanceOf(InvalidRestaurantRequestException.class);
+        }
+        behaviour = answer -> reply(answer,
+                QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantActive(true).build());
+
+        assertThat(catalog.quote(1L, List.of(10L)).restaurant().active()).isTrue();
+    }
+
+    @Test
+    void repeatsCallWhenServiceIsUnavailable() {
+        AtomicInteger attempt = new AtomicInteger();
+        behaviour = answer -> {
+            if (attempt.incrementAndGet() < 3) {
+                answer.onError(Status.UNAVAILABLE.asRuntimeException());
+            } else {
+                reply(answer, QuoteResponse.newBuilder().setRestaurantId(1L).setRestaurantActive(true).build());
+            }
+        };
+
+        assertThat(catalog.quote(1L, List.of(10L)).restaurant().active()).isTrue();
+        assertThat(calls).hasValue(3);
     }
 
     @Test
     void givesUpAfterLastAttempt() {
-        when(client.getMenuItemById(1L, 10L)).thenThrow(unavailable());
+        behaviour = answer -> answer.onError(Status.UNAVAILABLE.asRuntimeException());
 
-        assertThatThrownBy(() -> catalog.menuItem(1L, 10L))
-                .isInstanceOf(RestaurantServiceUnavailableException.class);
-        verify(client, times(3)).getMenuItemById(1L, 10L);
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
+                .isExactlyInstanceOf(RestaurantUnreachableException.class);
+        assertThat(calls).hasValue(3);
     }
 
     @Test
-    void doesNotRepeatWhenCircuitIsOpen() {
-        when(client.getRestaurantById(1L)).thenThrow(new RestaurantCircuitOpenException(null));
+    void doesNotRepeatOnServerError() {
+        behaviour = answer -> answer.onError(Status.INTERNAL.asRuntimeException());
 
-        assertThatThrownBy(() -> catalog.restaurant(1L)).isInstanceOf(RestaurantCircuitOpenException.class);
-        verify(client, times(1)).getRestaurantById(1L);
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
+                .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
+        assertThat(calls).hasValue(1);
     }
 
     @Test
-    void missingRestaurantIsNotRetriedAndBecomesEntityNotFound() {
-        when(client.getRestaurantById(1L)).thenThrow(notFound());
+    void doesNotRepeatWhenDeadlineIsExceeded() {
+        behaviour = answer -> {
+            try {
+                Thread.sleep(600);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
 
-        assertThatThrownBy(() -> catalog.restaurant(1L))
-                .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("Restaurant with ID: 1");
-        verify(client, times(1)).getRestaurantById(1L);
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
+                .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
+        assertThat(calls).hasValue(1);
     }
 
     @Test
-    void returnsMenuItemOfRestaurant() {
-        MenuItemDto pizza = new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true);
-        when(client.getMenuItemById(1L, 10L)).thenReturn(pizza);
+    void stopsCallingServiceWhenCircuitIsOpen() {
+        behaviour = answer -> answer.onError(Status.INTERNAL.asRuntimeException());
+        for (int call = 0; call < 4; call++) {
+            assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
+                    .isExactlyInstanceOf(RestaurantServiceUnavailableException.class);
+        }
 
-        assertThat(catalog.menuItem(1L, 10L)).isEqualTo(pizza);
+        assertThatThrownBy(() -> catalog.quote(1L, List.of(10L)))
+                .isInstanceOf(RestaurantCircuitOpenException.class);
+        assertThat(calls).hasValue(4);
     }
 
-    private static RestaurantServiceUnavailableException unavailable() {
-        return new RestaurantServiceUnavailableException("Restaurant service did not answer", null);
+    private static void reply(StreamObserver<QuoteResponse> answer, QuoteResponse response) {
+        answer.onNext(response);
+        answer.onCompleted();
     }
 
-    private static FeignException.NotFound notFound() {
-        Request request = Request.create(Request.HttpMethod.GET, "/api/restaurants/1",
-                Map.of(), null, new RequestTemplate());
-        return new FeignException.NotFound("not found", request, null, Map.of());
+    private static QuotedItem item(long id, ItemStatus status, String name, String price) {
+        return QuotedItem.newBuilder().setMenuItemId(id).setStatus(status).setName(name).setPrice(price).build();
     }
 }

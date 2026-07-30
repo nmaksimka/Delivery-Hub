@@ -12,6 +12,7 @@ import com.deliveryhub.user.mapper.UserMapper;
 import com.deliveryhub.user.repository.UserRepository;
 import com.deliveryhub.user.exception.InvalidRefreshTokenException;
 import com.deliveryhub.user.security.AccessTokens;
+import com.deliveryhub.user.security.AppUserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -73,13 +75,13 @@ class AuthServiceTest {
     void hashesPasswordAndAssignsRole() {
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn("$2a$hashed");
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userMapper.toDto(any(User.class))).thenReturn(userDto());
 
         authService.register(registerRequest());
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(captor.capture());
+        verify(userRepository).saveAndFlush(captor.capture());
 
         User saved = captor.getValue();
         assertThat(saved.getEmail()).isEqualTo(EMAIL);
@@ -98,16 +100,44 @@ class AuthServiceTest {
                 .isInstanceOf(EmailAlreadyUsedException.class)
                 .hasMessageContaining(EMAIL);
 
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("приводит email к нижнему регистру при регистрации")
+    void storesEmailInLowerCase() {
+        when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn("$2a$hashed");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.register(new RegisterRequest("  " + EMAIL.toUpperCase() + " ", RAW_PASSWORD, "Test", null));
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo(EMAIL);
+    }
+
+    @Test
+    @DisplayName("гонка двух регистраций заканчивается EmailAlreadyUsedException, а не ошибкой базы")
+    void translatesUniqueViolationOnRace() {
+        when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn("$2a$hashed");
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("users_email_key"));
+
+        assertThatThrownBy(() -> authService.register(registerRequest()))
+                .isInstanceOf(EmailAlreadyUsedException.class);
     }
 
     @Test
     @DisplayName("возвращает пару токенов и профиль при успешном входе")
     void returnsTokenOnLogin() {
         User user = UserFixtures.persistedUser(7L, EMAIL, Role.USER);
-        Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, List.of());
+        Authentication authentication =
+                new UsernamePasswordAuthenticationToken(AppUserPrincipal.of(user), null, List.of());
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user));
         when(accessTokens.issue(user)).thenReturn("jwt-token");
         when(accessTokens.lifetime()).thenReturn(Duration.ofMinutes(15));
         when(refreshTokens.issueFor(7L)).thenReturn("refresh-token");

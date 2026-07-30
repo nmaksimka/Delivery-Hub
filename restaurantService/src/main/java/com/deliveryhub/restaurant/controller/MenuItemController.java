@@ -2,9 +2,12 @@ package com.deliveryhub.restaurant.controller;
 
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.dto.MenuItemRequest;
+import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,13 +17,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/restaurants/{restaurantId}/menu")
 public class MenuItemController {
+
+    private static final int MAX_IDS = 100;
+
     private final MenuItemService menuItemService;
 
     public MenuItemController(MenuItemService menuItemService) {
@@ -30,8 +40,13 @@ public class MenuItemController {
     @GetMapping
     public List<MenuItemDto> getMenuByRestaurant(
             @PathVariable Long restaurantId,
-            @RequestParam(value = "availableOnly", defaultValue = "true") boolean availableOnly) {
-        return menuItemService.getMenuItemsByRestaurant(restaurantId, availableOnly);
+            @RequestParam(value = "availableOnly", defaultValue = "true") boolean availableOnly,
+            @RequestParam(value = "ids", required = false) @Size(max = MAX_IDS) Set<Long> ids,
+            @RequestParam(value = "section", required = false) MenuSection section) {
+        if (ids != null) {
+            return menuItemService.getMenuItemsByIds(restaurantId, ids);
+        }
+        return menuItemService.getMenuItemsByRestaurant(restaurantId, availableOnly, section);
     }
 
     @GetMapping("/{menuItemId}")
@@ -51,6 +66,13 @@ public class MenuItemController {
                                       @PathVariable Long menuItemId,
                                       @Valid @RequestBody MenuItemRequest request) {
         return menuItemService.updateMenuItem(restaurantId, menuItemId, request);
+    }
+
+    @PutMapping(value = "/{menuItemId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public MenuItemDto uploadImage(@PathVariable Long restaurantId,
+                                   @PathVariable Long menuItemId,
+                                   @RequestPart("file") MultipartFile file) throws IOException {
+        return menuItemService.replaceImage(restaurantId, menuItemId, file.getBytes());
     }
 
     @DeleteMapping("/{menuItemId}")
