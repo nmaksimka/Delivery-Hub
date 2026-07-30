@@ -3,7 +3,8 @@ import { z } from 'zod';
 const storageKey = 'deliveryhub.session';
 
 const sessionSchema = z.object({
-  token: z.string().min(1),
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1),
   user: z.object({
     id: z.number(),
     email: z.string(),

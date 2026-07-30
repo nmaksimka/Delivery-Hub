@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { errorMessage } from '../api/http';
 import { useCreateOrder } from '../api/queries';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 import { formatPrice } from '../lib/format';
+import { orderErrorMessage } from '../lib/orderErrors';
 import { Button } from './Button';
 import styles from './CartDrawer.module.css';
 import { BagIcon, CloseIcon } from './icons';
@@ -156,7 +156,10 @@ export function CartDrawer() {
             </p>
             {createOrder.isError && (
               <p className={styles.error} role="alert">
-                {errorMessage(createOrder.error)}
+                {orderErrorMessage(
+                  createOrder.error,
+                  (menuItemId) => cart.lines.find((line) => line.menuItemId === menuItemId)?.name,
+                )}
               </p>
             )}
             {!user && <p className={styles.hint}>Чтобы оформить заказ, войдите в аккаунт.</p>}

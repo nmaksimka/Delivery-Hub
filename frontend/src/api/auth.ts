@@ -1,13 +1,6 @@
 import { z } from 'zod';
 import { request } from './http';
-
-const loginResponseSchema = z.object({
-  token: z.string().min(1),
-  id: z.number(),
-  email: z.string(),
-  name: z.string(),
-  role: z.string(),
-});
+import { tokenResponseSchema } from './tokens';
 
 const registeredUserSchema = z.object({
   id: z.number(),
@@ -16,7 +9,6 @@ const registeredUserSchema = z.object({
   role: z.string(),
 });
 
-export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type RegisteredUser = z.infer<typeof registeredUserSchema>;
 
 export type Credentials = {
@@ -34,7 +26,7 @@ export const authApi = {
     return request('/api/auth/login', {
       method: 'POST',
       body: credentials,
-      schema: loginResponseSchema,
+      schema: tokenResponseSchema,
     });
   },
   register(registration: Registration) {
@@ -42,6 +34,13 @@ export const authApi = {
       method: 'POST',
       body: registration,
       schema: registeredUserSchema,
+    });
+  },
+  logout(refreshToken: string) {
+    return request('/api/auth/logout', {
+      method: 'POST',
+      body: { refreshToken },
+      schema: z.undefined(),
     });
   },
 };
