@@ -48,5 +48,7 @@ export function useCreateOrder() {
   return useMutation({
     mutationFn: (order: NewOrder) => ordersApi.create(order),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+    onError: (_error, order) =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.restaurant(order.restaurantId) }),
   });
 }
