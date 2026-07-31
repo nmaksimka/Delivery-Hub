@@ -91,6 +91,10 @@ spring:
               uri: lb://orderService
               predicates:
                 - Path=/api/orders/**
+            - id: cart
+              uri: lb://orderService
+              predicates:
+                - Path=/api/cart/**
             - id: delivery-service
               uri: lb://deliveryService
               predicates:
