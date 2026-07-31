@@ -1,0 +1,211 @@
+package com.deliveryhub.order.cart;
+
+import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.MenuItemDto;
+import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.dto.CreateOrderRequest;
+import com.deliveryhub.order.dto.OrderDto;
+import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.exception.Coded;
+import com.deliveryhub.order.exception.ErrorCode;
+import com.deliveryhub.order.exception.OrderRejectedException;
+import com.deliveryhub.order.service.OrderService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.UnaryOperator;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class CartServiceTest {
+
+    private static final long USER = 42L;
+    private static final long RESTAURANT = 1L;
+
+    @Mock
+    private CartStore store;
+    @Mock
+    private RestaurantCatalog restaurantCatalog;
+    @Mock
+    private OrderService orderService;
+
+    private CartService service;
+    private Cart stored = Cart.empty();
+
+    @BeforeEach
+    void setUp() {
+        service = new CartService(store, restaurantCatalog, orderService);
+    }
+
+    private void storeBacksCart() {
+        lenient().when(store.load(USER)).thenAnswer(invocation -> stored);
+        lenient().when(store.update(eq(USER), any())).thenAnswer(invocation -> {
+            UnaryOperator<Cart> change = invocation.getArgument(1);
+            stored = change.apply(stored);
+            return stored;
+        });
+    }
+
+    private void menuIs(RestaurantDto restaurant, MenuItemDto... items) {
+        Map<Long, MenuItemDto> byId = new HashMap<>();
+        for (MenuItemDto item : items) {
+            byId.put(item.id(), item);
+        }
+        when(restaurantCatalog.quote(eq(RESTAURANT), anyCollection())).thenReturn(new MenuQuote(restaurant, byId));
+    }
+
+    private static RestaurantDto open() {
+        return new RestaurantDto(RESTAURANT, "Pizzeria", true);
+    }
+
+    private static MenuItemDto pizza(boolean available) {
+        return new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), available);
+    }
+
+    @Test
+    void emptyCartIsShownWithoutAskingRestaurantService() {
+        storeBacksCart();
+
+        CartDto cart = service.get(USER);
+
+        assertThat(cart.items()).isEmpty();
+        assertThat(cart.orderable()).isFalse();
+        assertThat(cart.total()).isEqualByComparingTo("0");
+        verify(restaurantCatalog, never()).quote(any(), anyCollection());
+    }
+
+    @Test
+    void pricesAreTakenFromQuoteNotFromStoredCart() {
+        storeBacksCart();
+        menuIs(open(), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
+
+        menuIs(open(), new MenuItemDto(10L, "Pizza", new BigDecimal("15.00"), true));
+        CartDto cart = service.get(USER);
+
+        assertThat(cart.items()).singleElement().satisfies(line -> {
+            assertThat(line.price()).isEqualByComparingTo("15.00");
+            assertThat(line.lineTotal()).isEqualByComparingTo("30.00");
+        });
+        assertThat(cart.total()).isEqualByComparingTo("30.00");
+        assertThat(cart.orderable()).isTrue();
+    }
+
+    @Test
+    void unavailableAndDeletedItemsMakeCartNotOrderableAndStayOutOfTotal() {
+        storeBacksCart();
+        menuIs(open(), pizza(true), new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
+
+        menuIs(open(), pizza(false));
+        CartDto cart = service.get(USER);
+
+        assertThat(cart.items()).extracting(CartLineDto::available).containsExactly(false, false);
+        assertThat(cart.items().get(1).name()).isNull();
+        assertThat(cart.total()).isEqualByComparingTo("0");
+        assertThat(cart.orderable()).isFalse();
+    }
+
+    @Test
+    void closedRestaurantMakesCartNotOrderable() {
+        storeBacksCart();
+        menuIs(new RestaurantDto(RESTAURANT, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk"), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
+
+        CartDto cart = service.get(USER);
+
+        assertThat(cart.restaurant().closed()).isTrue();
+        assertThat(cart.orderable()).isFalse();
+    }
+
+    @Test
+    void addingItemUnknownToRestaurantIsRejectedAndNothingIsStored() {
+        storeBacksCart();
+        menuIs(open());
+
+        assertThatThrownBy(() -> service.addItem(USER, new AddCartItemRequest(RESTAURANT, 99L, 1), false))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.ITEM_NOT_FOUND));
+        verify(store, never()).update(any(), any());
+    }
+
+    @Test
+    void addingFromOtherRestaurantConflictsUnlessReplaced() {
+        storeBacksCart();
+        menuIs(open(), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
+        when(restaurantCatalog.quote(eq(2L), anyCollection())).thenReturn(new MenuQuote(
+                new RestaurantDto(2L, "Sushi", true),
+                Map.of(20L, new MenuItemDto(20L, "Roll", new BigDecimal("8.00"), true))));
+        AddCartItemRequest fromOther = new AddCartItemRequest(2L, 20L, 1);
+
+        assertThatThrownBy(() -> service.addItem(USER, fromOther, false))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code())
+                        .isEqualTo(ErrorCode.CART_OTHER_RESTAURANT));
+
+        CartDto replaced = service.addItem(USER, fromOther, true);
+        assertThat(replaced.restaurant().id()).isEqualTo(2L);
+        assertThat(replaced.items()).extracting(CartLineDto::menuItemId).containsExactly(20L);
+    }
+
+    @Test
+    void checkoutCreatesOrderFromCartLinesAndClearsCart() {
+        storeBacksCart();
+        menuIs(open(), pizza(true), new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
+        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("28.00"), null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER))).thenReturn(created);
+
+        OrderDto order = service.checkout(USER);
+
+        assertThat(order.id()).isEqualTo(5L);
+        ArgumentCaptor<CreateOrderRequest> request = ArgumentCaptor.forClass(CreateOrderRequest.class);
+        verify(orderService).createOrder(request.capture(), eq(USER));
+        assertThat(request.getValue().restaurantId()).isEqualTo(RESTAURANT);
+        assertThat(request.getValue().orderItemsRequest())
+                .containsExactly(new OrderItemRequest(10L, 2), new OrderItemRequest(11L, 1));
+        verify(store).clear(USER);
+    }
+
+    @Test
+    void failedCheckoutKeepsCart() {
+        storeBacksCart();
+        menuIs(open(), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
+        when(orderService.createOrder(any(), eq(USER)))
+                .thenThrow(new OrderRejectedException(
+                        ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
+
+        assertThatThrownBy(() -> service.checkout(USER)).isInstanceOf(Coded.class);
+
+        verify(store, never()).clear(USER);
+    }
+
+    @Test
+    void checkoutOfEmptyCartIsRejected() {
+        storeBacksCart();
+
+        assertThatThrownBy(() -> service.checkout(USER))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
+        verify(orderService, never()).createOrder(any(), any());
+    }
+}
