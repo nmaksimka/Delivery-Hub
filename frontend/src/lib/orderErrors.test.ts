@@ -64,6 +64,49 @@ describe('orderErrorMessage', () => {
     );
   });
 
+  it('explainsEveryPromoCodeRejection', () => {
+    expect(
+      messageFor(new ApiError(404, 'x', 'Promo code NOPE was not found', 'PROMO_NOT_FOUND')),
+    ).toBe('Такого промокода нет, проверьте написание');
+    expect(messageFor(conflict('Promo code A is not active', 'PROMO_INACTIVE'))).toBe(
+      'Этот промокод больше не действует',
+    );
+    expect(messageFor(conflict('Promo code A is not valid yet', 'PROMO_NOT_STARTED'))).toBe(
+      'Этот промокод ещё не начал действовать',
+    );
+    expect(messageFor(conflict('Promo code A has expired', 'PROMO_EXPIRED'))).toBe(
+      'Срок действия промокода истёк',
+    );
+    expect(messageFor(conflict('Promo code A is used up', 'PROMO_LIMIT_REACHED'))).toBe(
+      'Промокод уже использовали максимальное число раз',
+    );
+    expect(
+      messageFor(conflict('Promo code A is valid only for restaurant 3', 'PROMO_OTHER_RESTAURANT')),
+    ).toBe('Этот промокод действует только в другом ресторане');
+    expect(messageFor(conflict('Promo code A already exists', 'PROMO_CODE_EXISTS'))).toBe(
+      'Промокод с таким названием уже есть',
+    );
+  });
+
+  it('namesMinimumAmountAndPerUserLimitFromDetail', () => {
+    expect(
+      messageFor(conflict('Promo code A requires an order of at least 30.00', 'PROMO_MIN_AMOUNT')),
+    ).toBe('Промокод действует на заказ от 30.00 ₽');
+    expect(messageFor(conflict('Promo code A requires', 'PROMO_MIN_AMOUNT'))).toBe(
+      'Сумма заказа слишком мала для этого промокода',
+    );
+    expect(
+      messageFor(
+        conflict('Promo code A can be used only 1 time(s) per user', 'PROMO_USER_LIMIT_REACHED'),
+      ),
+    ).toBe('Вы уже использовали этот промокод');
+    expect(
+      messageFor(
+        conflict('Promo code A can be used only 3 time(s) per user', 'PROMO_USER_LIMIT_REACHED'),
+      ),
+    ).toBe('Вы исчерпали лимит использований этого промокода');
+  });
+
   it('fallsBackToDetailTextWhenCodeIsMissing', () => {
     expect(messageFor(conflict('Restaurant 1 is not active'))).toBe(
       'Ресторан сейчас не принимает заказы',

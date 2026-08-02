@@ -5,6 +5,8 @@ type ItemName = (menuItemId: number) => string | undefined;
 const workingHoursPattern = /working hours: (\d{1,2}:\d{2})(?::\d{2})?-(\d{1,2}:\d{2})/;
 const menuItemIdPattern = /(?:Menu item|menu item|ID:) (\d+)/;
 const limitPattern = /exceeds (\d+)/;
+const minAmountPattern = /at least (\d+(?:\.\d+)?)/;
+const perUserLimitPattern = /only (\d+) time/;
 
 const legacyCodes: [RegExp, string][] = [
   [/^Restaurant \d+ is not active/, 'RESTAURANT_INACTIVE'],
@@ -62,6 +64,32 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
       return 'Корзина пуста';
     case 'CART_TOO_MANY_LINES':
       return 'В корзине слишком много позиций';
+    case 'PROMO_NOT_FOUND':
+      return 'Такого промокода нет, проверьте написание';
+    case 'PROMO_INACTIVE':
+      return 'Этот промокод больше не действует';
+    case 'PROMO_NOT_STARTED':
+      return 'Этот промокод ещё не начал действовать';
+    case 'PROMO_EXPIRED':
+      return 'Срок действия промокода истёк';
+    case 'PROMO_MIN_AMOUNT': {
+      const amount = detail.match(minAmountPattern)?.[1];
+      return amount
+        ? `Промокод действует на заказ от ${amount} ₽`
+        : 'Сумма заказа слишком мала для этого промокода';
+    }
+    case 'PROMO_LIMIT_REACHED':
+      return 'Промокод уже использовали максимальное число раз';
+    case 'PROMO_USER_LIMIT_REACHED': {
+      const times = detail.match(perUserLimitPattern)?.[1];
+      return times === '1'
+        ? 'Вы уже использовали этот промокод'
+        : 'Вы исчерпали лимит использований этого промокода';
+    }
+    case 'PROMO_OTHER_RESTAURANT':
+      return 'Этот промокод действует только в другом ресторане';
+    case 'PROMO_CODE_EXISTS':
+      return 'Промокод с таким названием уже есть';
     case 'CONCURRENT_UPDATE':
       return 'Данные успели измениться, попробуйте ещё раз';
     default:
