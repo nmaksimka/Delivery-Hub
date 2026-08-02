@@ -102,6 +102,7 @@ public class OrderService {
         return withItems(orderRepository.findAllIds(pageable));
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
         return createOrder(createRequest, userId, null);
     }
