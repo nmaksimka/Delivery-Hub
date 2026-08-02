@@ -85,6 +85,12 @@ app:
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   cart:
     ttl: 7d
+  idempotency:
+    ttl: 24h
+    cleanup-interval: 1h
+    endpoints:
+      - POST /api/orders
+      - POST /api/cart/checkout
   restaurant-grpc:
     deadline: 2s
   outbox:
