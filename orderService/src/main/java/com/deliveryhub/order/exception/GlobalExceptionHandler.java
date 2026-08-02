@@ -42,6 +42,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
     }
 
+    @ExceptionHandler(InvalidPromoException.class)
+    public ProblemDetail handleInvalidPromo(InvalidPromoException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ProblemDetail handleForbidden(ForbiddenException ex) {
         return problem(HttpStatus.FORBIDDEN, ex.getMessage(), ErrorCode.FORBIDDEN);
