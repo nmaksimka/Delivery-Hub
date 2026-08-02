@@ -87,4 +87,20 @@ class CartTest {
         assertThat(emptied.restaurantId()).isNull();
         assertThat(cart.remove(99L)).isEqualTo(cart);
     }
+
+    @Test
+    void promoCodeSurvivesLineChangesButNotRestaurantReplacementOrEmptying() {
+        Cart cart = Cart.empty().add(1L, 10L, 2, false).withPromo("SPRING10");
+
+        assertThat(cart.add(1L, 11L, 1, false).promoCode()).isEqualTo("SPRING10");
+        assertThat(cart.changeQuantity(10L, 3).promoCode()).isEqualTo("SPRING10");
+        assertThat(cart.add(2L, 20L, 1, true).promoCode()).isNull();
+        assertThat(cart.remove(10L).promoCode()).isNull();
+        assertThat(cart.withoutPromo().promoCode()).isNull();
+    }
+
+    @Test
+    void emptyCartCannotHoldPromoCode() {
+        assertThat(Cart.empty().withPromo("SPRING10").promoCode()).isNull();
+    }
 }
