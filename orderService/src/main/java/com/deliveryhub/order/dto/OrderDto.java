@@ -12,6 +12,8 @@ public record OrderDto(
         Long restaurantId,
         OrderStatus status,
         BigDecimal totalAmount,
+        BigDecimal discount,
+        String promoCode,
         Instant createdAt,
         Instant updatedAt,
         List<OrderItemDto> orderItems) {

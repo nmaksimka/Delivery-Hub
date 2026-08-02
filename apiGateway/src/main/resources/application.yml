@@ -95,6 +95,10 @@ spring:
               uri: lb://orderService
               predicates:
                 - Path=/api/cart/**
+            - id: promo-admin
+              uri: lb://orderService
+              predicates:
+                - Path=/api/admin/promo-codes/**
             - id: delivery-service
               uri: lb://deliveryService
               predicates:

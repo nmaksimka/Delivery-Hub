@@ -8,7 +8,7 @@ import com.deliveryhub.order.exception.OrderRejectedException;
 import java.util.ArrayList;
 import java.util.List;
 
-public record Cart(Long restaurantId, List<CartLine> lines) {
+public record Cart(Long restaurantId, List<CartLine> lines, String promoCode) {
 
     public static final int MAX_LINES = 50;
 
@@ -17,7 +17,7 @@ public record Cart(Long restaurantId, List<CartLine> lines) {
     }
 
     public static Cart empty() {
-        return new Cart(null, List.of());
+        return new Cart(null, List.of(), null);
     }
 
     public boolean hasLines() {
@@ -47,7 +47,7 @@ public record Cart(Long restaurantId, List<CartLine> lines) {
             }
             updated.add(new CartLine(menuItemId, quantity));
         }
-        return new Cart(targetRestaurantId, updated);
+        return new Cart(targetRestaurantId, updated, base.promoCode);
     }
 
     public Cart changeQuantity(Long menuItemId, int quantity) {
@@ -58,14 +58,22 @@ public record Cart(Long restaurantId, List<CartLine> lines) {
         requireWithinLimit(menuItemId, quantity);
         List<CartLine> updated = new ArrayList<>(lines);
         updated.set(index, new CartLine(menuItemId, quantity));
-        return new Cart(restaurantId, updated);
+        return new Cart(restaurantId, updated, promoCode);
     }
 
     public Cart remove(Long menuItemId) {
         List<CartLine> updated = lines.stream()
                 .filter(line -> !line.menuItemId().equals(menuItemId))
                 .toList();
-        return updated.isEmpty() ? empty() : new Cart(restaurantId, updated);
+        return updated.isEmpty() ? empty() : new Cart(restaurantId, updated, promoCode);
+    }
+
+    public Cart withPromo(String code) {
+        return hasLines() ? new Cart(restaurantId, lines, code) : this;
+    }
+
+    public Cart withoutPromo() {
+        return new Cart(restaurantId, lines, null);
     }
 
     private int indexOf(Long menuItemId) {

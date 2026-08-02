@@ -41,6 +41,12 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal discount;
+
+    @Column(name = "promo_code", length = 64)
+    private String promoCode;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -68,6 +74,7 @@ public class Order {
         this.restaurantId = Objects.requireNonNull(restaurantId, "restaurantId");
         this.status = OrderStatus.CREATED;
         this.totalAmount = BigDecimal.ZERO;
+        this.discount = BigDecimal.ZERO;
         this.createdAt = Objects.requireNonNull(placedAt, "placedAt");
         this.updatedAt = placedAt;
     }
@@ -83,6 +90,31 @@ public class Order {
         OrderItem item = new OrderItem(this, menuItemId, itemName, quantity, pricePerUnit);
         orderItems.add(item);
         totalAmount = totalAmount.add(item.lineTotal());
+    }
+
+    public void applyDiscount(String code, BigDecimal amount) {
+        Objects.requireNonNull(code, "code");
+        Objects.requireNonNull(amount, "amount");
+        if (status != OrderStatus.CREATED) {
+            throw new IllegalStateException("Discount can be applied only to a new order, current status: " + status);
+        }
+        if (promoCode != null) {
+            throw new IllegalStateException("Order already has promo code " + promoCode);
+        }
+        if (amount.signum() < 0 || amount.compareTo(totalAmount) > 0) {
+            throw new IllegalArgumentException("Discount must be between 0 and the order amount " + totalAmount);
+        }
+        promoCode = code;
+        discount = amount;
+        totalAmount = totalAmount.subtract(amount);
+    }
+
+    public BigDecimal subtotal() {
+        return totalAmount.add(discount);
+    }
+
+    public boolean hasPromo() {
+        return promoCode != null;
     }
 
     public boolean changeStatus(OrderStatus next, Instant at) {
@@ -155,6 +187,14 @@ public class Order {
 
     public BigDecimal getTotalAmount() {
         return totalAmount;
+    }
+
+    public BigDecimal getDiscount() {
+        return discount;
+    }
+
+    public String getPromoCode() {
+        return promoCode;
     }
 
     public Instant getCreatedAt() {

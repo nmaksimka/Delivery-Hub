@@ -168,6 +168,46 @@ class OrderTest {
         assertThat(order.belongsTo(43L)).isFalse();
     }
 
+    @Test
+    void discountReducesTotalAndKeepsSubtotal() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.addItem(10L, "Pizza", 2, new BigDecimal("12.50"));
+
+        order.applyDiscount("SPRING10", new BigDecimal("2.50"));
+
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("22.50");
+        assertThat(order.getDiscount()).isEqualByComparingTo("2.50");
+        assertThat(order.subtotal()).isEqualByComparingTo("25.00");
+        assertThat(order.getPromoCode()).isEqualTo("SPRING10");
+        assertThat(order.hasPromo()).isTrue();
+    }
+
+    @Test
+    void orderWithoutPromoHasZeroDiscount() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.addItem(10L, "Pizza", 1, BigDecimal.TEN);
+
+        assertThat(order.getDiscount()).isEqualByComparingTo("0");
+        assertThat(order.getPromoCode()).isNull();
+        assertThat(order.hasPromo()).isFalse();
+        assertThat(order.subtotal()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void discountCannotExceedTotalOrBeAppliedTwiceOrAfterCreation() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.addItem(10L, "Pizza", 1, BigDecimal.TEN);
+
+        assertThatThrownBy(() -> order.applyDiscount("BIG", new BigDecimal("10.01")))
+                .isInstanceOf(IllegalArgumentException.class);
+        order.applyDiscount("TEN", BigDecimal.TEN);
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("0");
+        assertThatThrownBy(() -> order.applyDiscount("TWICE", BigDecimal.ONE))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> orderIn(OrderStatus.CONFIRMED).applyDiscount("LATE", BigDecimal.ZERO))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private static Order orderIn(OrderStatus status) {
         Order order = Order.place(42L, 1L, NOW);
         ReflectionTestUtils.setField(order, "status", status);

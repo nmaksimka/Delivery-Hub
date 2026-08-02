@@ -49,6 +49,17 @@ public class CartController {
         return cartService.removeItem(userId, menuItemId);
     }
 
+    @PostMapping("/promo")
+    public CartDto applyPromo(@Valid @RequestBody ApplyPromoRequest request,
+                              @RequestHeader("X-User-Id") Long userId) {
+        return cartService.applyPromo(userId, request.code());
+    }
+
+    @DeleteMapping("/promo")
+    public CartDto removePromo(@RequestHeader("X-User-Id") Long userId) {
+        return cartService.removePromo(userId);
+    }
+
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void clear(@RequestHeader("X-User-Id") Long userId) {
