@@ -21,6 +21,8 @@ import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
+import com.deliveryhub.order.promo.PromoService;
+import com.deliveryhub.order.promo.PromoUse;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
 import io.micrometer.core.instrument.Counter;
@@ -56,6 +58,7 @@ public class OrderService {
     private final RestaurantCatalog restaurantCatalog;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
+    private final PromoService promoService;
     private final Clock clock;
     private final TransactionTemplate transaction;
     private final Counter ordersPlaced;
@@ -65,6 +68,7 @@ public class OrderService {
                         RestaurantCatalog restaurantCatalog,
                         Outbox outbox,
                         ProcessedEvents processedEvents,
+                        PromoService promoService,
                         Clock clock,
                         PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
@@ -73,6 +77,7 @@ public class OrderService {
         this.restaurantCatalog = restaurantCatalog;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
+        this.promoService = promoService;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
         this.ordersPlaced = Counter.builder(ORDERS_PLACED)
@@ -97,8 +102,12 @@ public class OrderService {
         return withItems(orderRepository.findAllIds(pageable));
     }
 
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
+        return createOrder(createRequest, userId, null);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
@@ -127,7 +136,7 @@ public class OrderService {
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
 
-        Order savedOrder = transaction.execute(status -> store(order));
+        Order savedOrder = transaction.execute(status -> store(order, promoCode));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
@@ -140,9 +149,17 @@ public class OrderService {
                 : closed + ", working hours: " + restaurant.workingHours();
     }
 
-    private Order store(Order order) {
+    private Order store(Order order, String promoCode) {
+        PromoUse promo = null;
+        if (promoCode != null && !promoCode.isBlank()) {
+            promo = promoService.reserve(promoCode, order.getUserId(), order.getRestaurantId(), order.subtotal());
+            order.applyDiscount(promo.code(), promo.discount());
+        }
         long sequence = order.nextEventSequence();
         Order savedOrder = orderRepository.save(order);
+        if (promo != null) {
+            promoService.record(promo, savedOrder.getUserId(), savedOrder.getId());
+        }
         OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
         return savedOrder;
@@ -203,6 +220,9 @@ public class OrderService {
     }
 
     private void appendCancelled(Order order) {
+        if (order.hasPromo()) {
+            promoService.release(order.getId());
+        }
         OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
                 .setEventId(UUID.randomUUID())
                 .setOrderId(order.getId())
