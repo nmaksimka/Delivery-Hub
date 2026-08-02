@@ -11,6 +11,7 @@ import com.deliveryhub.order.exception.Coded;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.promo.PromoService;
+import com.deliveryhub.order.promo.PromoUse;
 import com.deliveryhub.order.service.OrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -211,5 +212,86 @@ class CartServiceTest {
         assertThatThrownBy(() -> service.checkout(USER))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
         verify(orderService, never()).createOrder(any(), any(), any());
+    }
+
+    private void cartWithTwoPizzas() {
+        storeBacksCart();
+        menuIs(open(), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
+    }
+
+    @Test
+    void appliedPromoShowsDiscountAndIsKeptInCart() {
+        cartWithTwoPizzas();
+        when(promoService.preview("spring10", USER, RESTAURANT, new BigDecimal("25.00")))
+                .thenReturn(new PromoUse(7L, "SPRING10", new BigDecimal("2.50")));
+
+        CartDto cart = service.applyPromo(USER, "spring10");
+
+        assertThat(cart.subtotal()).isEqualByComparingTo("25.00");
+        assertThat(cart.discount()).isEqualByComparingTo("2.50");
+        assertThat(cart.total()).isEqualByComparingTo("22.50");
+        assertThat(cart.promoCode()).isEqualTo("SPRING10");
+        assertThat(stored.promoCode()).isEqualTo("SPRING10");
+    }
+
+    @Test
+    void rejectedPromoLeavesCartWithoutPromo() {
+        cartWithTwoPizzas();
+        when(promoService.preview(any(), any(), any(), any()))
+                .thenThrow(new OrderRejectedException(ErrorCode.PROMO_MIN_AMOUNT, "too small"));
+
+        assertThatThrownBy(() -> service.applyPromo(USER, "SPRING10"))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.PROMO_MIN_AMOUNT));
+
+        assertThat(stored.promoCode()).isNull();
+    }
+
+    @Test
+    void promoCannotBeAppliedToEmptyCart() {
+        storeBacksCart();
+
+        assertThatThrownBy(() -> service.applyPromo(USER, "SPRING10"))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
+        verify(promoService, never()).preview(any(), any(), any(), any());
+    }
+
+    @Test
+    void removingPromoRestoresFullTotal() {
+        cartWithTwoPizzas();
+        stored = stored.withPromo("SPRING10");
+
+        CartDto cart = service.removePromo(USER);
+
+        assertThat(cart.promoCode()).isNull();
+        assertThat(cart.discount()).isEqualByComparingTo("0");
+        assertThat(cart.total()).isEqualByComparingTo("25.00");
+        verify(promoService, never()).preview(any(), any(), any(), any());
+    }
+
+    @Test
+    void promoThatStoppedWorkingIsReportedWithoutDiscount() {
+        cartWithTwoPizzas();
+        stored = stored.withPromo("SPRING10");
+        when(promoService.preview(any(), any(), any(), any()))
+                .thenThrow(new OrderRejectedException(ErrorCode.PROMO_EXPIRED, "expired"));
+
+        CartDto cart = service.get(USER);
+
+        assertThat(cart.promoCode()).isEqualTo("SPRING10");
+        assertThat(cart.promoProblem()).isEqualTo(ErrorCode.PROMO_EXPIRED);
+        assertThat(cart.discount()).isEqualByComparingTo("0");
+        assertThat(cart.total()).isEqualByComparingTo("25.00");
+    }
+
+    @Test
+    void checkoutPassesPromoCodeToOrderService() {
+        cartWithTwoPizzas();
+        stored = stored.withPromo("SPRING10");
+        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
+                "SPRING10", null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), eq("SPRING10"))).thenReturn(created);
+
+        assertThat(service.checkout(USER).promoCode()).isEqualTo("SPRING10");
     }
 }
