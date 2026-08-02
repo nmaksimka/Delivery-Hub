@@ -22,7 +22,7 @@ class GatewayRoutesTest {
 
         assertThat(routeIds).containsExactlyInAnyOrder(
                 "auth-login", "restaurant-service", "catalog-import", "restaurant-owners", "restaurant-cabinet",
-                "user-admin", "order-service", "cart", "delivery-service", "user-service",
+                "user-admin", "order-service", "cart", "promo-admin", "delivery-service", "user-service",
                 "restaurant-docs", "order-docs", "delivery-docs", "user-docs");
     }
 
