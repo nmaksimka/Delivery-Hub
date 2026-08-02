@@ -15,11 +15,14 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
 import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
+import com.deliveryhub.order.promo.PromoService;
+import com.deliveryhub.order.promo.PromoUse;
 import com.deliveryhub.order.outbox.Outbox;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
@@ -81,6 +84,8 @@ class OrderServiceTest {
     private Outbox outbox;
     @Mock
     private ProcessedEvents processedEvents;
+    @Mock
+    private PromoService promoService;
 
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -99,7 +104,7 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 restaurantCatalog, outbox,
-                processedEvents, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
+                processedEvents, promoService, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -324,6 +329,56 @@ class OrderServiceTest {
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Menu item with ID: 10");
         }
+
+        @Test
+        @DisplayName("с промокодом уменьшает сумму заказа и записывает использование")
+        void appliesPromoDiscountAndRecordsRedemption() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            PromoUse use = new PromoUse(7L, "SPRING10", new BigDecimal("3.40"));
+            when(promoService.reserve("spring10", USER_ID, RESTAURANT_ID, new BigDecimal("34.00"))).thenReturn(use);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID, "spring10");
+
+            verify(orderRepository).save(orderCaptor.capture());
+            Order saved = orderCaptor.getValue();
+            assertThat(saved.getTotalAmount()).isEqualByComparingTo("30.60");
+            assertThat(saved.getDiscount()).isEqualByComparingTo("3.40");
+            assertThat(saved.getPromoCode()).isEqualTo("SPRING10");
+            verify(promoService).record(use, USER_ID, 15L);
+        }
+
+        @Test
+        @DisplayName("без промокода не трогает PromoService")
+        void ignoresPromoServiceWithoutCode() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID);
+
+            verifyNoInteractions(promoService);
+        }
+
+        @Test
+        @DisplayName("отказ промокода не сохраняет заказ")
+        void rejectedPromoDoesNotSaveOrder() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "12.50", true);
+            givenMenuItem(11L, "Cola", "3.00", true);
+            when(promoService.reserve(any(), any(), any(), any()))
+                    .thenThrow(new OrderRejectedException(ErrorCode.PROMO_LIMIT_REACHED, "used up"));
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, "SPRING10"))
+                    .isInstanceOf(OrderRejectedException.class);
+
+            verify(orderRepository, never()).save(any());
+        }
     }
 
     @Nested
@@ -390,6 +445,28 @@ class OrderServiceTest {
             assertThat(event.getValue().getUserId()).isEqualTo(USER_ID);
             assertThat(event.getValue().getSequence()).isEqualTo(2L);
             assertThat(event.getValue().getCancelledAt()).isEqualTo(NOW);
+        }
+
+        @Test
+        @DisplayName("отмена заказа с промокодом освобождает использование")
+        void cancelReleasesPromoRedemption() {
+            Order order = orderOf(USER_ID);
+            order.applyDiscount("SPRING10", BigDecimal.ONE);
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER"));
+
+            verify(promoService).release(1L);
+        }
+
+        @Test
+        @DisplayName("отмена заказа без промокода не обращается к PromoService")
+        void cancelWithoutPromoSkipsRelease() {
+            when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(orderOf(USER_ID)));
+
+            orderService.cancelOrder(1L, new CurrentUser(USER_ID, "USER"));
+
+            verifyNoInteractions(promoService);
         }
 
         @Test
@@ -534,7 +611,7 @@ class OrderServiceTest {
     }
 
     private static OrderDto dto() {
-        return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, BigDecimal.TEN,
+        return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, BigDecimal.TEN, BigDecimal.ZERO, null,
                 Instant.EPOCH, Instant.EPOCH, List.of());
     }
 

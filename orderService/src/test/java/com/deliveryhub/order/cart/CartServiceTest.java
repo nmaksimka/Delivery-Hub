@@ -10,6 +10,7 @@ import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.exception.Coded;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.OrderRejectedException;
+import com.deliveryhub.order.promo.PromoService;
 import com.deliveryhub.order.service.OrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,13 +47,15 @@ class CartServiceTest {
     private RestaurantCatalog restaurantCatalog;
     @Mock
     private OrderService orderService;
+    @Mock
+    private PromoService promoService;
 
     private CartService service;
     private Cart stored = Cart.empty();
 
     @BeforeEach
     void setUp() {
-        service = new CartService(store, restaurantCatalog, orderService);
+        service = new CartService(store, restaurantCatalog, orderService, promoService);
     }
 
     private void storeBacksCart() {
@@ -172,14 +175,15 @@ class CartServiceTest {
         menuIs(open(), pizza(true), new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
-        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("28.00"), null, null, List.of());
-        when(orderService.createOrder(any(), eq(USER))).thenReturn(created);
+        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
+                null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), any())).thenReturn(created);
 
         OrderDto order = service.checkout(USER);
 
         assertThat(order.id()).isEqualTo(5L);
         ArgumentCaptor<CreateOrderRequest> request = ArgumentCaptor.forClass(CreateOrderRequest.class);
-        verify(orderService).createOrder(request.capture(), eq(USER));
+        verify(orderService).createOrder(request.capture(), eq(USER), any());
         assertThat(request.getValue().restaurantId()).isEqualTo(RESTAURANT);
         assertThat(request.getValue().orderItemsRequest())
                 .containsExactly(new OrderItemRequest(10L, 2), new OrderItemRequest(11L, 1));
@@ -191,7 +195,7 @@ class CartServiceTest {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
-        when(orderService.createOrder(any(), eq(USER)))
+        when(orderService.createOrder(any(), eq(USER), any()))
                 .thenThrow(new OrderRejectedException(
                         ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
 
@@ -206,6 +210,6 @@ class CartServiceTest {
 
         assertThatThrownBy(() -> service.checkout(USER))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
-        verify(orderService, never()).createOrder(any(), any());
+        verify(orderService, never()).createOrder(any(), any(), any());
     }
 }
