@@ -3,15 +3,18 @@ package com.deliveryhub.order.promo;
 import com.deliveryhub.order.exception.Coded;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.InvalidPromoException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -143,6 +146,25 @@ class PromoServiceTest {
     }
 
     @Test
+    void createTurnsUniqueViolationOfConcurrentInsertIntoCodeExists() {
+        when(promoCodes.saveAndFlush(any())).thenThrow(violation("uq_promo_codes_code_upper"));
+        CreatePromoCodeRequest request = new CreatePromoCodeRequest("race", PromoType.FIXED, BigDecimal.ONE,
+                null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.PROMO_CODE_EXISTS));
+    }
+
+    @Test
+    void createRethrowsOtherIntegrityViolations() {
+        when(promoCodes.saveAndFlush(any())).thenThrow(violation("ck_promo_codes_used_count"));
+        CreatePromoCodeRequest request = new CreatePromoCodeRequest("other", PromoType.FIXED, BigDecimal.ONE,
+                null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.create(request)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void createValidatesDomainRules() {
         CreatePromoCodeRequest request = new CreatePromoCodeRequest("big", PromoType.PERCENT, new BigDecimal("150"),
                 null, null, null, null, null, null);
@@ -157,5 +179,10 @@ class PromoServiceTest {
         service.deactivate(7L);
 
         assertThat(promo.isActive()).isFalse();
+    }
+
+    private static DataIntegrityViolationException violation(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("duplicate", new SQLException("duplicate", "23505"), constraint));
     }
 }
