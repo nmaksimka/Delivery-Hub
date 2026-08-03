@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { request } from './http';
+import { idempotencyKeyHeader } from './idempotency';
 import { pageOf } from './page';
 
 const orderItemSchema = z.object({
@@ -31,8 +32,13 @@ export type NewOrder = {
 };
 
 export const ordersApi = {
-  create(order: NewOrder) {
-    return request('/api/orders', { method: 'POST', body: order, schema: orderSchema });
+  create(order: NewOrder, idempotencyKey: string) {
+    return request('/api/orders', {
+      method: 'POST',
+      body: order,
+      headers: { [idempotencyKeyHeader]: idempotencyKey },
+      schema: orderSchema,
+    });
   },
   mine(options: { page: number; size: number; signal?: AbortSignal }) {
     return request('/api/orders', {

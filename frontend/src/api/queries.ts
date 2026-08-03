@@ -1,4 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { createAttemptKeys } from './idempotency';
 import { ordersApi, type NewOrder } from './orders';
 import { restaurantsApi } from './restaurants';
 
@@ -45,8 +47,10 @@ export function useMyOrders(page: number) {
 
 export function useCreateOrder() {
   const queryClient = useQueryClient();
+  const [attempts] = useState(createAttemptKeys);
   return useMutation({
-    mutationFn: (order: NewOrder) => ordersApi.create(order),
+    mutationFn: (order: NewOrder) => ordersApi.create(order, attempts.keyFor(order)),
+    onSettled: (_order, error) => attempts.settle(error),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
     onError: (_error, order) =>
       queryClient.invalidateQueries({ queryKey: queryKeys.restaurant(order.restaurantId) }),
