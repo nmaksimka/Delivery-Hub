@@ -213,6 +213,34 @@ class PromoApiIT {
         assertThat(recorded).isEqualTo(limit);
     }
 
+    @Test
+    void concurrentCreationOfSameCodeGivesOneCreatedAndConflictsWithCode() throws Exception {
+        int admins = 6;
+        ExecutorService pool = Executors.newFixedThreadPool(admins);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<MvcTestResult>> results = new ArrayList<>();
+        for (int i = 0; i < admins; i++) {
+            String spelling = i % 2 == 0 ? "twins" : "TWINS";
+            results.add(pool.submit(() -> {
+                start.await();
+                return createPromo(spelling, "FIXED", "1", "{}", "ADMIN");
+            }));
+        }
+        start.countDown();
+        int created = 0;
+        for (Future<MvcTestResult> future : results) {
+            MvcTestResult result = future.get();
+            if (result.getResponse().getStatus() == 201) {
+                created++;
+            } else {
+                assertThat(result).hasStatus(409).bodyJson().extractingPath("$.code").isEqualTo("PROMO_CODE_EXISTS");
+            }
+        }
+        pool.shutdown();
+
+        assertThat(created).isEqualTo(1);
+    }
+
     private static long nextUser() {
         return USERS.incrementAndGet();
     }

@@ -3,8 +3,10 @@ package com.deliveryhub.order.promo;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ItemNotFoundException;
 import com.deliveryhub.order.exception.OrderRejectedException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -12,12 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.util.Locale;
 
 @Service
 @Transactional(readOnly = true)
 public class PromoService {
 
     private static final Logger log = LoggerFactory.getLogger(PromoService.class);
+    private static final String UNIQUE_CODE_CONSTRAINT = "uq_promo_codes_code";
 
     private final PromoCodeRepository promoCodes;
     private final PromoRedemptionRepository redemptions;
@@ -68,12 +72,12 @@ public class PromoService {
     public PromoCode create(CreatePromoCodeRequest request) {
         String code = PromoCode.normalize(request.code());
         if (promoCodes.existsByCode(code)) {
-            throw new OrderRejectedException(ErrorCode.PROMO_CODE_EXISTS, "Promo code " + code + " already exists");
+            throw codeExists(code);
         }
         PromoCode promo = PromoCode.create(code, request.type(), request.value(), request.minOrderAmount(),
                 request.validFrom(), request.validTo(), request.maxRedemptions(), request.maxPerUser(),
                 request.restaurantId(), clock.instant());
-        PromoCode saved = promoCodes.save(promo);
+        PromoCode saved = saveUnique(promo);
         log.info("Promo code {} created", saved.getCode());
         return saved;
     }
@@ -98,5 +102,30 @@ public class PromoService {
 
     private static ItemNotFoundException notFound(String what) {
         return new ItemNotFoundException(ErrorCode.PROMO_NOT_FOUND, what + " was not found");
+    }
+
+    private PromoCode saveUnique(PromoCode promo) {
+        try {
+            return promoCodes.saveAndFlush(promo);
+        } catch (DataIntegrityViolationException ex) {
+            if (violatesUniqueCode(ex)) {
+                throw codeExists(promo.getCode());
+            }
+            throw ex;
+        }
+    }
+
+    private static boolean violatesUniqueCode(DataIntegrityViolationException ex) {
+        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation && violation.getConstraintName() != null
+                    && violation.getConstraintName().toLowerCase(Locale.ROOT).startsWith(UNIQUE_CODE_CONSTRAINT)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static OrderRejectedException codeExists(String code) {
+        return new OrderRejectedException(ErrorCode.PROMO_CODE_EXISTS, "Promo code " + code + " already exists");
     }
 }

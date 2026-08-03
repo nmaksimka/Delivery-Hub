@@ -9,6 +9,7 @@ type RequestOptions<T> = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   query?: Record<string, QueryValue>;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
@@ -123,7 +124,7 @@ function refreshSession(expired: Session): Promise<Session | null> {
 }
 
 async function send<T>(path: string, options: RequestOptions<T>, session: Session | null) {
-  const headers = new Headers({ Accept: 'application/json' });
+  const headers = new Headers({ ...options.headers, Accept: 'application/json' });
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
   }

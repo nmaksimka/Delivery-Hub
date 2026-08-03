@@ -116,6 +116,18 @@ describe('orderErrorMessage', () => {
     );
   });
 
+  it('explainsRepeatedOrderAttempts', () => {
+    expect(messageFor(conflict('still processing', 'IDEMPOTENCY_IN_PROGRESS'))).toBe(
+      'Заказ уже оформляется, подождите пару секунд',
+    );
+    expect(messageFor(new ApiError(422, 'x', 'reused', 'IDEMPOTENCY_KEY_REUSED'))).toBe(
+      'Корзина изменилась во время оформления, нажмите «Оформить заказ» ещё раз',
+    );
+    expect(messageFor(new ApiError(400, 'x', 'invalid', 'IDEMPOTENCY_KEY_INVALID'))).toBe(
+      'Не получилось отправить заказ, обновите страницу и попробуйте снова',
+    );
+  });
+
   it('usesGenericConflictMessageForUnknownCode', () => {
     expect(messageFor(conflict('Order 1 cannot change status', 'INVALID_STATUS_TRANSITION'))).toBe(
       'Заказ не принят, обновите страницу и попробуйте ещё раз',

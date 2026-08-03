@@ -92,6 +92,12 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
       return 'Промокод с таким названием уже есть';
     case 'CONCURRENT_UPDATE':
       return 'Данные успели измениться, попробуйте ещё раз';
+    case 'IDEMPOTENCY_IN_PROGRESS':
+      return 'Заказ уже оформляется, подождите пару секунд';
+    case 'IDEMPOTENCY_KEY_REUSED':
+      return 'Корзина изменилась во время оформления, нажмите «Оформить заказ» ещё раз';
+    case 'IDEMPOTENCY_KEY_INVALID':
+      return 'Не получилось отправить заказ, обновите страницу и попробуйте снова';
     default:
       return null;
   }
