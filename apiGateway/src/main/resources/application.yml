@@ -46,6 +46,8 @@ spring:
               - uri: http://localhost:3333
             userService:
               - uri: http://localhost:3334
+            paymentService:
+              - uri: http://localhost:3336
     gateway:
       server:
         webflux:
@@ -103,6 +105,10 @@ spring:
               uri: lb://deliveryService
               predicates:
                 - Path=/api/deliveries/**
+            - id: payment-service
+              uri: lb://paymentService
+              predicates:
+                - Path=/api/payments/**
             - id: user-service
               uri: lb://userService
               predicates:
@@ -123,6 +129,12 @@ spring:
               uri: lb://deliveryService
               predicates:
                 - Path=/docs/deliveries/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+            - id: payment-docs
+              uri: lb://paymentService
+              predicates:
+                - Path=/docs/payments/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: user-docs
@@ -161,3 +173,5 @@ springdoc:
         url: /docs/orders/v3/api-docs
       - name: delivery-service
         url: /docs/deliveries/v3/api-docs
+      - name: payment-service
+        url: /docs/payments/v3/api-docs
