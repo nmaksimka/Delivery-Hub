@@ -2,6 +2,7 @@ package com.deliveryhub.payment.api;
 
 import com.deliveryhub.payment.domain.ErrorCode;
 import com.deliveryhub.payment.domain.PaymentException;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +30,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PaymentException.class)
     public ProblemDetail handlePayment(PaymentException ex) {
         return problem(statusOf(ex.getCode()), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getConstraintViolations().forEach(violation ->
+                errors.put(lastNodeOf(violation.getPropertyPath().toString()), violation.getMessage()));
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", ErrorCode.VALIDATION_FAILED);
+        problem.setProperty("errors", errors);
+        return problem;
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
@@ -71,13 +82,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers,
                                                              HttpStatusCode statusCode, WebRequest request) {
-        if (body instanceof ProblemDetail problem
+        ResponseEntity<Object> response = super.handleExceptionInternal(ex, body, headers, statusCode, request);
+        if (response != null && response.getBody() instanceof ProblemDetail problem
                 && (problem.getProperties() == null || !problem.getProperties().containsKey(CODE_PROPERTY))) {
             problem.setProperty(CODE_PROPERTY, statusCode.is5xxServerError()
                     ? ErrorCode.INTERNAL_ERROR
                     : ErrorCode.INVALID_REQUEST);
         }
-        return super.handleExceptionInternal(ex, body, headers, statusCode, request);
+        return response;
+    }
+
+    private static String lastNodeOf(String path) {
+        return path.substring(path.lastIndexOf('.') + 1);
     }
 
     private static HttpStatus statusOf(ErrorCode code) {
