@@ -14,3 +14,7 @@ services:
   postgres-user:
     ports:
       - "127.0.0.1:5334:5432"
+
+  postgres-payment:
+    ports:
+      - "127.0.0.1:5336:5432"

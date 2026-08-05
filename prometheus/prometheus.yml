@@ -15,6 +15,7 @@ scrape_configs:
           - orderService:3332
           - deliveryService:3333
           - userService:3334
+          - paymentService:3336
         labels:
           system: deliveryhub
 

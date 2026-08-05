@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "PaymentCapturedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "orderId", "type": "long"},
+    {"name": "userId", "type": "long"},
+    {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
+    {"name": "capturedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

@@ -51,6 +51,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/docs/*/v3/api-docs", "/docs/*/v3/api-docs/**").permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .pathMatchers("/actuator/**").hasRole("ADMIN")
+                        .pathMatchers("/internal/**").denyAll()
 
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/cabinet/**").hasRole("RESTAURANT_OWNER")

@@ -1,0 +1,17 @@
+app:
+  payment:
+    provider: demo
+    demo:
+      max-balance: 100000.00
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

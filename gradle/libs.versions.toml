@@ -14,6 +14,7 @@ spring-grpc = "1.0.3"
 grpc = "1.77.1"
 protobuf = "4.33.4"
 protobuf-plugin = "0.9.6"
+openapi-generator = "7.23.0"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -91,3 +92,4 @@ tomcat-annotations = { module = "org.apache.tomcat:annotations-api", version = "
 [plugins]
 avro = { id = "com.github.davidmc24.gradle.plugin.avro", version.ref = "avro-plugin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
+openapi-generator = { id = "org.openapi.generator", version.ref = "openapi-generator" }
