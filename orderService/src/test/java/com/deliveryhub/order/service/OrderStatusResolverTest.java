@@ -15,7 +15,7 @@ class OrderStatusResolverTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({
-            "ASSIGNED,   CONFIRMED",
+            "ASSIGNED,   COURIER_ASSIGNED",
             "PICKED_UP,  IN_DELIVERY",
             "IN_TRANSIT, IN_DELIVERY",
             "DELIVERED,  DELIVERED",
@@ -38,6 +38,6 @@ class OrderStatusResolverTest {
     void neverLeaksDeliveryVocabulary() {
         assertThat(OrderStatusResolver.fromDeliveryStatus(DeliveryStatus.ASSIGNED))
                 .isNotEqualTo(OrderStatus.CREATED)
-                .isEqualTo(OrderStatus.CONFIRMED);
+                .isEqualTo(OrderStatus.COURIER_ASSIGNED);
     }
 }

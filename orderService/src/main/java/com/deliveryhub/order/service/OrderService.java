@@ -2,7 +2,6 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
-import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
@@ -12,6 +11,7 @@ import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.CancellationReason;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ErrorCode;
@@ -59,6 +59,7 @@ public class OrderService {
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final PromoService promoService;
+    private final OrderCancellation cancellation;
     private final Clock clock;
     private final TransactionTemplate transaction;
     private final Counter ordersPlaced;
@@ -69,6 +70,7 @@ public class OrderService {
                         Outbox outbox,
                         ProcessedEvents processedEvents,
                         PromoService promoService,
+                        OrderCancellation cancellation,
                         Clock clock,
                         PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
@@ -78,6 +80,7 @@ public class OrderService {
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.promoService = promoService;
+        this.cancellation = cancellation;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
         this.ordersPlaced = Counter.builder(ORDERS_PLACED)
@@ -170,11 +173,10 @@ public class OrderService {
     public OrderDto updateOrderStatus(Long id, OrderStatus newStatus) {
         Order order = findWithItemsOrThrow(id);
 
-        if (order.changeStatus(newStatus, clock.instant())) {
+        if (newStatus == OrderStatus.CANCELLED) {
+            cancellation.cancel(order, CancellationReason.ADMIN);
+        } else if (order.changeStatus(newStatus, clock.instant())) {
             log.info("Order {} status updated to {}", id, newStatus);
-            if (newStatus == OrderStatus.CANCELLED) {
-                appendCancelled(order);
-            }
         }
         return orderMapper.toDto(order);
     }
@@ -184,17 +186,13 @@ public class OrderService {
         Order order = findWithItemsOrThrow(id);
 
         if (currentUser.isAdmin()) {
-            if (!order.changeStatus(OrderStatus.CANCELLED, clock.instant())) {
-                return orderMapper.toDto(order);
-            }
-        } else {
-            if (!order.belongsTo(currentUser.id())) {
-                throw new ForbiddenException("Order " + id + " does not belong to the current user");
-            }
-            order.cancelByCustomer(clock.instant());
+            cancellation.cancel(order, CancellationReason.ADMIN);
+            return orderMapper.toDto(order);
         }
-        log.info("Order {} is cancelled by user {}", id, currentUser.id());
-        appendCancelled(order);
+        if (!order.belongsTo(currentUser.id())) {
+            throw new ForbiddenException("Order " + id + " does not belong to the current user");
+        }
+        cancellation.cancel(order, CancellationReason.CUSTOMER);
         return orderMapper.toDto(order);
     }
 
@@ -213,25 +211,17 @@ public class OrderService {
             return;
         }
         OrderStatus reported = OrderStatusResolver.fromDeliveryStatus(event.getStatus());
+        if (reported == OrderStatus.CANCELLED) {
+            if (!order.getStatus().isFinal()) {
+                cancellation.cancel(order, CancellationReason.DELIVERY_CANCELLED);
+            }
+            return;
+        }
         if (order.followDelivery(reported, clock.instant())) {
             log.info("Order {} status updated to {} after delivery event", order.getId(), reported);
         } else {
             log.info("Order {} stays {}, delivery reported {}", order.getId(), order.getStatus(), reported);
         }
-    }
-
-    private void appendCancelled(Order order) {
-        if (order.hasPromo()) {
-            promoService.release(order.getId());
-        }
-        OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
-                .setEventId(UUID.randomUUID())
-                .setOrderId(order.getId())
-                .setUserId(order.getUserId())
-                .setCancelledAt(order.getUpdatedAt())
-                .setSequence(order.nextEventSequence())
-                .build();
-        outbox.append(AGGREGATE_TYPE, order.getId(), Topics.ORDER_CANCELLED, event.getEventId(), event);
     }
 
     private Order findWithItemsOrThrow(Long id) {
