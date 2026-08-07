@@ -100,7 +100,8 @@ class OrderTest {
     @CsvSource({
             "CREATED,     IN_DELIVERY, IN_DELIVERY, true",
             "CREATED,     DELIVERED,   DELIVERED,   true",
-            "CONFIRMED,   CANCELLED,   CANCELLED,   true",
+            "CONFIRMED,   CANCELLED,   CONFIRMED,   false",
+            "PAYMENT_HELD, COURIER_ASSIGNED, COURIER_ASSIGNED, true",
             "IN_DELIVERY, CONFIRMED,   IN_DELIVERY, false",
             "DELIVERED,   CANCELLED,   DELIVERED,   false",
             "CANCELLED,   IN_DELIVERY, CANCELLED,   false"
@@ -114,13 +115,85 @@ class OrderTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CREATED", "CONFIRMED"})
+    @CsvSource({"CREATED", "PAYMENT_HELD", "COURIER_ASSIGNED", "CONFIRMED"})
     void customerCancelsOrderThatIsNotOnItsWay(OrderStatus from) {
         Order order = orderIn(from);
 
-        order.cancelByCustomer(NOW);
+        assertThat(order.cancelByCustomer(NOW)).isTrue();
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getCancellationReason()).isEqualTo(CancellationReason.CUSTOMER);
+    }
+
+    @Test
+    void sagaMovesOrderFromPaymentToConfirmation() {
+        Order order = Order.place(42L, 1L, NOW);
+
+        assertThat(order.markPaymentHeld(NOW)).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYMENT_HELD);
+        assertThat(order.markCourierAssigned(NOW)).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.COURIER_ASSIGNED);
+        assertThat(order.confirmPayment(NOW)).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void lateSagaStepDoesNotMoveOrderBack() {
+        Order order = orderIn(OrderStatus.CONFIRMED);
+
+        assertThat(order.markPaymentHeld(NOW)).isFalse();
+        assertThat(order.markCourierAssigned(NOW)).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void sagaStepDoesNotReviveCancelledOrder() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.cancel(CancellationReason.PAYMENT_TIMEOUT, NOW);
+
+        assertThat(order.markPaymentHeld(NOW)).isFalse();
+        assertThat(order.confirmPayment(NOW)).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getCancellationReason()).isEqualTo(CancellationReason.PAYMENT_TIMEOUT);
+    }
+
+    @Test
+    void secondCancellationKeepsFirstReason() {
+        Order order = Order.place(42L, 1L, NOW);
+
+        assertThat(order.cancel(CancellationReason.PAYMENT_REJECTED, NOW)).isTrue();
+        assertThat(order.cancel(CancellationReason.ADMIN, NOW.plusSeconds(5))).isFalse();
+
+        assertThat(order.getCancellationReason()).isEqualTo(CancellationReason.PAYMENT_REJECTED);
+    }
+
+    @Test
+    void deliveredOrderCannotBeCancelled() {
+        Order order = orderIn(OrderStatus.DELIVERED);
+
+        assertThatThrownBy(() -> order.cancel(CancellationReason.ADMIN, NOW))
+                .isInstanceOf(InvalidStatusTransitionException.class);
+    }
+
+    @Test
+    void refundIsRecordedOnceAndOnlyForCancelledOrder() {
+        Order order = orderIn(OrderStatus.CONFIRMED);
+        assertThatThrownBy(() -> order.recordRefund(NOW)).isInstanceOf(InvalidStatusTransitionException.class);
+
+        order.cancel(CancellationReason.CUSTOMER, NOW);
+
+        assertThat(order.recordRefund(NOW)).isTrue();
+        assertThat(order.recordRefund(NOW.plusSeconds(1))).isFalse();
+        assertThat(order.getRefundedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void stuckOrderIsDetectedOnlyInAwaitedStatus() {
+        Order order = Order.place(42L, 1L, NOW);
+
+        assertThat(order.isStuckIn(OrderStatus.CREATED, NOW.plusSeconds(60))).isTrue();
+        assertThat(order.isStuckIn(OrderStatus.CREATED, NOW)).isFalse();
+        assertThat(order.isStuckIn(OrderStatus.PAYMENT_HELD, NOW.plusSeconds(60))).isFalse();
     }
 
     @ParameterizedTest
