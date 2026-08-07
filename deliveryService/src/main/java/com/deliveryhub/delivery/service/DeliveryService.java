@@ -4,7 +4,6 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
-import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
@@ -30,6 +29,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -116,33 +116,22 @@ public class DeliveryService {
     }
 
     @Transactional
-    public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
-        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)) {
-            log.info("Event {} is already processed, skipping", event.getEventId());
-            return;
-        }
-        if (deliveryRepository.existsByOrderId(event.getOrderId())) {
-            log.warn("Delivery already exists for orderId={}, skipping", event.getOrderId());
-            return;
-        }
-
-        Delivery created = Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant());
-        created.acceptOrderEvent(event.getSequence());
-        Delivery delivery = deliveryRepository.save(created);
-
-        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
-        publishStatusChange(delivery);
-    }
-
-    @Transactional
     public void cancelDeliveryOfOrder(OrderCancelledEvent event) {
         if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)) {
             log.info("Event {} is already processed, skipping", event.getEventId());
             return;
         }
-        Delivery delivery = deliveryRepository.findByOrderId(event.getOrderId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Delivery for order ID: " + event.getOrderId() + " was not found"));
+        Optional<Delivery> existing = deliveryRepository.findByOrderId(event.getOrderId());
+        if (existing.isEmpty()) {
+            Delivery cancelled = Delivery.cancelledBeforeAssignment(event.getOrderId(), event.getUserId(),
+                    clock.instant());
+            cancelled.acceptOrderEvent(event.getSequence());
+            deliveryRepository.save(cancelled);
+            log.info("Order {} is cancelled before a courier was assigned, delivery will not be created",
+                    event.getOrderId());
+            return;
+        }
+        Delivery delivery = existing.get();
         if (!delivery.acceptOrderEvent(event.getSequence())) {
             log.info("Event {} with sequence {} is older than the applied one, dropping",
                     event.getEventId(), event.getSequence());
