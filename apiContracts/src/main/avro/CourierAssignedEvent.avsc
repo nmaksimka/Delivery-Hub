@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "CourierAssignedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "deliveryId", "type": "long"},
+    {"name": "orderId", "type": "long"},
+    {"name": "courierId", "type": "long"},
+    {"name": "assignedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "sequence", "type": "long", "default": 0}
+  ]
+}
