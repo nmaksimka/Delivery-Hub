@@ -15,6 +15,7 @@ const orderSchema = z.object({
   id: z.number(),
   restaurantId: z.number(),
   status: z.string(),
+  cancellationReason: z.string().nullish(),
   totalAmount: z.coerce.number(),
   createdAt: z.string(),
   orderItems: z
