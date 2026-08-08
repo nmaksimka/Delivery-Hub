@@ -18,6 +18,8 @@ import java.util.Objects;
 @Table(name = "payments")
 public class Payment {
 
+    public static final String FREE_PROVIDER = "free";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -61,7 +63,7 @@ public class Payment {
                     String providerReference, ErrorCode declineReason, Instant now) {
         this.orderId = orderId;
         this.userId = userId;
-        this.amount = Money.positive(amount);
+        this.amount = amount;
         this.status = status;
         this.provider = Objects.requireNonNull(provider, "provider");
         this.providerReference = providerReference;
@@ -72,13 +74,18 @@ public class Payment {
 
     public static Payment held(long orderId, long userId, BigDecimal amount, String provider, String reference,
                                Instant now) {
-        return new Payment(orderId, userId, amount, PaymentStatus.HELD, provider,
+        return new Payment(orderId, userId, Money.positive(amount), PaymentStatus.HELD, provider,
                 Objects.requireNonNull(reference, "reference"), null, now);
+    }
+
+    public static Payment free(long orderId, long userId, Instant now) {
+        return new Payment(orderId, userId, Money.zero(), PaymentStatus.HELD, FREE_PROVIDER,
+                FREE_PROVIDER + "-order-" + orderId, null, now);
     }
 
     public static Payment rejected(long orderId, long userId, BigDecimal amount, String provider, ErrorCode reason,
                                    Instant now) {
-        return new Payment(orderId, userId, amount, PaymentStatus.REJECTED, provider, null,
+        return new Payment(orderId, userId, Money.positive(amount), PaymentStatus.REJECTED, provider, null,
                 Objects.requireNonNull(reason, "reason"), now);
     }
 
@@ -99,6 +106,10 @@ public class Payment {
             throw new PaymentException(ErrorCode.PAYMENT_ORDER_MISMATCH,
                     "Order " + orderId + " already has a payment with another user or amount");
         }
+    }
+
+    public boolean isFree() {
+        return amount.signum() == 0;
     }
 
     public boolean isRejected() {

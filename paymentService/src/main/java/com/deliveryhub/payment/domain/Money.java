@@ -15,6 +15,17 @@ public final class Money {
         if (amount == null || amount.signum() <= 0) {
             throw new PaymentException(ErrorCode.INVALID_AMOUNT, "Amount must be positive");
         }
+        return normalized(amount);
+    }
+
+    public static BigDecimal nonNegative(BigDecimal amount) {
+        if (amount == null || amount.signum() < 0) {
+            throw new PaymentException(ErrorCode.INVALID_AMOUNT, "Amount must not be negative");
+        }
+        return normalized(amount);
+    }
+
+    private static BigDecimal normalized(BigDecimal amount) {
         if (amount.stripTrailingZeros().scale() > SCALE) {
             throw new PaymentException(ErrorCode.INVALID_AMOUNT, "Amount must have at most two decimal places");
         }

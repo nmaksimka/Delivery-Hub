@@ -109,6 +109,24 @@ class PaymentTest {
                 .extracting("code").isEqualTo(ErrorCode.INVALID_AMOUNT);
     }
 
+    @Test
+    void freePaymentIsHeldWithZeroAmountAndMovesLikeAnyOther() {
+        Payment payment = Payment.free(5L, 7L, CREATED);
+
+        assertThat(payment.isFree()).isTrue();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.HELD);
+        assertThat(payment.getAmount()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(payment.capture(LATER)).isTrue();
+        assertThat(payment.refund(LATER)).isTrue();
+        assertThat(held().isFree()).isFalse();
+    }
+
+    @Test
+    void chargedPaymentNeedsPositiveAmount() {
+        assertThatThrownBy(() -> Payment.held(5L, 7L, BigDecimal.ZERO, "demo", "ref", CREATED))
+                .extracting("code").isEqualTo(ErrorCode.INVALID_AMOUNT);
+    }
+
     private static Payment held() {
         return Payment.held(5L, 7L, new BigDecimal("250.5"), "demo", "demo-order-5", CREATED);
     }
