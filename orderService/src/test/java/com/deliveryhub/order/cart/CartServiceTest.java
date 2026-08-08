@@ -176,7 +176,7 @@ class CartServiceTest {
         menuIs(open(), pizza(true), new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
-        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
+        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
                 null, null, List.of());
         when(orderService.createOrder(any(), eq(USER), any())).thenReturn(created);
 
@@ -288,7 +288,7 @@ class CartServiceTest {
     void checkoutPassesPromoCodeToOrderService() {
         cartWithTwoPizzas();
         stored = stored.withPromo("SPRING10");
-        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
+        OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
                 "SPRING10", null, null, List.of());
         when(orderService.createOrder(any(), eq(USER), eq("SPRING10"))).thenReturn(created);
 

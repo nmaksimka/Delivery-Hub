@@ -22,6 +22,7 @@ public class KafkaContainerConfig {
         return registry -> {
             registry.add("spring.kafka.properties.schema.registry.url", () -> SCHEMA_REGISTRY_URL);
             registry.add("app.kafka.topics.partitions", () -> 1);
+            registry.add("app.saga.check-interval", () -> "1h");
         };
     }
 }

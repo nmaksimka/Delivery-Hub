@@ -7,6 +7,8 @@ type StatusView = {
 
 const known: Record<string, StatusView> = {
   CREATED: { label: 'Принят', tone: 'neutral' },
+  PAYMENT_HELD: { label: 'Оплачен, ищем курьера', tone: 'active' },
+  COURIER_ASSIGNED: { label: 'Курьер назначен', tone: 'active' },
   CONFIRMED: { label: 'Готовится', tone: 'active' },
   IN_DELIVERY: { label: 'В пути', tone: 'active' },
   DELIVERED: { label: 'Доставлен', tone: 'done' },

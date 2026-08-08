@@ -1,10 +1,14 @@
 package com.deliveryhub.contracts;
 
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.CourierAssignedEvent;
+import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.contracts.events.PaymentHeldEvent;
+import com.deliveryhub.contracts.events.PaymentReleasedEvent;
 import org.apache.avro.AvroRuntimeException;
 import org.junit.jupiter.api.Test;
 
@@ -84,6 +88,22 @@ class EventPayloadsTest {
     void sequenceIsOptionalForOldProducers() {
         assertThat(DeliveryStatusUpdatedEvent.getClassSchema().getField("sequence").defaultVal()).isEqualTo(0L);
         assertThat(OrderCreatedEvent.getClassSchema().getField("sequence").defaultVal()).isEqualTo(0L);
+    }
+
+    @Test
+    void sagaEventsSurviveRoundTrip() {
+        PaymentHeldEvent held = new PaymentHeldEvent(UUID.randomUUID(), 15L, 42L, new BigDecimal("256.00"), "demo", NOW);
+        CourierAssignedEvent assigned = new CourierAssignedEvent(UUID.randomUUID(), 7L, 15L, 9001L, NOW, 1L);
+        DeliveryRejectedEvent rejected = new DeliveryRejectedEvent(UUID.randomUUID(), 15L, 42L, "NO_FREE_COURIER", NOW);
+
+        assertThat(EventPayloads.decode(Topics.PAYMENT_HELD, EventPayloads.encode(held))).isEqualTo(held);
+        assertThat(EventPayloads.decode(Topics.COURIER_ASSIGNED, EventPayloads.encode(assigned))).isEqualTo(assigned);
+        assertThat(EventPayloads.decode(Topics.DELIVERY_REJECTED, EventPayloads.encode(rejected))).isEqualTo(rejected);
+    }
+
+    @Test
+    void releaseReasonDefaultsToOrderCancellation() {
+        assertThat(PaymentReleasedEvent.getClassSchema().getField("reason").defaultVal()).isEqualTo("ORDER_CANCELLED");
     }
 
     @Test

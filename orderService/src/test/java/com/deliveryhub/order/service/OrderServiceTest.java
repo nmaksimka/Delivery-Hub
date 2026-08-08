@@ -104,7 +104,9 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 restaurantCatalog, outbox,
-                processedEvents, promoService, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
+                processedEvents, promoService,
+                new OrderCancellation(outbox, promoService, Clock.fixed(NOW, ZoneOffset.UTC)),
+                Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -611,7 +613,7 @@ class OrderServiceTest {
     }
 
     private static OrderDto dto() {
-        return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, BigDecimal.TEN, BigDecimal.ZERO, null,
+        return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, null, null, BigDecimal.TEN, BigDecimal.ZERO, null,
                 Instant.EPOCH, Instant.EPOCH, List.of());
     }
 

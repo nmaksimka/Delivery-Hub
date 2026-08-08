@@ -5,15 +5,21 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":apiContracts"))
+
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.kafka)
+    implementation(libs.kafka.avro.serializer)
 
     runtimeOnly(libs.postgresql)
     implementation(libs.spring.boot.starter.flyway)
     runtimeOnly(libs.flyway.postgresql)
 
     implementation(libs.springdoc.webmvc.ui)
+
+    integrationTestImplementation(libs.testcontainers.kafka)
 }
 
 val generatedApi = layout.buildDirectory.dir("generated/openapi")

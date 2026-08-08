@@ -35,12 +35,17 @@ public class PaymentService {
     }
 
     public Payment hold(long orderId, long userId, BigDecimal amount) {
-        BigDecimal value = Money.positive(amount);
-        Payment payment = findOrHold(orderId, userId, value);
-        payment.requireSameRequest(userId, value);
+        Payment payment = holdOrDecline(orderId, userId, amount);
         if (payment.isRejected()) {
             throw new PaymentException(payment.getDeclineReason(), "Payment of order " + orderId + " was declined");
         }
+        return payment;
+    }
+
+    public Payment holdOrDecline(long orderId, long userId, BigDecimal amount) {
+        BigDecimal value = Money.positive(amount);
+        Payment payment = findOrHold(orderId, userId, value);
+        payment.requireSameRequest(userId, value);
         return payment;
     }
 
