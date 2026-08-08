@@ -7,6 +7,7 @@ RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY settings.gradle.kts ./
 COPY build-logic ./build-logic
+COPY apiContracts ./apiContracts
 COPY paymentService ./paymentService
 
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked ./gradlew :paymentService:bootJar --no-daemon
