@@ -104,8 +104,12 @@ class OrderTest {
 
     @ParameterizedTest
     @CsvSource({
-            "CREATED,     IN_DELIVERY, IN_DELIVERY, true",
-            "CREATED,     DELIVERED,   DELIVERED,   true",
+            "CONFIRMED,   IN_DELIVERY, IN_DELIVERY, true",
+            "CONFIRMED,   DELIVERED,   DELIVERED,   true",
+            "CREATED,     IN_DELIVERY, CREATED,     false",
+            "PAYMENT_HELD, DELIVERED,  PAYMENT_HELD, false",
+            "COURIER_ASSIGNED, IN_DELIVERY, COURIER_ASSIGNED, false",
+            "CREATED,     COURIER_ASSIGNED, CREATED, false",
             "CONFIRMED,   CANCELLED,   CONFIRMED,   false",
             "PAYMENT_HELD, COURIER_ASSIGNED, COURIER_ASSIGNED, true",
             "IN_DELIVERY, CONFIRMED,   IN_DELIVERY, false",

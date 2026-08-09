@@ -196,10 +196,15 @@ public class Order {
 
     public boolean followDelivery(OrderStatus reported, Instant at) {
         Objects.requireNonNull(reported, "reported");
-        if (reported == OrderStatus.CANCELLED) {
+        if (reported == OrderStatus.CANCELLED || !paidEnoughFor(reported)) {
             return false;
         }
         return advanceTo(reported, at);
+    }
+
+    private boolean paidEnoughFor(OrderStatus reported) {
+        OrderStatus required = reported.isBefore(OrderStatus.IN_DELIVERY) ? OrderStatus.PAYMENT_HELD : OrderStatus.CONFIRMED;
+        return !status.isBefore(required);
     }
 
     private boolean advanceTo(OrderStatus next, Instant at) {
