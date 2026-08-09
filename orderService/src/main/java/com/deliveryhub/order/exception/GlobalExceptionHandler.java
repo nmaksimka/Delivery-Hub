@@ -2,6 +2,7 @@ package com.deliveryhub.order.exception;
 
 import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
+import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -45,6 +46,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidPromoException.class)
     public ProblemDetail handleInvalidPromo(InvalidPromoException ex) {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
+    }
+
+    @ExceptionHandler(MissingIdempotencyKeyException.class)
+    public ProblemDetail handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.code());
     }
 
     @ExceptionHandler(ForbiddenException.class)
