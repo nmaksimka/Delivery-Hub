@@ -545,6 +545,7 @@ class OrderServiceTest {
         @DisplayName("переводит заказ в статус заказа, а не доставки")
         void mapsDeliveryStatusToOrderStatus() {
             Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.CONFIRMED);
             when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);

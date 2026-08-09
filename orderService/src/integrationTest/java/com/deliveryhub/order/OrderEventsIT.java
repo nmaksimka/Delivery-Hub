@@ -1,5 +1,7 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.order.entity.Order;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
@@ -92,7 +94,7 @@ class OrderEventsIT {
 
     @Test
     void appliesDeliveryStatusOnceEvenIfEventArrivesTwice() {
-        Long orderId = placeOrder();
+        Long orderId = placeConfirmedOrder();
         UUID eventId = UUID.randomUUID();
         DeliveryStatusUpdatedEvent picked =
                 new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L);
@@ -113,7 +115,7 @@ class OrderEventsIT {
 
     @Test
     void dropsDeliveryEventThatIsOlderThanAppliedOne() {
-        Long orderId = placeOrder();
+        Long orderId = placeConfirmedOrder();
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
                 UUID.randomUUID(), 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L));
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
@@ -143,6 +145,12 @@ class OrderEventsIT {
     private Long placeOrder() {
         return orderService.createOrder(
                 new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L).id();
+    }
+
+    private Long placeConfirmedOrder() {
+        Order order = orderRepository.findById(placeOrder()).orElseThrow();
+        ReflectionTestUtils.setField(order, "status", OrderStatus.CONFIRMED);
+        return orderRepository.save(order).getId();
     }
 
     private OrderStatus statusOf(Long orderId) {
