@@ -7,11 +7,8 @@ import com.deliveryhub.payment.domain.PaymentException;
 import com.deliveryhub.payment.domain.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -23,28 +20,18 @@ public class PaymentService {
 
     private final PaymentRepository payments;
     private final PaymentProvider provider;
-    private final TransactionTemplate transaction;
     private final Clock clock;
 
-    public PaymentService(PaymentRepository payments, PaymentProvider provider,
-                          PlatformTransactionManager transactionManager, Clock clock) {
+    public PaymentService(PaymentRepository payments, PaymentProvider provider, Clock clock) {
         this.payments = payments;
         this.provider = provider;
-        this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
 
-    public Payment hold(long orderId, long userId, BigDecimal amount) {
-        Payment payment = holdOrDecline(orderId, userId, amount);
-        if (payment.isRejected()) {
-            throw new PaymentException(payment.getDeclineReason(), "Payment of order " + orderId + " was declined");
-        }
-        return payment;
-    }
-
-    public Payment holdOrDecline(long orderId, long userId, BigDecimal amount) {
-        BigDecimal value = Money.positive(amount);
-        Payment payment = findOrHold(orderId, userId, value);
+    public Payment open(long orderId, long userId, BigDecimal amount) {
+        BigDecimal value = Money.nonNegative(amount);
+        Payment payment = payments.findByOrderId(orderId)
+                .orElseGet(() -> payments.saveAndFlush(newPayment(orderId, userId, value)));
         payment.requireSameRequest(userId, value);
         return payment;
     }
@@ -52,7 +39,7 @@ public class PaymentService {
     @Transactional
     public Payment capture(long orderId) {
         Payment payment = lockedPayment(orderId);
-        if (payment.capture(clock.instant())) {
+        if (payment.capture(clock.instant()) && !payment.isFree()) {
             approve(provider.capture(ProviderRequest.of(payment)), payment);
             log.info("Payment of order {} captured", orderId);
         }
@@ -62,7 +49,7 @@ public class PaymentService {
     @Transactional
     public Payment release(long orderId) {
         Payment payment = lockedPayment(orderId);
-        if (payment.release(clock.instant())) {
+        if (payment.release(clock.instant()) && !payment.isFree()) {
             approve(provider.release(ProviderRequest.of(payment)), payment);
             log.info("Payment of order {} released", orderId);
         }
@@ -72,7 +59,7 @@ public class PaymentService {
     @Transactional
     public Payment refund(long orderId) {
         Payment payment = lockedPayment(orderId);
-        if (payment.refund(clock.instant())) {
+        if (payment.refund(clock.instant()) && !payment.isFree()) {
             approve(provider.refund(ProviderRequest.of(payment)), payment);
             log.info("Payment of order {} refunded", orderId);
         }
@@ -86,17 +73,11 @@ public class PaymentService {
                 .orElseThrow(() -> notFound(orderId));
     }
 
-    private Payment findOrHold(long orderId, long userId, BigDecimal amount) {
-        try {
-            return transaction.execute(status -> payments.findByOrderId(orderId)
-                    .orElseGet(() -> payments.saveAndFlush(newPayment(orderId, userId, amount))));
-        } catch (DataIntegrityViolationException ex) {
-            log.info("Concurrent hold of order {} lost the race, reading the winner", orderId);
-            return payments.findByOrderId(orderId).orElseThrow(() -> ex);
-        }
-    }
-
     private Payment newPayment(long orderId, long userId, BigDecimal amount) {
+        if (amount.signum() == 0) {
+            log.info("Order {} costs nothing, payment is held without the provider", orderId);
+            return Payment.free(orderId, userId, clock.instant());
+        }
         ProviderResult result = provider.hold(ProviderRequest.newHold(orderId, userId, amount));
         return switch (result) {
             case ProviderResult.Approved approved -> {
