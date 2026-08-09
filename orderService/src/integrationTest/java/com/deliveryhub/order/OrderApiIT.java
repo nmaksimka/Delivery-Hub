@@ -17,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
@@ -50,6 +51,8 @@ class OrderApiIT {
     private MockMvcTester mvc;
     @Autowired
     private KafkaContainer kafka;
+    @Autowired
+    private JdbcClient jdbcClient;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
 
@@ -130,7 +133,7 @@ class OrderApiIT {
     @Test
     void ownerCannotCancelOrderThatIsAlreadyOnItsWay() {
         Integer orderId = JsonPath.read(bodyOf(createOrder(90L)), "$.id");
-        patchStatus(orderId, "CONFIRMED");
+        confirmedBySaga(orderId);
         patchStatus(orderId, "IN_DELIVERY");
 
         assertThat(mvc.post().uri("/api/orders/" + orderId + "/cancel").header("X-User-Id", "90")).hasStatus(409);
@@ -139,11 +142,22 @@ class OrderApiIT {
     }
 
     @Test
+    void manualStatusChangeCannotSkipPayment() {
+        Integer orderId = JsonPath.read(bodyOf(createOrder(43L)), "$.id");
+
+        assertThat(patchStatus(orderId, "PAYMENT_HELD")).hasStatus(409);
+        assertThat(patchStatus(orderId, "COURIER_ASSIGNED")).hasStatus(409);
+        assertThat(patchStatus(orderId, "CONFIRMED")).hasStatus(409)
+                .bodyJson().extractingPath("$.code").isEqualTo("INVALID_STATUS_TRANSITION");
+        assertThat(patchStatus(orderId, "CANCELLED")).hasStatusOk();
+    }
+
+    @Test
     void refusesToMoveDeliveredOrderBack() {
         Integer orderId = JsonPath.read(bodyOf(createOrder(42L)), "$.id");
 
         assertThat(patchStatus(orderId, "DELIVERED")).hasStatus(409);
-        assertThat(patchStatus(orderId, "CONFIRMED")).hasStatusOk();
+        confirmedBySaga(orderId);
         assertThat(patchStatus(orderId, "IN_DELIVERY")).hasStatusOk();
         assertThat(patchStatus(orderId, "DELIVERED")).hasStatusOk();
         assertThat(patchStatus(orderId, "CONFIRMED")).hasStatus(409);
@@ -188,6 +202,10 @@ class OrderApiIT {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ORDER_REQUEST)
                 .exchange();
+    }
+
+    private void confirmedBySaga(Integer orderId) {
+        jdbcClient.sql("UPDATE orders SET status = 'CONFIRMED' WHERE id = :id").param("id", orderId).update();
     }
 
     private MvcTestResult patchStatus(Integer orderId, String status) {

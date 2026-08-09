@@ -85,7 +85,7 @@ class OrderRepositoryIT {
     void persistsStatusChange() {
         Order order = orderRepository.saveAndFlush(orderOf(42L));
 
-        order.changeStatus(OrderStatus.CONFIRMED, NOW);
+        order.confirmPayment(NOW);
         orderRepository.flush();
         entityManager.clear();
 
@@ -99,7 +99,7 @@ class OrderRepositoryIT {
         entityManager.detach(stale);
 
         Order fresh = orderRepository.findById(stale.getId()).orElseThrow();
-        fresh.changeStatus(OrderStatus.CONFIRMED, NOW);
+        fresh.confirmPayment(NOW);
         orderRepository.flush();
 
         stale.changeStatus(OrderStatus.CANCELLED, NOW);

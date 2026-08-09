@@ -48,7 +48,7 @@ class OrderTest {
     @Test
     void itemsCannotBeAddedAfterConfirmation() {
         Order order = Order.place(42L, 1L, NOW);
-        order.changeStatus(OrderStatus.CONFIRMED, NOW);
+        order.confirmPayment(NOW);
 
         assertThatThrownBy(() -> order.addItem(10L, "Pizza", 1, BigDecimal.TEN))
                 .isInstanceOf(IllegalStateException.class);
@@ -56,14 +56,15 @@ class OrderTest {
 
     @ParameterizedTest
     @CsvSource({
-            "CREATED,     CONFIRMED",
             "CREATED,     CANCELLED",
+            "PAYMENT_HELD, CANCELLED",
+            "COURIER_ASSIGNED, CANCELLED",
             "CONFIRMED,   IN_DELIVERY",
             "CONFIRMED,   CANCELLED",
             "IN_DELIVERY, DELIVERED",
             "IN_DELIVERY, CANCELLED"
     })
-    void movesOneStepForwardOrCancels(OrderStatus from, OrderStatus to) {
+    void manualChangeMovesDeliveryForwardOrCancels(OrderStatus from, OrderStatus to) {
         Order order = orderIn(from);
 
         assertThat(order.changeStatus(to, NOW)).isTrue();
@@ -75,13 +76,18 @@ class OrderTest {
     @CsvSource({
             "CREATED,     IN_DELIVERY",
             "CREATED,     DELIVERED",
+            "CREATED,     PAYMENT_HELD",
+            "CREATED,     CONFIRMED",
+            "PAYMENT_HELD, COURIER_ASSIGNED",
+            "PAYMENT_HELD, CONFIRMED",
+            "COURIER_ASSIGNED, CONFIRMED",
             "CONFIRMED,   DELIVERED",
             "CONFIRMED,   CREATED",
             "IN_DELIVERY, CONFIRMED",
             "DELIVERED,   CANCELLED",
             "CANCELLED,   CONFIRMED"
     })
-    void rejectsJumpsBackwardAndPostFinalTransitions(OrderStatus from, OrderStatus to) {
+    void rejectsSagaStepsJumpsBackwardAndPostFinalTransitions(OrderStatus from, OrderStatus to) {
         Order order = orderIn(from);
 
         assertThatThrownBy(() -> order.changeStatus(to, NOW))
