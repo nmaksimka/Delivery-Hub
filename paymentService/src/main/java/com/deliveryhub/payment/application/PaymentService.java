@@ -67,9 +67,9 @@ public class PaymentService {
     }
 
     @Transactional(readOnly = true)
-    public Payment findForViewer(long orderId, long viewerId, boolean admin) {
+    public Payment findForViewer(long orderId, CurrentUser viewer) {
         return payments.findByOrderId(orderId)
-                .filter(payment -> payment.isVisibleTo(viewerId, admin))
+                .filter(payment -> payment.isVisibleTo(viewer.id(), viewer.isAdmin()))
                 .orElseThrow(() -> notFound(orderId));
     }
 
