@@ -87,6 +87,8 @@ app:
     ttl: 7d
   idempotency:
     ttl: 24h
+    lease: 60s
+    max-body-size: 64KB
     cleanup-interval: 1h
     endpoints:
       - POST /api/orders
