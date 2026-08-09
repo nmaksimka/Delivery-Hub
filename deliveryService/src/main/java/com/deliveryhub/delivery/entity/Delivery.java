@@ -78,12 +78,6 @@ public class Delivery {
         return new Delivery(orderId, userId, courierId, estimatedDeliveryTime, createdAt);
     }
 
-    public static Delivery cancelledBeforeAssignment(Long orderId, Long userId, Instant at) {
-        Delivery delivery = new Delivery(orderId, userId, null, null, at);
-        delivery.status = DeliveryStatus.CANCELLED;
-        return delivery;
-    }
-
     public boolean changeStatus(DeliveryStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
         Objects.requireNonNull(at, "at");

@@ -29,7 +29,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler({InvalidStatusTransitionException.class, DeliveryAlreadyExistsException.class,
-            DeliveryFinishedException.class})
+            DeliveryFinishedException.class, OrderAlreadyCancelledException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }

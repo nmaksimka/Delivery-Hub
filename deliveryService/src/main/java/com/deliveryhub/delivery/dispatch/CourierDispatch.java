@@ -7,6 +7,7 @@ import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,14 +27,16 @@ public class CourierDispatch {
     private static final Logger log = LoggerFactory.getLogger(CourierDispatch.class);
 
     private final DeliveryRepository deliveryRepository;
+    private final CancelledOrders cancelledOrders;
     private final CourierPool courierPool;
     private final ProcessedEvents processedEvents;
     private final Outbox outbox;
     private final Clock clock;
 
-    public CourierDispatch(DeliveryRepository deliveryRepository, CourierPool courierPool,
-                           ProcessedEvents processedEvents, Outbox outbox, Clock clock) {
+    public CourierDispatch(DeliveryRepository deliveryRepository, CancelledOrders cancelledOrders,
+                           CourierPool courierPool, ProcessedEvents processedEvents, Outbox outbox, Clock clock) {
         this.deliveryRepository = deliveryRepository;
+        this.cancelledOrders = cancelledOrders;
         this.courierPool = courierPool;
         this.processedEvents = processedEvents;
         this.outbox = outbox;
@@ -48,6 +51,10 @@ public class CourierDispatch {
         }
         if (deliveryRepository.existsByOrderId(event.getOrderId())) {
             log.info("Order {} already has a delivery, courier is not assigned again", event.getOrderId());
+            return;
+        }
+        if (cancelledOrders.contains(event.getOrderId())) {
+            log.info("Order {} is already cancelled, courier is not assigned", event.getOrderId());
             return;
         }
         Instant now = clock.instant();
