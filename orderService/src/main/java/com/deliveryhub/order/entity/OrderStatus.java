@@ -29,9 +29,7 @@ public enum OrderStatus {
 
     private Set<OrderStatus> nextSteps() {
         return switch (this) {
-            case CREATED -> Set.of(PAYMENT_HELD, CONFIRMED, CANCELLED);
-            case PAYMENT_HELD -> Set.of(COURIER_ASSIGNED, CONFIRMED, CANCELLED);
-            case COURIER_ASSIGNED -> Set.of(CONFIRMED, CANCELLED);
+            case CREATED, PAYMENT_HELD, COURIER_ASSIGNED -> Set.of(CANCELLED);
             case CONFIRMED -> Set.of(IN_DELIVERY, CANCELLED);
             case IN_DELIVERY -> Set.of(DELIVERED, CANCELLED);
             case DELIVERED, CANCELLED -> Set.of();
