@@ -45,10 +45,12 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private final IdempotencyKeys keys;
     private final JsonMapper jsonMapper;
     private final List<IdempotentEndpoint> endpoints;
+    private final int maxBodyBytes;
 
     public IdempotencyFilter(IdempotencyKeys keys, JsonMapper jsonMapper, IdempotencyProperties properties) {
         this.keys = keys;
         this.jsonMapper = jsonMapper;
+        this.maxBodyBytes = Math.toIntExact(properties.maxBodySize().toBytes());
         this.endpoints = properties.endpoints().stream().map(IdempotentEndpoint::parse).toList();
     }
 
@@ -68,7 +70,15 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                     "Idempotency-Key must be 1 to 64 visible ASCII characters");
             return;
         }
-        byte[] body = request.getInputStream().readAllBytes();
+        if (request.getContentLengthLong() > maxBodyBytes) {
+            rejectTooLarge(request, response);
+            return;
+        }
+        byte[] body = request.getInputStream().readNBytes(maxBodyBytes + 1);
+        if (body.length > maxBodyBytes) {
+            rejectTooLarge(request, response);
+            return;
+        }
         IdempotencyScope scope = new IdempotencyScope(userIdOf(request), request.getMethod(),
                 request.getRequestURI(), key);
         switch (keys.claim(scope, sha256(body))) {
@@ -132,6 +142,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                 : MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(replay.body());
+    }
+
+    private void rejectTooLarge(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        writeProblem(request, response, HttpStatus.CONTENT_TOO_LARGE, ErrorCode.REQUEST_TOO_LARGE,
+                "Request body of an idempotent endpoint must not exceed " + maxBodyBytes + " bytes");
     }
 
     private void writeProblem(HttpServletRequest request, HttpServletResponse response, HttpStatus status,
