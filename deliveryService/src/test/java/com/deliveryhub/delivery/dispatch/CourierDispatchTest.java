@@ -1,13 +1,13 @@
 package com.deliveryhub.delivery.dispatch;
 
 import com.deliveryhub.contracts.Topics;
-import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +42,8 @@ class CourierDispatchTest {
     @Mock
     private DeliveryRepository deliveryRepository;
     @Mock
+    private CancelledOrders cancelledOrders;
+    @Mock
     private ProcessedEvents processedEvents;
     @Mock
     private Outbox outbox;
@@ -51,7 +53,7 @@ class CourierDispatchTest {
     @BeforeEach
     void setUp() {
         CourierPool pool = new CourierPool(deliveryRepository, new DispatchProperties(List.of(9001L, 9002L)));
-        dispatch = new CourierDispatch(deliveryRepository, pool, processedEvents, outbox, Clock.fixed(NOW, ZoneOffset.UTC));
+        dispatch = new CourierDispatch(deliveryRepository, cancelledOrders, pool, processedEvents, outbox, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -111,12 +113,15 @@ class CourierDispatchTest {
     }
 
     @Test
-    void cancelledDeliveryIsFinishedWithoutCourier() {
-        Delivery delivery = Delivery.cancelledBeforeAssignment(ORDER_ID, 42L, NOW);
+    void orderCancelledBeforePaymentHeldGetsNoCourier() {
+        PaymentHeldEvent event = paymentHeld();
+        when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.PAYMENT_HELD)).thenReturn(true);
+        when(cancelledOrders.contains(ORDER_ID)).thenReturn(true);
 
-        assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
-        assertThat(delivery.isFinished()).isTrue();
-        assertThat(delivery.getCourierId()).isNull();
+        dispatch.onPaymentHeld(event);
+
+        verify(deliveryRepository, never()).save(any());
+        verifyNoInteractions(outbox);
     }
 
     private static PaymentHeldEvent paymentHeld() {

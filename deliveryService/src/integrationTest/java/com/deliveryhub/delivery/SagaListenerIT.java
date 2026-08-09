@@ -6,6 +6,7 @@ import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,8 @@ class SagaListenerIT {
     private KafkaTemplate<String, Object> kafkaTemplate;
     @Autowired
     private DeliveryRepository deliveryRepository;
+    @Autowired
+    private CancelledOrders cancelledOrders;
     @Autowired
     private KafkaContainer kafka;
 
@@ -110,21 +113,18 @@ class SagaListenerIT {
     }
 
     @Test
-    void cancellationBeforePaymentHeldKeepsCourierFree() {
+    void cancellationBeforePaymentHeldKeepsCourierFreeWithoutStubDelivery() {
         long orderId = 7020L;
         long marker = 7021L;
         kafkaTemplate.send(Topics.ORDER_CANCELLED, Long.toString(orderId),
                 new OrderCancelledEvent(UUID.randomUUID(), orderId, 42L, Instant.now(), 2L));
-        await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(orderId));
+        await().atMost(TIMEOUT).until(() -> cancelledOrders.contains(orderId));
 
         kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
         kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(marker));
         await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(marker));
 
-        assertThat(deliveryRepository.findByOrderId(orderId)).get().satisfies(delivery -> {
-            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
-            assertThat(delivery.getCourierId()).isNull();
-        });
+        assertThat(deliveryRepository.existsByOrderId(orderId)).isFalse();
     }
 
     private static PaymentHeldEvent paymentHeld(long orderId) {
