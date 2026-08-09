@@ -57,22 +57,26 @@ public class PaymentSaga {
             return;
         }
         long orderId = event.getOrderId();
-        if (payments.findByOrderId(orderId).isPresent()) {
-            log.info("Order {} already has a payment, hold is not repeated", orderId);
-            return;
-        }
         try {
-            Payment payment = paymentService.holdOrDecline(orderId, event.getUserId(), event.getTotalAmount());
-            if (payment.isRejected()) {
-                publishRejected(orderId, event.getUserId(), payment.getAmount(), payment.getDeclineReason().name());
-            } else {
+            announce(paymentService.open(orderId, event.getUserId(), event.getTotalAmount()));
+        } catch (PaymentException ex) {
+            log.info("Order {} cannot be paid: {}", orderId, ex.getMessage());
+            publishRejected(orderId, event.getUserId(), event.getTotalAmount(), ex.getCode().name());
+        }
+    }
+
+    private void announce(Payment payment) {
+        long orderId = payment.getOrderId();
+        switch (payment.getStatus()) {
+            case HELD -> {
                 UUID eventId = UUID.randomUUID();
                 publish(orderId, Topics.PAYMENT_HELD, eventId, new PaymentHeldEvent(eventId, orderId,
                         payment.getUserId(), payment.getAmount(), payment.getProvider(), clock.instant()));
             }
-        } catch (PaymentException ex) {
-            log.info("Order {} cannot be paid: {}", orderId, ex.getMessage());
-            publishRejected(orderId, event.getUserId(), event.getTotalAmount(), ex.getCode().name());
+            case REJECTED -> publishRejected(orderId, payment.getUserId(), payment.getAmount(),
+                    payment.getDeclineReason().name());
+            default -> log.info("Payment of order {} is already {}, saga has moved on", orderId,
+                    payment.getStatus());
         }
     }
 
