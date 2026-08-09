@@ -18,4 +18,5 @@ dependencies {
 
     "testImplementation"(libs.findLibrary("spring-boot-starter-test").get())
     "testImplementation"(libs.findLibrary("mockito-junit-jupiter").get())
+    "testImplementation"(libs.findLibrary("micrometer-prometheus").get())
 }
