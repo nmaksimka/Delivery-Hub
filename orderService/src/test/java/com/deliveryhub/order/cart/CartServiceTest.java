@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -65,6 +66,18 @@ class CartServiceTest {
             UnaryOperator<Cart> change = invocation.getArgument(1);
             stored = change.apply(stored);
             return stored;
+        });
+        lenient().when(store.take(USER)).thenAnswer(invocation -> {
+            Cart taken = stored;
+            stored = Cart.empty();
+            return taken;
+        });
+        lenient().when(store.restore(eq(USER), any())).thenAnswer(invocation -> {
+            if (stored.hasLines()) {
+                return false;
+            }
+            stored = invocation.getArgument(1);
+            return true;
         });
     }
 
@@ -171,7 +184,7 @@ class CartServiceTest {
     }
 
     @Test
-    void checkoutCreatesOrderFromCartLinesAndClearsCart() {
+    void checkoutTakesCartAndCreatesOrderFromItsLines() {
         storeBacksCart();
         menuIs(open(), pizza(true), new MenuItemDto(11L, "Cola", new BigDecimal("3.00"), true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
@@ -188,11 +201,12 @@ class CartServiceTest {
         assertThat(request.getValue().restaurantId()).isEqualTo(RESTAURANT);
         assertThat(request.getValue().orderItemsRequest())
                 .containsExactly(new OrderItemRequest(10L, 2), new OrderItemRequest(11L, 1));
-        verify(store).clear(USER);
+        assertThat(stored.hasLines()).isFalse();
+        verify(store, never()).restore(any(), any());
     }
 
     @Test
-    void failedCheckoutKeepsCart() {
+    void failedCheckoutGivesCartBack() {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
@@ -202,7 +216,33 @@ class CartServiceTest {
 
         assertThatThrownBy(() -> service.checkout(USER)).isInstanceOf(Coded.class);
 
-        verify(store, never()).clear(USER);
+        assertThat(stored.lines()).extracting(CartLine::menuItemId).containsExactly(10L);
+    }
+
+    @Test
+    void redisFailureWhileGivingCartBackDoesNotHideCheckoutError() {
+        storeBacksCart();
+        menuIs(open(), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
+        when(orderService.createOrder(any(), eq(USER), any()))
+                .thenThrow(new OrderRejectedException(ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
+        when(store.restore(eq(USER), any())).thenThrow(new RedisConnectionFailureException("redis is down"));
+
+        assertThatThrownBy(() -> service.checkout(USER))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.RESTAURANT_CLOSED));
+    }
+
+    @Test
+    void secondCheckoutOfSameCartFindsItEmpty() {
+        cartWithTwoPizzas();
+        when(orderService.createOrder(any(), eq(USER), any())).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
+                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, null, null, List.of()));
+
+        service.checkout(USER);
+
+        assertThatThrownBy(() -> service.checkout(USER))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
+        verify(orderService).createOrder(any(), eq(USER), any());
     }
 
     @Test
