@@ -1,7 +1,5 @@
 package com.deliveryhub.order;
 
-import com.deliveryhub.order.entity.Order;
-import org.springframework.test.util.ReflectionTestUtils;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
@@ -12,6 +10,7 @@ import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.outbox.OutboxEvent;
 import com.deliveryhub.order.outbox.OutboxEventRepository;
@@ -26,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.kafka.KafkaContainer;
 
 import java.math.BigDecimal;
