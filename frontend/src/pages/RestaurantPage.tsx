@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ApiError, errorMessage } from '../api/http';
-import { useMenu, useRestaurant } from '../api/queries';
+import { useAddToCart, useChangeQuantity, useMenu, useRestaurant } from '../api/queries';
 import type { MenuItem } from '../api/restaurants';
+import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 import { Button } from '../components/Button';
 import { Chips } from '../components/Chips';
@@ -12,6 +13,7 @@ import { ArrowLeftIcon, ClockIcon, PinIcon, StarIcon } from '../components/icons
 import { MenuItemCard } from '../components/MenuItemCard';
 import { StateMessage } from '../components/StateMessage';
 import { groupMenu } from '../lib/menuGroups';
+import { orderErrorMessage } from '../lib/orderErrors';
 import { placeholderEta, placeholderRating } from '../lib/placeholders';
 import { closedBadge, workingHoursLabel } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
@@ -26,9 +28,15 @@ export function RestaurantPage() {
   const restaurant = useRestaurant(restaurantId);
   const menu = useMenu(restaurantId);
   const cart = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const addToCartMutation = useAddToCart();
+  const changeQuantity = useChangeQuantity();
   const now = useNow();
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
+  const [askLogin, setAskLogin] = useState(false);
   const groups = useMemo(() => groupMenu(menu.data ?? []), [menu.data]);
 
   const missing =
@@ -65,22 +73,43 @@ export function RestaurantPage() {
   const closedLabel = closedBadge(current, now);
   const hours = workingHoursLabel(current);
   const place = [current.address, current.city].filter(Boolean).join(', ');
+  const cartRestaurant = cart.cart.restaurant;
   const otherRestaurant =
-    cart.restaurant && cart.restaurant.id !== current.id ? cart.restaurant : null;
+    cartRestaurant && cartRestaurant.id !== current.id && cart.count > 0 ? cartRestaurant : null;
+  const cartError = addToCartMutation.error ?? changeQuantity.error;
 
-  function addToCart(item: MenuItem) {
-    cart.add(
-      { id: current.id, name: current.name },
-      { menuItemId: item.id, name: item.name, price: item.price },
+  function dishName(menuItemId: number) {
+    return menu.data?.find((item) => item.id === menuItemId)?.name;
+  }
+
+  function addToCart(item: MenuItem, replace: boolean) {
+    changeQuantity.reset();
+    addToCartMutation.mutate(
+      { item: { restaurantId: current.id, menuItemId: item.id, quantity: 1 }, replace },
+      {
+        onError: (error) => {
+          if (error instanceof ApiError && error.code === 'CART_OTHER_RESTAURANT') {
+            addToCartMutation.reset();
+            setPendingItem(item);
+          }
+        },
+      },
     );
   }
 
   function requestAdd(item: MenuItem) {
-    if (otherRestaurant) {
+    if (!user) {
+      setAskLogin(true);
+    } else if (otherRestaurant) {
       setPendingItem(item);
     } else {
-      addToCart(item);
+      addToCart(item, false);
     }
+  }
+
+  function decrement(item: MenuItem) {
+    addToCartMutation.reset();
+    changeQuantity.mutate({ menuItemId: item.id, quantity: cart.quantityOf(item.id) - 1 });
   }
 
   function scrollToGroup(groupId: string) {
@@ -195,7 +224,7 @@ export function RestaurantPage() {
                     requestAdd(item);
                   }}
                   onDecrement={() => {
-                    cart.decrement(item.id);
+                    decrement(item);
                   }}
                 />
               </li>
@@ -204,18 +233,39 @@ export function RestaurantPage() {
         </section>
       ))}
 
-      {pendingItem && otherRestaurant && (
+      {cartError && (
+        <p className={styles.cartError} role="alert">
+          {orderErrorMessage(cartError, dishName)}
+        </p>
+      )}
+
+      {pendingItem && (
         <ConfirmDialog
-          title="Начать новую корзину?"
-          text={`В корзине блюда из «${otherRestaurant.name}». Чтобы заказать в «${current.name}», её придётся очистить.`}
+          title="Очистить корзину и добавить?"
+          text={`В корзине блюда из «${otherRestaurant?.name ?? 'другого ресторана'}». Чтобы заказать в «${current.name}», её придётся очистить.`}
           confirmLabel="Очистить и добавить"
           cancelLabel="Оставить"
           onCancel={() => {
             setPendingItem(null);
           }}
           onConfirm={() => {
-            addToCart(pendingItem);
+            addToCart(pendingItem, true);
             setPendingItem(null);
+          }}
+        />
+      )}
+
+      {askLogin && (
+        <ConfirmDialog
+          title="Войдите, чтобы собрать корзину"
+          text="Корзина хранится в аккаунте: она не потеряется и будет ждать вас на любом устройстве."
+          confirmLabel="Войти"
+          cancelLabel="Позже"
+          onCancel={() => {
+            setAskLogin(false);
+          }}
+          onConfirm={() => {
+            void navigate('/login', { state: { from: location.pathname } });
           }}
         />
       )}
