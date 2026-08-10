@@ -10,9 +10,11 @@ import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
+import com.deliveryhub.delivery.exception.OrderAlreadyCancelledException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -45,6 +47,7 @@ public class DeliveryService {
     private final DeliveryMapper deliveryMapper;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
+    private final CancelledOrders cancelledOrders;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
 
@@ -52,12 +55,14 @@ public class DeliveryService {
                            DeliveryMapper deliveryMapper,
                            Outbox outbox,
                            ProcessedEvents processedEvents,
+                           CancelledOrders cancelledOrders,
                            Clock clock,
                            MeterRegistry meterRegistry) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
+        this.cancelledOrders = cancelledOrders;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
     }
@@ -84,6 +89,9 @@ public class DeliveryService {
     public DeliveryDto createDelivery(CreateDeliveryRequest request) {
         if (deliveryRepository.existsByOrderId(request.orderId())) {
             throw new DeliveryAlreadyExistsException(request.orderId());
+        }
+        if (cancelledOrders.contains(request.orderId())) {
+            throw new OrderAlreadyCancelledException(request.orderId());
         }
 
         Delivery delivery;
@@ -123,10 +131,7 @@ public class DeliveryService {
         }
         Optional<Delivery> existing = deliveryRepository.findByOrderId(event.getOrderId());
         if (existing.isEmpty()) {
-            Delivery cancelled = Delivery.cancelledBeforeAssignment(event.getOrderId(), event.getUserId(),
-                    clock.instant());
-            cancelled.acceptOrderEvent(event.getSequence());
-            deliveryRepository.save(cancelled);
+            cancelledOrders.remember(event.getOrderId(), clock.instant());
             log.info("Order {} is cancelled before a courier was assigned, delivery will not be created",
                     event.getOrderId());
             return;

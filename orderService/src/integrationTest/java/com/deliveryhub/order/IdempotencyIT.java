@@ -6,7 +6,10 @@ import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.idempotency.ExpiredIdempotencyKeysCleanup;
+import com.deliveryhub.order.idempotency.IdempotencyClaim;
 import com.deliveryhub.order.idempotency.IdempotencyFilter;
+import com.deliveryhub.order.idempotency.IdempotencyKeys;
+import com.deliveryhub.order.idempotency.IdempotencyScope;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,9 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,6 +63,8 @@ class IdempotencyIT {
     private JdbcClient jdbcClient;
     @Autowired
     private ExpiredIdempotencyKeysCleanup cleanup;
+    @Autowired
+    private IdempotencyKeys keys;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
 
@@ -206,6 +214,53 @@ class IdempotencyIT {
         assertThat(createOrder(6012L, key, OTHER_ORDER_REQUEST)).hasStatus(201)
                 .doesNotContainHeader(IdempotencyFilter.HEADER_REPLAYED);
         assertThat(ordersOf(6012L)).isEqualTo(2);
+    }
+
+    @Test
+    void claimHoldsKeyForShortLeaseAndCompletionKeepsItForFullTtl() {
+        IdempotencyScope scope = new IdempotencyScope(6013L, "POST", "/api/orders", UUID.randomUUID().toString());
+
+        assertThat(keys.claim(scope, "hash")).isInstanceOf(IdempotencyClaim.Acquired.class);
+        Instant leasedUntil = expiresAt(scope.key());
+        keys.complete(scope, 201, "{}");
+        Instant keptUntil = expiresAt(scope.key());
+
+        assertThat(leasedUntil).isBefore(Instant.now().plus(Duration.ofMinutes(2)));
+        assertThat(keptUntil).isAfter(Instant.now().plus(Duration.ofHours(23)));
+    }
+
+    @Test
+    void abandonedInProgressKeyIsTakenOverAfterLease() {
+        String key = UUID.randomUUID().toString();
+        jdbcClient.sql("""
+                        INSERT INTO idempotency_keys (user_id, method, path, key, request_hash, status, created_at, expires_at)
+                        VALUES (6014, 'POST', '/api/orders', :key, 'stale', 'IN_PROGRESS',
+                                now() - interval '2 minutes', now() - interval '1 minute')
+                        """)
+                .param("key", key)
+                .update();
+
+        assertThat(createOrder(6014L, key, ORDER_REQUEST)).hasStatus(201)
+                .doesNotContainHeader(IdempotencyFilter.HEADER_REPLAYED);
+        assertThat(ordersOf(6014L)).isEqualTo(1);
+    }
+
+    @Test
+    void tooLargeBodyIsRejectedBeforeKeyIsClaimed() {
+        String key = UUID.randomUUID().toString();
+        String huge = "{\"restaurantId\": 1, \"note\": \"" + "x".repeat(70 * 1024) + "\"}";
+
+        assertThat(createOrder(6015L, key, huge)).hasStatus(413)
+                .bodyJson().extractingPath("$.code").isEqualTo("REQUEST_TOO_LARGE");
+        assertThat(keysNamed(key)).isZero();
+    }
+
+    private Instant expiresAt(String key) {
+        return jdbcClient.sql("SELECT expires_at FROM idempotency_keys WHERE key = :key")
+                .param("key", key)
+                .query(Timestamp.class)
+                .single()
+                .toInstant();
     }
 
     private static MenuQuote pizzeriaQuote() {

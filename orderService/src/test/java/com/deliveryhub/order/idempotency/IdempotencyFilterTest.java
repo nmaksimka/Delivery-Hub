@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -39,7 +40,7 @@ class IdempotencyFilterTest {
     @BeforeEach
     void setUp() {
         filter = new IdempotencyFilter(keys, JsonMapper.builder().build(),
-                new IdempotencyProperties(Duration.ofHours(24), List.of("POST /api/orders", "POST /api/orders/{id}/pay")));
+                new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(60), DataSize.ofKilobytes(64), List.of("POST /api/orders", "POST /api/orders/{id}/pay")));
         response = new MockHttpServletResponse();
     }
 
@@ -89,6 +90,38 @@ class IdempotencyFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(400);
         assertThat(response.getContentAsString()).contains("\"code\":\"IDEMPOTENCY_KEY_INVALID\"");
+        verifyNoInteractions(keys, chain);
+    }
+
+    @Test
+    void rejectsDeclaredBodyLargerThanLimitWithoutReadingIt() throws Exception {
+        MockHttpServletRequest request = orderRequest();
+        request.setContent(new byte[64 * 1024 + 1]);
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(413);
+        assertThat(response.getContentAsString()).contains("\"code\":\"REQUEST_TOO_LARGE\"");
+        verifyNoInteractions(keys, chain);
+    }
+
+    @Test
+    void rejectsChunkedBodyThatGrowsPastLimit() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/orders") {
+            @Override
+            public long getContentLengthLong() {
+                return -1;
+            }
+        };
+        request.addHeader(IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, "attempt-1");
+        request.addHeader("X-User-Id", "42");
+        request.setContent(new byte[64 * 1024 + 1]);
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(413);
         verifyNoInteractions(keys, chain);
     }
 

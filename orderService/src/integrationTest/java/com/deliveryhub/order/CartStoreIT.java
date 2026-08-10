@@ -76,6 +76,30 @@ class CartStoreIT {
     }
 
     @Test
+    void takeReturnsCartOnlyOnce() {
+        store.update(9008L, cart -> cart.add(1L, 10L, 2, false));
+
+        Cart first = store.take(9008L);
+        Cart second = store.take(9008L);
+
+        assertThat(first.lines()).containsExactly(new CartLine(10L, 2));
+        assertThat(second.hasLines()).isFalse();
+        assertThat(redis.hasKey("cart:9008")).isFalse();
+    }
+
+    @Test
+    void restoreGivesCartBackButNeverOverwritesNewOne() {
+        store.update(9009L, cart -> cart.add(1L, 10L, 2, false));
+        Cart taken = store.take(9009L);
+
+        assertThat(store.restore(9009L, taken)).isTrue();
+        assertThat(redis.getExpire("cart:9009", TimeUnit.SECONDS)).isGreaterThan(7000L);
+        store.update(9009L, cart -> cart.changeQuantity(10L, 5));
+        assertThat(store.restore(9009L, taken)).isFalse();
+        assertThat(store.load(9009L).lines()).containsExactly(new CartLine(10L, 5));
+    }
+
+    @Test
     void parallelUpdatesDoNotLoseQuantity() throws Exception {
         int threads = 8;
         ExecutorService pool = Executors.newFixedThreadPool(threads);

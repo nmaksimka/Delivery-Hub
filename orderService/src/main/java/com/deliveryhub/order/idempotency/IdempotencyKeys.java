@@ -29,7 +29,8 @@ public class IdempotencyKeys {
             """;
     private static final String COMPLETE = """
             UPDATE idempotency_keys
-            SET status = 'COMPLETED', response_status = :responseStatus, response_body = CAST(:responseBody AS jsonb)
+            SET status = 'COMPLETED', response_status = :responseStatus, response_body = CAST(:responseBody AS jsonb),
+                expires_at = :expiresAt
             WHERE user_id = :userId AND method = :method AND path = :path AND key = :key AND status = 'IN_PROGRESS'
             """;
     private static final String RELEASE = """
@@ -64,6 +65,7 @@ public class IdempotencyKeys {
         bind(jdbcClient.sql(COMPLETE), scope)
                 .param("responseStatus", responseStatus)
                 .param("responseBody", responseBody)
+                .param("expiresAt", Timestamp.from(clock.instant().plus(properties.ttl())))
                 .update();
     }
 
@@ -82,7 +84,7 @@ public class IdempotencyKeys {
         return bind(jdbcClient.sql(CLAIM), scope)
                 .param("requestHash", requestHash)
                 .param("now", Timestamp.from(now))
-                .param("expiresAt", Timestamp.from(now.plus(properties.ttl())))
+                .param("expiresAt", Timestamp.from(now.plus(properties.lease())))
                 .update() == 1;
     }
 

@@ -7,7 +7,6 @@ servers:
 tags:
   - name: Wallet
   - name: Payments
-  - name: InternalPayments
 paths:
   /api/payments/wallet:
     get:
@@ -81,84 +80,6 @@ paths:
                 $ref: '#/components/schemas/PaymentResponse'
         '404':
           $ref: '#/components/responses/Problem'
-  /internal/payments/{orderId}/hold:
-    post:
-      tags: [InternalPayments]
-      operationId: holdPayment
-      summary: Зарезервировать сумму заказа
-      parameters:
-        - $ref: '#/components/parameters/OrderId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/HoldRequest'
-      responses:
-        '200':
-          description: Сумма зарезервирована, повтор возвращает тот же платёж
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentResponse'
-        '409':
-          $ref: '#/components/responses/Problem'
-        '422':
-          $ref: '#/components/responses/Problem'
-  /internal/payments/{orderId}/capture:
-    post:
-      tags: [InternalPayments]
-      operationId: capturePayment
-      summary: Списать зарезервированную сумму
-      parameters:
-        - $ref: '#/components/parameters/OrderId'
-      responses:
-        '200':
-          description: Платёж списан
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentResponse'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-  /internal/payments/{orderId}/release:
-    post:
-      tags: [InternalPayments]
-      operationId: releasePayment
-      summary: Снять резерв
-      parameters:
-        - $ref: '#/components/parameters/OrderId'
-      responses:
-        '200':
-          description: Резерв снят
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentResponse'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-  /internal/payments/{orderId}/refund:
-    post:
-      tags: [InternalPayments]
-      operationId: refundPayment
-      summary: Вернуть списанные деньги
-      parameters:
-        - $ref: '#/components/parameters/OrderId'
-      responses:
-        '200':
-          description: Деньги возвращены
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentResponse'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
 components:
   parameters:
     UserId:
@@ -192,18 +113,6 @@ components:
           type: number
           minimum: 1
           maximum: 50000
-    HoldRequest:
-      type: object
-      required: [userId, amount]
-      properties:
-        userId:
-          type: integer
-          format: int64
-          minimum: 1
-        amount:
-          type: number
-          minimum: 0.01
-          maximum: 9999999999.99
     WalletResponse:
       type: object
       required: [userId, available, held, updatedAt]

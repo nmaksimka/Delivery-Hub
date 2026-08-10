@@ -13,6 +13,7 @@ import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -56,6 +58,8 @@ class DeliveryServiceTest {
     private Outbox outbox;
     @Mock
     private ProcessedEvents processedEvents;
+    @Mock
+    private CancelledOrders cancelledOrders;
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -63,7 +67,7 @@ class DeliveryServiceTest {
 
     @BeforeEach
     void setUp() {
-        deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents,
+        deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents, cancelledOrders,
                 Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
     }
 
@@ -125,10 +129,8 @@ class DeliveryServiceTest {
 
             deliveryService.cancelDeliveryOfOrder(event);
 
-            ArgumentCaptor<Delivery> saved = ArgumentCaptor.forClass(Delivery.class);
-            verify(deliveryRepository).save(saved.capture());
-            assertThat(saved.getValue().getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
-            assertThat(saved.getValue().getCourierId()).isNull();
+            verify(cancelledOrders).remember(ORDER_ID, NOW);
+            verify(deliveryRepository, never()).save(any());
             verifyNoInteractions(outbox);
         }
 

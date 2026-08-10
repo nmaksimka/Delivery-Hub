@@ -1,6 +1,7 @@
 package com.deliveryhub.order.promo;
 
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,8 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/promo-codes")
 public class PromoAdminController {
-
-    private static final String ADMIN_ROLE = "ADMIN";
 
     private final PromoService promoService;
 
@@ -50,7 +49,7 @@ public class PromoAdminController {
     }
 
     private static void requireAdmin(String role) {
-        if (!ADMIN_ROLE.equals(role)) {
+        if (!CurrentUser.isAdmin(role)) {
             throw new ForbiddenException("Only administrators can manage promo codes");
         }
     }

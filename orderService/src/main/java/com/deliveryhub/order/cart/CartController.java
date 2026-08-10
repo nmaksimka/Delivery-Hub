@@ -1,6 +1,8 @@
 package com.deliveryhub.order.cart;
 
 import com.deliveryhub.order.dto.OrderDto;
+import com.deliveryhub.order.idempotency.IdempotencyFilter;
+import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -68,7 +70,12 @@ public class CartController {
 
     @PostMapping("/checkout")
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderDto checkout(@RequestHeader("X-User-Id") Long userId) {
+    public OrderDto checkout(@RequestHeader("X-User-Id") Long userId,
+                             @RequestHeader(name = IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, required = false)
+                             String idempotencyKey) {
+        if (idempotencyKey == null) {
+            throw new MissingIdempotencyKeyException("Checkout requires the Idempotency-Key header");
+        }
         return cartService.checkout(userId);
     }
 }

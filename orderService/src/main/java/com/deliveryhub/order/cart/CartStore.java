@@ -60,6 +60,18 @@ public class CartStore {
         redis.delete(key(userId));
     }
 
+    public Cart take(Long userId) {
+        return parse(redis.opsForValue().getAndDelete(key(userId)));
+    }
+
+    public boolean restore(Long userId, Cart cart) {
+        if (!cart.hasLines()) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redis.opsForValue()
+                .setIfAbsent(key(userId), jsonMapper.writeValueAsString(cart), properties.ttl()));
+    }
+
     private boolean replace(String key, String expected, Cart updated) {
         String serialized = updated.hasLines() ? jsonMapper.writeValueAsString(updated) : "";
         Long applied = redis.execute(COMPARE_AND_SET, List.of(key),

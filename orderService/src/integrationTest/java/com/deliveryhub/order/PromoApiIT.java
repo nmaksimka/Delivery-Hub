@@ -4,6 +4,7 @@ import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.idempotency.IdempotencyFilter;
 import com.deliveryhub.order.promo.PromoCode;
 import com.deliveryhub.order.promo.PromoCodeRepository;
 import com.deliveryhub.order.promo.PromoRedemptionRepository;
@@ -24,6 +25,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -276,7 +278,10 @@ class PromoApiIT {
     }
 
     private MvcTestResult checkout(long user) {
-        return mvc.post().uri("/api/cart/checkout").header("X-User-Id", Long.toString(user)).exchange();
+        return mvc.post().uri("/api/cart/checkout")
+                .header("X-User-Id", Long.toString(user))
+                .header(IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, UUID.randomUUID().toString())
+                .exchange();
     }
 
     private static String bodyOf(MvcTestResult result) {

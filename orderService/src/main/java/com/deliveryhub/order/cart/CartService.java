@@ -15,6 +15,7 @@ import com.deliveryhub.order.promo.PromoUse;
 import com.deliveryhub.order.service.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -84,18 +85,32 @@ public class CartService {
     }
 
     public OrderDto checkout(Long userId) {
-        Cart cart = store.load(userId);
+        Cart cart = store.take(userId);
         if (!cart.hasLines()) {
             throw new OrderRejectedException(ErrorCode.CART_EMPTY, "Cart is empty");
         }
         List<OrderItemRequest> items = cart.lines().stream()
                 .map(line -> new OrderItemRequest(line.menuItemId(), line.quantity()))
                 .toList();
-        OrderDto order = orderService.createOrder(new CreateOrderRequest(cart.restaurantId(), items), userId,
-                cart.promoCode());
-        store.clear(userId);
-        log.info("Cart of user {} became order {}", userId, order.id());
-        return order;
+        try {
+            OrderDto order = orderService.createOrder(new CreateOrderRequest(cart.restaurantId(), items), userId,
+                    cart.promoCode());
+            log.info("Cart of user {} became order {}", userId, order.id());
+            return order;
+        } catch (RuntimeException ex) {
+            giveBack(userId, cart);
+            throw ex;
+        }
+    }
+
+    private void giveBack(Long userId, Cart cart) {
+        try {
+            if (!store.restore(userId, cart)) {
+                log.warn("Cart of user {} was not given back after failed checkout: a new cart already exists", userId);
+            }
+        } catch (DataAccessException ex) {
+            log.warn("Cart of user {} could not be given back after failed checkout", userId, ex);
+        }
     }
 
     private CartDto view(Cart cart, Long userId) {

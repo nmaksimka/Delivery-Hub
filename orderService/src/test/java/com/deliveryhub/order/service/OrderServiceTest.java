@@ -528,9 +528,10 @@ class OrderServiceTest {
         @DisplayName("обычная смена статуса событий не публикует")
         void plainStatusChangeAppendsNothing() {
             Order order = orderOf(USER_ID);
+            order.confirmPayment(NOW);
             when(orderRepository.findWithItemsById(1L)).thenReturn(Optional.of(order));
 
-            orderService.updateOrderStatus(1L, OrderStatus.CONFIRMED);
+            orderService.updateOrderStatus(1L, OrderStatus.IN_DELIVERY);
 
             verifyNoInteractions(outbox);
         }
@@ -544,6 +545,7 @@ class OrderServiceTest {
         @DisplayName("переводит заказ в статус заказа, а не доставки")
         void mapsDeliveryStatusToOrderStatus() {
             Order order = orderOf(USER_ID);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.CONFIRMED);
             when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
             DeliveryStatusUpdatedEvent event = statusUpdate(DeliveryStatus.IN_TRANSIT);

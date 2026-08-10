@@ -10,6 +10,7 @@ import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.outbox.OutboxEvent;
 import com.deliveryhub.order.outbox.OutboxEventRepository;
@@ -24,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.kafka.KafkaContainer;
 
 import java.math.BigDecimal;
@@ -92,7 +94,7 @@ class OrderEventsIT {
 
     @Test
     void appliesDeliveryStatusOnceEvenIfEventArrivesTwice() {
-        Long orderId = placeOrder();
+        Long orderId = placeConfirmedOrder();
         UUID eventId = UUID.randomUUID();
         DeliveryStatusUpdatedEvent picked =
                 new DeliveryStatusUpdatedEvent(eventId, 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L);
@@ -113,7 +115,7 @@ class OrderEventsIT {
 
     @Test
     void dropsDeliveryEventThatIsOlderThanAppliedOne() {
-        Long orderId = placeOrder();
+        Long orderId = placeConfirmedOrder();
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
                 UUID.randomUUID(), 1L, orderId, DeliveryStatus.PICKED_UP, Instant.now(), 2L));
         kafkaTemplate.send(Topics.DELIVERY_STATUS_UPDATED, orderId.toString(), new DeliveryStatusUpdatedEvent(
@@ -143,6 +145,12 @@ class OrderEventsIT {
     private Long placeOrder() {
         return orderService.createOrder(
                 new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L).id();
+    }
+
+    private Long placeConfirmedOrder() {
+        Order order = orderRepository.findById(placeOrder()).orElseThrow();
+        ReflectionTestUtils.setField(order, "status", OrderStatus.CONFIRMED);
+        return orderRepository.save(order).getId();
     }
 
     private OrderStatus statusOf(Long orderId) {

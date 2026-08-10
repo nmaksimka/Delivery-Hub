@@ -1,10 +1,11 @@
 package com.deliveryhub.order;
 
-import com.jayway.jsonpath.JsonPath;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.idempotency.IdempotencyFilter;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -179,6 +181,15 @@ class CartApiIT {
         assertThat(checkout(1014L)).hasStatus(409).bodyJson().extractingPath("$.code").isEqualTo("ITEM_UNAVAILABLE");
     }
 
+    @Test
+    void checkoutWithoutIdempotencyKeyIsRejectedAndKeepsCart() {
+        add(1015L, 1, 10, 1, false);
+
+        assertThat(mvc.post().uri("/api/cart/checkout").header("X-User-Id", "1015")).hasStatus(400)
+                .bodyJson().extractingPath("$.code").isEqualTo("IDEMPOTENCY_KEY_REQUIRED");
+        assertThat(get(1015L)).bodyJson().extractingPath("$.items").asArray().hasSize(1);
+    }
+
     private MvcTestResult get(long userId) {
         return mvc.get().uri("/api/cart").header("X-User-Id", Long.toString(userId)).exchange();
     }
@@ -205,7 +216,10 @@ class CartApiIT {
     }
 
     private MvcTestResult checkout(long userId) {
-        return mvc.post().uri("/api/cart/checkout").header("X-User-Id", Long.toString(userId)).exchange();
+        return mvc.post().uri("/api/cart/checkout")
+                .header("X-User-Id", Long.toString(userId))
+                .header(IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, UUID.randomUUID().toString())
+                .exchange();
     }
 
     private static String bodyOf(MvcTestResult result) {

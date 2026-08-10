@@ -42,17 +42,6 @@ abstract class PaymentApiSupport {
         return mvc.get().uri("/api/payments/wallet").header("X-User-Id", String.valueOf(userId)).exchange();
     }
 
-    protected MvcTestResult hold(long orderId, long userId, String amount) {
-        return mvc.post().uri("/internal/payments/{orderId}/hold", orderId)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"userId\": " + userId + ", \"amount\": " + amount + "}")
-                .exchange();
-    }
-
-    protected MvcTestResult operation(long orderId, String name) {
-        return mvc.post().uri("/internal/payments/{orderId}/" + name, orderId).exchange();
-    }
-
     protected BigDecimal available(long userId) {
         return amountAt(wallet(userId), "$.available");
     }

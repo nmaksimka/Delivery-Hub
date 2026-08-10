@@ -333,7 +333,7 @@ Authorization: Bearer <accessToken>
 - опубликованные события, записи `processed_events` и истёкшие refresh-токены удаляются по расписанию.
   Отозванный, но ещё не истёкший refresh-токен не удаляется: по нему распознаётся повторное использование.
 
-Метрики: `outbox.pending`, `outbox.parked`, `outbox.oldest.pending.age`, `outbox.publish.failures`.
+Метрики: `outbox.pending`, `outbox.parked.current`, `outbox.oldest.pending.age`, `outbox.publish.failures`.
 
 ## Обнаружение сервисов и конфигурация
 
