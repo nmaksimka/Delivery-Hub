@@ -129,7 +129,7 @@ describe('orderErrorMessage', () => {
   });
 
   it('usesGenericConflictMessageForUnknownCode', () => {
-    expect(messageFor(conflict('Order 1 cannot change status', 'INVALID_STATUS_TRANSITION'))).toBe(
+    expect(messageFor(conflict('Something unexpected happened', 'SOMETHING_NEW'))).toBe(
       'Заказ не принят, обновите страницу и попробуйте ещё раз',
     );
   });
