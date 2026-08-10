@@ -1,17 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { CartItem, CartLine, CartRestaurant } from './cartState';
+import type { Cart } from '../api/cart';
 
 export type CartContextValue = {
-  restaurant: CartRestaurant | null;
-  lines: CartLine[];
+  cart: Cart;
   count: number;
-  total: number;
+  isLoading: boolean;
   isOpen: boolean;
   quantityOf: (menuItemId: number) => number;
-  add: (restaurant: CartRestaurant, item: CartItem) => void;
-  decrement: (menuItemId: number) => void;
-  remove: (menuItemId: number) => void;
-  clear: () => void;
   open: () => void;
   close: () => void;
 };
