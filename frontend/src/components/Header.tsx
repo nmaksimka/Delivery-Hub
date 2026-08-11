@@ -50,6 +50,14 @@ export function Header() {
                 </span>
               </NavLink>
               <NavLink
+                to="/addresses"
+                aria-label="Мои адреса"
+                className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+              >
+                <PinIcon />
+                <span className={styles.label}>Адреса</span>
+              </NavLink>
+              <NavLink
                 to="/orders"
                 aria-label="Мои заказы"
                 className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}

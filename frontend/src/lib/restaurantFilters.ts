@@ -9,6 +9,9 @@ export type QuickFilter = {
 
 export const allFilterId = 'all';
 export const openFilterId = 'open';
+export const favoritesFilterId = 'favorites';
+
+export const favoritesFilter: QuickFilter = { id: favoritesFilterId, label: 'Избранное' };
 
 export const quickFilters: QuickFilter[] = [
   { id: allFilterId, label: 'Все' },
@@ -25,10 +28,17 @@ export const quickFilters: QuickFilter[] = [
   { id: 'coffee', label: 'Кофе и выпечка', stems: ['коф', 'пекарн', 'булоч', 'coffee'] },
 ];
 
+export function filtersFor(withFavorites: boolean) {
+  return withFavorites
+    ? [...quickFilters.slice(0, 1), favoritesFilter, ...quickFilters.slice(1)]
+    : quickFilters;
+}
+
 type Criteria = {
   query: string;
   filterId: string;
   now: Date;
+  favoriteIds?: readonly number[];
 };
 
 export function filterRestaurants(restaurants: Restaurant[], criteria: Criteria) {
@@ -42,6 +52,9 @@ export function filterRestaurants(restaurants: Restaurant[], criteria: Criteria)
 
     if (query && !searchable.some((text) => text.includes(query))) {
       return false;
+    }
+    if (criteria.filterId === favoritesFilterId) {
+      return criteria.favoriteIds?.includes(restaurant.id) ?? false;
     }
     if (criteria.filterId === openFilterId) {
       return isOpenAt(restaurant, criteria.now);
