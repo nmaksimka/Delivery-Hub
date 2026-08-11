@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { CartLine } from '../api/cart';
 import {
@@ -15,6 +15,7 @@ import { cx } from '../lib/cx';
 import { formatPrice } from '../lib/format';
 import { orderErrorMessage } from '../lib/orderErrors';
 import { shortageOf, topUpErrorMessage } from '../lib/walletErrors';
+import { AddressPicker } from './AddressPicker';
 import { Button } from './Button';
 import styles from './CartDrawer.module.css';
 import { BagIcon, CloseIcon } from './icons';
@@ -58,6 +59,7 @@ export function CartDrawer() {
   const wallet = useWallet();
   const topUp = useTopUp();
   const resetCheckout = checkout.reset;
+  const [addressId, setAddressId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -237,6 +239,7 @@ export function CartDrawer() {
               <div className={styles.promo}>
                 <PromoCodeForm cart={cart} />
               </div>
+              <AddressPicker selectedId={addressId} onSelect={setAddressId} onNavigate={close} />
             </>
           )}
         </div>
