@@ -12,7 +12,7 @@ import java.time.Duration;
 public class OutboxMetrics implements MeterBinder {
 
     public static final String PENDING = "outbox.pending";
-    public static final String PARKED = "outbox.parked";
+    public static final String PARKED = "outbox.parked.current";
     public static final String OLDEST_PENDING_AGE = "outbox.oldest.pending.age";
 
     private final OutboxEventRepository outboxEventRepository;

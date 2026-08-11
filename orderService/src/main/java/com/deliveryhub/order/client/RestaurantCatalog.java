@@ -7,6 +7,8 @@ import com.deliveryhub.contracts.pricing.QuoteResponse;
 import com.deliveryhub.contracts.pricing.QuotedItem;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.exception.ErrorCode;
+import com.deliveryhub.order.exception.ItemNotFoundException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -14,7 +16,6 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -69,7 +70,8 @@ public class RestaurantCatalog {
     private static RuntimeException translate(StatusRuntimeException e, long restaurantId) {
         Status.Code code = e.getStatus().getCode();
         if (code == Status.Code.NOT_FOUND) {
-            return new EntityNotFoundException("Restaurant with ID: " + restaurantId + " was not found");
+            return new ItemNotFoundException(ErrorCode.RESTAURANT_NOT_FOUND,
+                    "Restaurant with ID: " + restaurantId + " was not found");
         }
         if (code == Status.Code.INVALID_ARGUMENT) {
             return new InvalidRestaurantRequestException("Restaurant service rejected the request: "

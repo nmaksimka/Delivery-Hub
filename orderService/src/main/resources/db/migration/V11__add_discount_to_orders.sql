@@ -1,0 +1,3 @@
+ALTER TABLE orders
+    ADD COLUMN discount   NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN promo_code VARCHAR(64);

@@ -4,7 +4,6 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
-import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
@@ -14,6 +13,7 @@ import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
@@ -28,11 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +58,8 @@ class DeliveryServiceTest {
     private Outbox outbox;
     @Mock
     private ProcessedEvents processedEvents;
+    @Mock
+    private CancelledOrders cancelledOrders;
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -67,60 +67,8 @@ class DeliveryServiceTest {
 
     @BeforeEach
     void setUp() {
-        deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents,
+        deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents, cancelledOrders,
                 Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
-    }
-
-    @Nested
-    @DisplayName("createDeliveryFromOrderEvent")
-    class FromOrderEvent {
-
-        @Test
-        @DisplayName("создаёт доставку в статусе ASSIGNED и кладёт событие в outbox")
-        void createsAssignedDeliveryAndAppendsEvent() {
-            OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(true);
-            when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
-            when(deliveryRepository.save(any(Delivery.class))).thenAnswer(inv -> {
-                Delivery delivery = inv.getArgument(0);
-                ReflectionTestUtils.setField(delivery, "id", 7L);
-                return delivery;
-            });
-
-            deliveryService.createDeliveryFromOrderEvent(event);
-
-            DeliveryStatusUpdatedEvent published = appendedEvent(7L);
-            assertThat(published.getEventId()).isNotNull().isNotEqualTo(event.getEventId());
-            assertThat(published.getOrderId()).isEqualTo(ORDER_ID);
-            assertThat(published.getDeliveryId()).isEqualTo(7L);
-            assertThat(published.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
-            assertThat(published.getUpdatedAt()).isEqualTo(NOW);
-            assertThat(published.getSequence()).isEqualTo(1L);
-        }
-
-        @Test
-        @DisplayName("событие с уже обработанным eventId пропускается целиком")
-        void skipsAlreadyProcessedEvent() {
-            OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(false);
-
-            deliveryService.createDeliveryFromOrderEvent(event);
-
-            verifyNoInteractions(deliveryRepository, outbox);
-        }
-
-        @Test
-        @DisplayName("новое событие по заказу с существующей доставкой не создаёт дубль")
-        void doesNotDuplicateDeliveryForSameOrder() {
-            OrderCreatedEvent event = orderCreated();
-            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)).thenReturn(true);
-            when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
-
-            deliveryService.createDeliveryFromOrderEvent(event);
-
-            verify(deliveryRepository, never()).save(any());
-            verifyNoInteractions(outbox);
-        }
     }
 
     @Nested
@@ -173,14 +121,17 @@ class DeliveryServiceTest {
         }
 
         @Test
-        @DisplayName("отмена раньше создания доставки — ошибка, которую стоит повторить")
-        void failsWhenDeliveryIsNotCreatedYet() {
+        @DisplayName("отмена раньше создания доставки запоминается, чтобы курьера потом не назначили")
+        void remembersCancellationBeforeDeliveryExists() {
             OrderCancelledEvent event = orderCancelled(2L);
             when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
             when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> deliveryService.cancelDeliveryOfOrder(event))
-                    .isInstanceOf(EntityNotFoundException.class);
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            verify(cancelledOrders).remember(ORDER_ID, NOW);
+            verify(deliveryRepository, never()).save(any());
+            verifyNoInteractions(outbox);
         }
 
         private OrderCancelledEvent orderCancelled(long sequence) {
@@ -316,10 +267,6 @@ class DeliveryServiceTest {
         verify(outbox).append(eq("Delivery"), eq(deliveryId), eq(Topics.DELIVERY_STATUS_UPDATED), any(),
                 captor.capture());
         return captor.getValue();
-    }
-
-    private static OrderCreatedEvent orderCreated() {
-        return new OrderCreatedEvent(UUID.randomUUID(), ORDER_ID, 42L, 1L, new BigDecimal("34.00"), NOW, List.of(), 1L);
     }
 
     private static Delivery existingDelivery() {

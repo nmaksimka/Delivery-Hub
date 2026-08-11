@@ -10,6 +10,7 @@ import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaAdmin;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 
 @Configuration
 @EnableConfigurationProperties(TopicProperties.class)
@@ -17,11 +18,13 @@ public class KafkaTopicsConfig {
 
     @Bean
     public KafkaAdmin.NewTopics orderTopics(TopicProperties properties) {
-        return new KafkaAdmin.NewTopics(
-                topic(Topics.ORDER_CREATED, properties, properties.retention()),
-                topic(Topics.ORDER_CANCELLED, properties, properties.retention()),
-                topic(Topics.deadLetterOf(Topics.DELIVERY_STATUS_UPDATED), properties,
-                        properties.deadLetterRetention()));
+        Stream<NewTopic> published = Stream.of(Topics.ORDER_CREATED, Topics.ORDER_CANCELLED)
+                .map(name -> topic(name, properties, properties.retention()));
+        Stream<NewTopic> deadLetters = Stream.of(Topics.DELIVERY_STATUS_UPDATED, Topics.COURIER_ASSIGNED,
+                        Topics.PAYMENT_HELD, Topics.PAYMENT_REJECTED, Topics.PAYMENT_CAPTURED,
+                        Topics.PAYMENT_RELEASED, Topics.PAYMENT_REFUNDED)
+                .map(name -> topic(Topics.deadLetterOf(name), properties, properties.deadLetterRetention()));
+        return new KafkaAdmin.NewTopics(Stream.concat(published, deadLetters).toArray(NewTopic[]::new));
     }
 
     private static NewTopic topic(String name, TopicProperties properties, Duration retention) {

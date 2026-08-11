@@ -4,16 +4,17 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
-import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
+import com.deliveryhub.delivery.exception.OrderAlreadyCancelledException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -30,6 +31,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -45,6 +47,7 @@ public class DeliveryService {
     private final DeliveryMapper deliveryMapper;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
+    private final CancelledOrders cancelledOrders;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
 
@@ -52,12 +55,14 @@ public class DeliveryService {
                            DeliveryMapper deliveryMapper,
                            Outbox outbox,
                            ProcessedEvents processedEvents,
+                           CancelledOrders cancelledOrders,
                            Clock clock,
                            MeterRegistry meterRegistry) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
+        this.cancelledOrders = cancelledOrders;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
     }
@@ -84,6 +89,9 @@ public class DeliveryService {
     public DeliveryDto createDelivery(CreateDeliveryRequest request) {
         if (deliveryRepository.existsByOrderId(request.orderId())) {
             throw new DeliveryAlreadyExistsException(request.orderId());
+        }
+        if (cancelledOrders.contains(request.orderId())) {
+            throw new OrderAlreadyCancelledException(request.orderId());
         }
 
         Delivery delivery;
@@ -116,33 +124,19 @@ public class DeliveryService {
     }
 
     @Transactional
-    public void createDeliveryFromOrderEvent(OrderCreatedEvent event) {
-        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CREATED)) {
-            log.info("Event {} is already processed, skipping", event.getEventId());
-            return;
-        }
-        if (deliveryRepository.existsByOrderId(event.getOrderId())) {
-            log.warn("Delivery already exists for orderId={}, skipping", event.getOrderId());
-            return;
-        }
-
-        Delivery created = Delivery.forOrder(event.getOrderId(), event.getUserId(), clock.instant());
-        created.acceptOrderEvent(event.getSequence());
-        Delivery delivery = deliveryRepository.save(created);
-
-        log.info("Created delivery id={} from order event, orderId={}", delivery.getId(), event.getOrderId());
-        publishStatusChange(delivery);
-    }
-
-    @Transactional
     public void cancelDeliveryOfOrder(OrderCancelledEvent event) {
         if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)) {
             log.info("Event {} is already processed, skipping", event.getEventId());
             return;
         }
-        Delivery delivery = deliveryRepository.findByOrderId(event.getOrderId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Delivery for order ID: " + event.getOrderId() + " was not found"));
+        Optional<Delivery> existing = deliveryRepository.findByOrderId(event.getOrderId());
+        if (existing.isEmpty()) {
+            cancelledOrders.remember(event.getOrderId(), clock.instant());
+            log.info("Order {} is cancelled before a courier was assigned, delivery will not be created",
+                    event.getOrderId());
+            return;
+        }
+        Delivery delivery = existing.get();
         if (!delivery.acceptOrderEvent(event.getSequence())) {
             log.info("Event {} with sequence {} is older than the applied one, dropping",
                     event.getEventId(), event.getSequence());

@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
@@ -28,6 +29,8 @@ class DeliveryApiIT {
 
     @Autowired
     private MockMvcTester mvc;
+    @Autowired
+    private JdbcClient jdbcClient;
 
     @Test
     void createsDeliveryAndMovesItThroughStatuses() {
@@ -76,6 +79,16 @@ class DeliveryApiIT {
         postJson("/api/deliveries", body);
 
         assertThat(postJson("/api/deliveries", body)).hasStatus(409);
+    }
+
+    @Test
+    void refusesDeliveryForOrderCancelledEarlier() {
+        jdbcClient.sql("INSERT INTO cancelled_orders (order_id, cancelled_at) VALUES (8099, now()) ON CONFLICT DO NOTHING")
+                .update();
+
+        assertThat(postJson("/api/deliveries", "{\"orderId\": 8099}")).hasStatus(409);
+        assertThat(mvc.get().uri("/api/deliveries/order/8099").header("X-User-Id", "1").header("X-User-Role", "ADMIN"))
+                .hasStatus(404);
     }
 
     @Test

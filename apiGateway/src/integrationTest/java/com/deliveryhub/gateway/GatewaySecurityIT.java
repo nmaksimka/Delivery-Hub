@@ -65,7 +65,8 @@ class GatewaySecurityIT {
 
     @DynamicPropertySource
     static void everyServiceIsWireMock(DynamicPropertyRegistry registry) {
-        for (String service : new String[]{"userService", "orderService", "restaurantService", "deliveryService"}) {
+        for (String service : new String[]{"userService", "orderService", "restaurantService", "deliveryService",
+                "paymentService"}) {
             registry.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri", SERVICES::baseUrl);
         }
     }
@@ -207,6 +208,27 @@ class GatewaySecurityIT {
             "PATCH, /api/orders/5/status,        ADMIN,   200",
             "POST,  /api/orders/5/cancel,        ANON,    401",
             "POST,  /api/orders/5/cancel,        USER,    200",
+            "GET,   /api/cart,                   ANON,    401",
+            "GET,   /api/cart,                   USER,    200",
+            "POST,  /api/cart/items,             ANON,    401",
+            "POST,  /api/cart/items,             USER,    200",
+            "PUT,   /api/cart/items/10,          COURIER, 200",
+            "DELETE, /api/cart,                  ANON,    401",
+            "DELETE, /api/cart,                  USER,    200",
+            "POST,  /api/cart/checkout,          ANON,    401",
+            "POST,  /api/cart/checkout,          USER,    200",
+            "POST,  /api/cart/promo,             ANON,    401",
+            "POST,  /api/cart/promo,             USER,    200",
+            "DELETE, /api/cart/promo,            USER,    200",
+            "GET,   /api/admin/promo-codes,      ANON,    401",
+            "GET,   /api/admin/promo-codes,      USER,    403",
+            "GET,   /api/admin/promo-codes,      COURIER, 403",
+            "GET,   /api/admin/promo-codes,      RESTAURANT_OWNER, 403",
+            "GET,   /api/admin/promo-codes,      ADMIN,   200",
+            "POST,  /api/admin/promo-codes,      USER,    403",
+            "POST,  /api/admin/promo-codes,      ADMIN,   200",
+            "POST,  /api/admin/promo-codes/3/deactivate, USER, 403",
+            "POST,  /api/admin/promo-codes/3/deactivate, ADMIN, 200",
             "GET,   /api/deliveries,             ANON,    401",
             "GET,   /api/deliveries,             USER,    403",
             "GET,   /api/deliveries,             COURIER, 200",
@@ -218,6 +240,19 @@ class GatewaySecurityIT {
             "POST,  /api/deliveries,             COURIER, 200",
             "PATCH, /api/deliveries/5/status,    USER,    403",
             "PATCH, /api/deliveries/5/status,    COURIER, 200",
+            "GET,   /api/payments/wallet,        ANON,    401",
+            "GET,   /api/payments/wallet,        USER,    200",
+            "GET,   /api/payments/wallet,        COURIER, 200",
+            "POST,  /api/payments/wallet/top-up, ANON,    401",
+            "POST,  /api/payments/wallet/top-up, USER,    200",
+            "GET,   /api/payments/order/5,       ANON,    401",
+            "GET,   /api/payments/order/5,       USER,    200",
+            "GET,   /api/payments/order/5,       ADMIN,   200",
+            "POST,  /internal/payments/5/hold,   ANON,    401",
+            "POST,  /internal/payments/5/hold,   USER,    403",
+            "POST,  /internal/payments/5/capture, ADMIN,  403",
+            "POST,  /internal/payments/5/refund, RESTAURANT_OWNER, 403",
+            "GET,   /docs/payments/v3/api-docs,  ANON,    200",
             "GET,   /actuator/env,               ANON,    401",
             "GET,   /actuator/env,               USER,    403",
             "GET,   /docs/orders/v3/api-docs,    ANON,    200",
@@ -235,6 +270,32 @@ class GatewaySecurityIT {
         }
 
         request.exchange().expectStatus().isEqualTo(expectedStatus);
+    }
+
+    @Test
+    void internalPaymentOperationsNeverLeaveGateway() {
+        client.post().uri("/internal/payments/5/capture")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token(1L, "ADMIN", "admin@example.com")))
+                .exchange()
+                .expectStatus().isForbidden();
+
+        SERVICES.verify(0, anyRequestedFor(urlPathMatching("/internal/.*")));
+    }
+
+    @Test
+    void walletRequestCarriesUserIdentityAndIdempotencyKey() {
+        client.post().uri("/api/payments/wallet/top-up")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token(7L, "USER", "kate@example.com")))
+                .header("Idempotency-Key", "top-up-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"amount\": 100}")
+                .exchange()
+                .expectStatus().isOk();
+
+        SERVICES.verify(postRequestedFor(urlEqualTo("/api/payments/wallet/top-up"))
+                .withHeader("X-User-Id", equalTo("7"))
+                .withHeader("Idempotency-Key", equalTo("top-up-1"))
+                .withHeader("X-Internal-Token", equalTo("local-dev-internal-token")));
     }
 
     @Test

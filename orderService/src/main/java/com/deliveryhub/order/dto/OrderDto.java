@@ -1,5 +1,6 @@
 package com.deliveryhub.order.dto;
 
+import com.deliveryhub.order.entity.CancellationReason;
 import com.deliveryhub.order.entity.OrderStatus;
 
 import java.math.BigDecimal;
@@ -11,7 +12,11 @@ public record OrderDto(
         Long userId,
         Long restaurantId,
         OrderStatus status,
+        CancellationReason cancellationReason,
+        Instant refundedAt,
         BigDecimal totalAmount,
+        BigDecimal discount,
+        String promoCode,
         Instant createdAt,
         Instant updatedAt,
         List<OrderItemDto> orderItems) {

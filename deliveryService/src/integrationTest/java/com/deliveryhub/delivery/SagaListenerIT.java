@@ -2,10 +2,11 @@ package com.deliveryhub.delivery;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
-import com.deliveryhub.contracts.events.OrderCreatedEvent;
-import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.contracts.events.PaymentHeldEvent;
+import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,16 +18,15 @@ import org.testcontainers.kafka.KafkaContainer;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.dispatch.courier-ids=870001,870002,870003,870004,870005,870006,870007,870008")
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
-class OrderCreatedListenerIT {
+class SagaListenerIT {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
@@ -35,35 +35,37 @@ class OrderCreatedListenerIT {
     @Autowired
     private DeliveryRepository deliveryRepository;
     @Autowired
+    private CancelledOrders cancelledOrders;
+    @Autowired
     private KafkaContainer kafka;
 
     @Test
-    void createsDeliveryFromOrderCreatedEventAndReportsStatusBack() {
+    void assignsCourierAfterPaymentIsHeldAndAnnouncesIt() {
         long orderId = 7001L;
 
-        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(orderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
 
         await().atMost(TIMEOUT).untilAsserted(() ->
                 assertThat(deliveryRepository.findByOrderId(orderId)).get()
-                        .satisfies(delivery -> assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED)));
+                        .satisfies(delivery -> assertThat(delivery.getCourierId()).isNotNull()));
 
-        Optional<DeliveryStatusUpdatedEvent> statusUpdate = new KafkaTopicReader(kafka.getBootstrapServers())
-                .findFirst(Topics.DELIVERY_STATUS_UPDATED, DeliveryStatusUpdatedEvent.class,
-                        event -> event.getOrderId() == orderId);
+        Optional<CourierAssignedEvent> assigned = new KafkaTopicReader(kafka.getBootstrapServers())
+                .findFirst(Topics.COURIER_ASSIGNED, CourierAssignedEvent.class, event -> event.getOrderId() == orderId);
 
-        assertThat(statusUpdate).isPresent();
-        assertThat(statusUpdate.get().getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
-        assertThat(statusUpdate.get().getEventId()).isNotNull();
+        assertThat(assigned).isPresent();
+        assertThat(assigned.get().getCourierId())
+                .isEqualTo(deliveryRepository.findByOrderId(orderId).orElseThrow().getCourierId());
+        assertThat(assigned.get().getSequence()).isEqualTo(1L);
     }
 
     @Test
-    void repeatedEventDoesNotCreateSecondDelivery() {
+    void repeatedPaymentHeldDoesNotCreateSecondDelivery() {
         long orderId = 7002L;
         long marker = 7003L;
 
-        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(orderId));
-        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(orderId));
-        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(marker));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(marker));
 
         await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(marker));
 
@@ -79,9 +81,9 @@ class OrderCreatedListenerIT {
         long secondOrderId = 7005L;
         long marker = 7006L;
 
-        kafkaTemplate.send(Topics.ORDER_CREATED, "same-key", orderCreated(eventId, firstOrderId));
-        kafkaTemplate.send(Topics.ORDER_CREATED, "same-key", orderCreated(eventId, secondOrderId));
-        kafkaTemplate.send(Topics.ORDER_CREATED, "same-key", orderCreated(marker));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, "same-key", paymentHeld(eventId, firstOrderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, "same-key", paymentHeld(eventId, secondOrderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, "same-key", paymentHeld(marker));
 
         await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(marker));
 
@@ -92,7 +94,7 @@ class OrderCreatedListenerIT {
     @Test
     void cancelsDeliveryWhenOrderIsCancelledAndReportsItBack() {
         long orderId = 7010L;
-        kafkaTemplate.send(Topics.ORDER_CREATED, Long.toString(orderId), orderCreated(orderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
         await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(orderId));
 
         kafkaTemplate.send(Topics.ORDER_CANCELLED, Long.toString(orderId),
@@ -110,12 +112,26 @@ class OrderCreatedListenerIT {
         assertThat(statusUpdate.get().getSequence()).isEqualTo(2L);
     }
 
-    private static OrderCreatedEvent orderCreated(long orderId) {
-        return orderCreated(UUID.randomUUID(), orderId);
+    @Test
+    void cancellationBeforePaymentHeldKeepsCourierFreeWithoutStubDelivery() {
+        long orderId = 7020L;
+        long marker = 7021L;
+        kafkaTemplate.send(Topics.ORDER_CANCELLED, Long.toString(orderId),
+                new OrderCancelledEvent(UUID.randomUUID(), orderId, 42L, Instant.now(), 2L));
+        await().atMost(TIMEOUT).until(() -> cancelledOrders.contains(orderId));
+
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(orderId));
+        kafkaTemplate.send(Topics.PAYMENT_HELD, Long.toString(orderId), paymentHeld(marker));
+        await().atMost(TIMEOUT).until(() -> deliveryRepository.existsByOrderId(marker));
+
+        assertThat(deliveryRepository.existsByOrderId(orderId)).isFalse();
     }
 
-    private static OrderCreatedEvent orderCreated(UUID eventId, long orderId) {
-        return new OrderCreatedEvent(eventId, orderId, 42L, 1L, new BigDecimal("34.00"), Instant.now(),
-                List.of(new OrderItemPayload(10L, "Pizza", 2, new BigDecimal("12.50"))), 1L);
+    private static PaymentHeldEvent paymentHeld(long orderId) {
+        return paymentHeld(UUID.randomUUID(), orderId);
+    }
+
+    private static PaymentHeldEvent paymentHeld(UUID eventId, long orderId) {
+        return new PaymentHeldEvent(eventId, orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now());
     }
 }

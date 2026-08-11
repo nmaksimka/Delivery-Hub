@@ -2,6 +2,7 @@ package com.deliveryhub.order.exception;
 
 import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
+import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -25,32 +26,43 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String RETRY_AFTER_SECONDS = "10";
+    private static final String CODE_PROPERTY = "code";
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ProblemDetail handleNotFound(EntityNotFoundException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        return problem(HttpStatus.NOT_FOUND, ex.getMessage(), codeOf(ex, ErrorCode.NOT_FOUND));
     }
 
     @ExceptionHandler({InvalidStatusTransitionException.class, OrderRejectedException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        return problem(HttpStatus.CONFLICT, ex.getMessage(), codeOf(ex, ErrorCode.INVALID_STATUS_TRANSITION));
     }
 
     @ExceptionHandler(InvalidRestaurantRequestException.class)
     public ProblemDetail handleInvalidRestaurantRequest(InvalidRestaurantRequestException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
+    }
+
+    @ExceptionHandler(InvalidPromoException.class)
+    public ProblemDetail handleInvalidPromo(InvalidPromoException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
+    }
+
+    @ExceptionHandler(MissingIdempotencyKeyException.class)
+    public ProblemDetail handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.code());
     }
 
     @ExceptionHandler(ForbiddenException.class)
     public ProblemDetail handleForbidden(ForbiddenException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        return problem(HttpStatus.FORBIDDEN, ex.getMessage(), ErrorCode.FORBIDDEN);
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ProblemDetail handleConcurrentUpdate(ObjectOptimisticLockingFailureException ex) {
         log.info("Concurrent update rejected: {}", ex.getMessage());
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                "The record was changed by another request, reload it and try again");
+        ProblemDetail problem = problem(HttpStatus.CONFLICT,
+                "The record was changed by another request, reload it and try again", ErrorCode.CONCURRENT_UPDATE);
         problem.setTitle("Concurrent update");
         return problem;
     }
@@ -65,6 +77,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Validation failed");
+        problem.setProperty(CODE_PROPERTY, ErrorCode.VALIDATION_FAILED);
         problem.setProperty("errors", errors);
         return handleExceptionInternal(ex, problem, headers, status, request);
     }
@@ -72,8 +85,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(RestaurantServiceUnavailableException.class)
     public ResponseEntity<ProblemDetail> handleRestaurantUnavailable(RestaurantServiceUnavailableException ex) {
         log.warn("Restaurant service is unavailable: {}", ex.getMessage());
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                "Restaurant service is temporarily unavailable, try again later");
+        ProblemDetail problem = problem(HttpStatus.SERVICE_UNAVAILABLE,
+                "Restaurant service is temporarily unavailable, try again later", ErrorCode.RESTAURANT_UNAVAILABLE);
         problem.setTitle("Restaurant service unavailable");
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
@@ -83,6 +96,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
-        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", ErrorCode.INTERNAL_ERROR);
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String detail, ErrorCode code) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setProperty(CODE_PROPERTY, code);
+        return problem;
+    }
+
+    private static ErrorCode codeOf(RuntimeException ex, ErrorCode fallback) {
+        return ex instanceof Coded coded ? coded.code() : fallback;
     }
 }

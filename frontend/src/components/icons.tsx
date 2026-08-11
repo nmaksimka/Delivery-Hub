@@ -107,6 +107,24 @@ export function ReceiptIcon(props: IconProps) {
   );
 }
 
+export function WalletIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7.500a2 2 0 0 1 2-2h11.500v3" />
+      <path d="M4 7.500v10a2 2 0 0 0 2 2h13v-11H6a2 2 0 0 1-2-1z" />
+      <path d="M15.500 14h1" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12.500l4.500 4.500L19 7.500" />
+    </Icon>
+  );
+}
+
 export function LogoutIcon(props: IconProps) {
   return (
     <Icon {...props}>

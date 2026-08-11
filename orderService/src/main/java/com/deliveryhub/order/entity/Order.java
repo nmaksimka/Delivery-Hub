@@ -41,6 +41,19 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal discount;
+
+    @Column(name = "promo_code", length = 64)
+    private String promoCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_reason", length = 32)
+    private CancellationReason cancellationReason;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -68,6 +81,7 @@ public class Order {
         this.restaurantId = Objects.requireNonNull(restaurantId, "restaurantId");
         this.status = OrderStatus.CREATED;
         this.totalAmount = BigDecimal.ZERO;
+        this.discount = BigDecimal.ZERO;
         this.createdAt = Objects.requireNonNull(placedAt, "placedAt");
         this.updatedAt = placedAt;
     }
@@ -85,6 +99,31 @@ public class Order {
         totalAmount = totalAmount.add(item.lineTotal());
     }
 
+    public void applyDiscount(String code, BigDecimal amount) {
+        Objects.requireNonNull(code, "code");
+        Objects.requireNonNull(amount, "amount");
+        if (status != OrderStatus.CREATED) {
+            throw new IllegalStateException("Discount can be applied only to a new order, current status: " + status);
+        }
+        if (promoCode != null) {
+            throw new IllegalStateException("Order already has promo code " + promoCode);
+        }
+        if (amount.signum() < 0 || amount.compareTo(totalAmount) > 0) {
+            throw new IllegalArgumentException("Discount must be between 0 and the order amount " + totalAmount);
+        }
+        promoCode = code;
+        discount = amount;
+        totalAmount = totalAmount.subtract(amount);
+    }
+
+    public BigDecimal subtotal() {
+        return totalAmount.add(discount);
+    }
+
+    public boolean hasPromo() {
+        return promoCode != null;
+    }
+
     public boolean changeStatus(OrderStatus next, Instant at) {
         Objects.requireNonNull(next, "next");
         Objects.requireNonNull(at, "at");
@@ -94,25 +133,86 @@ public class Order {
         if (!status.canChangeTo(next)) {
             throw new InvalidStatusTransitionException(id, status, next);
         }
+        if (next == OrderStatus.CANCELLED) {
+            return cancel(CancellationReason.ADMIN, at);
+        }
         status = next;
         updatedAt = at;
         return true;
     }
 
-    public void cancelByCustomer(Instant at) {
-        if (status != OrderStatus.CREATED && status != OrderStatus.CONFIRMED) {
+    public boolean cancelByCustomer(Instant at) {
+        if (status.isFinal() || status == OrderStatus.IN_DELIVERY) {
             throw new InvalidStatusTransitionException(id, status, OrderStatus.CANCELLED);
         }
-        changeStatus(OrderStatus.CANCELLED, at);
+        return cancel(CancellationReason.CUSTOMER, at);
+    }
+
+    public boolean cancel(CancellationReason reason, Instant at) {
+        Objects.requireNonNull(reason, "reason");
+        Objects.requireNonNull(at, "at");
+        if (status == OrderStatus.CANCELLED) {
+            return false;
+        }
+        if (status == OrderStatus.DELIVERED) {
+            throw new InvalidStatusTransitionException(id, status, OrderStatus.CANCELLED);
+        }
+        status = OrderStatus.CANCELLED;
+        cancellationReason = reason;
+        updatedAt = at;
+        return true;
+    }
+
+    public boolean markPaymentHeld(Instant at) {
+        return advanceTo(OrderStatus.PAYMENT_HELD, at);
+    }
+
+    public boolean markCourierAssigned(Instant at) {
+        return advanceTo(OrderStatus.COURIER_ASSIGNED, at);
+    }
+
+    public boolean confirmPayment(Instant at) {
+        return advanceTo(OrderStatus.CONFIRMED, at);
+    }
+
+    public boolean recordRefund(Instant at) {
+        if (status != OrderStatus.CANCELLED) {
+            throw new InvalidStatusTransitionException(id, status, OrderStatus.CANCELLED);
+        }
+        if (refundedAt != null) {
+            return false;
+        }
+        refundedAt = Objects.requireNonNull(at, "at");
+        return true;
+    }
+
+    public boolean isCancelled() {
+        return status == OrderStatus.CANCELLED;
+    }
+
+    public boolean isStuckIn(OrderStatus awaited, Instant cutoff) {
+        return status == awaited && awaited.isAwaitingSaga() && updatedAt.isBefore(cutoff);
     }
 
     public boolean followDelivery(OrderStatus reported, Instant at) {
         Objects.requireNonNull(reported, "reported");
-        Objects.requireNonNull(at, "at");
-        if (status.isFinal() || !status.isBefore(reported)) {
+        if (reported == OrderStatus.CANCELLED || !paidEnoughFor(reported)) {
             return false;
         }
-        status = reported;
+        return advanceTo(reported, at);
+    }
+
+    private boolean paidEnoughFor(OrderStatus reported) {
+        OrderStatus required = reported.isBefore(OrderStatus.IN_DELIVERY) ? OrderStatus.PAYMENT_HELD : OrderStatus.CONFIRMED;
+        return !status.isBefore(required);
+    }
+
+    private boolean advanceTo(OrderStatus next, Instant at) {
+        Objects.requireNonNull(at, "at");
+        if (status.isFinal() || !status.isBefore(next)) {
+            return false;
+        }
+        status = next;
         updatedAt = at;
         return true;
     }
@@ -155,6 +255,22 @@ public class Order {
 
     public BigDecimal getTotalAmount() {
         return totalAmount;
+    }
+
+    public BigDecimal getDiscount() {
+        return discount;
+    }
+
+    public String getPromoCode() {
+        return promoCode;
+    }
+
+    public CancellationReason getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public Instant getRefundedAt() {
+        return refundedAt;
     }
 
     public Instant getCreatedAt() {

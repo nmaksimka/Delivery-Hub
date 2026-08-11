@@ -50,6 +50,18 @@ describe('request', () => {
     await expect(failure).rejects.toThrow('Сервер вернул неожиданный ответ');
   });
 
+  it('keepsProblemCodeOfFailedResponse', async () => {
+    stubFetch(
+      jsonResponse({ detail: 'Restaurant 1 is closed now', code: 'RESTAURANT_CLOSED' }, 409),
+    );
+
+    await expect(request('/api/orders', { schema: z.unknown() })).rejects.toMatchObject({
+      status: 409,
+      detail: 'Restaurant 1 is closed now',
+      code: 'RESTAURANT_CLOSED',
+    });
+  });
+
   it('reportsNetworkFailureAsApiError', async () => {
     vi.stubGlobal(
       'fetch',

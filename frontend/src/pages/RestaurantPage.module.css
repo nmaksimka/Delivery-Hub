@@ -153,3 +153,15 @@
     height: 112px;
   }
 }
+
+.cartError {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 5;
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--block-ink);
+  color: var(--color-bg);
+  font-weight: 600;
+}

@@ -46,6 +46,8 @@ spring:
 
 app:
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  dispatch:
+    courier-ids: ${COURIER_IDS:9001,9002,9003,9004,9005,9006,9007,9008,9009,9010}
   outbox:
     poll-interval: 1s
     batch-size: 50

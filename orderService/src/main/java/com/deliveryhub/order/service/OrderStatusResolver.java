@@ -10,7 +10,7 @@ public final class OrderStatusResolver {
 
     public static OrderStatus fromDeliveryStatus(DeliveryStatus deliveryStatus) {
         return switch (deliveryStatus) {
-            case ASSIGNED -> OrderStatus.CONFIRMED;
+            case ASSIGNED -> OrderStatus.COURIER_ASSIGNED;
             case PICKED_UP, IN_TRANSIT -> OrderStatus.IN_DELIVERY;
             case DELIVERED -> OrderStatus.DELIVERED;
             case CANCELLED -> OrderStatus.CANCELLED;

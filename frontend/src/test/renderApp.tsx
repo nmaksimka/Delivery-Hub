@@ -12,6 +12,9 @@ type Reply = {
 };
 
 export function jsonResponse(body: unknown, status = 200) {
+  if (status === 204) {
+    return new Response(null, { status });
+  }
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
@@ -23,7 +26,12 @@ export function stubApi(replies: Record<string, Reply>) {
     const path = String(input).split('?')[0] ?? '';
     const reply = replies[`${init?.method ?? 'GET'} ${path}`];
     return Promise.resolve(
-      reply ? jsonResponse(reply.body, reply.status) : jsonResponse({ detail: 'Not found' }, 404),
+      reply
+        ? jsonResponse(
+            typeof reply.body === 'function' ? (reply.body as () => unknown)() : reply.body,
+            reply.status,
+          )
+        : jsonResponse({ detail: 'Not found' }, 404),
     );
   });
   vi.stubGlobal('fetch', fetchMock);

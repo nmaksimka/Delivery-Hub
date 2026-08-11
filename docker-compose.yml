@@ -156,6 +156,17 @@ services:
       - pg-order-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
 
+  postgres-payment:
+    image: postgres:17.9-alpine
+    container_name: postgres-payment
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_pass}
+    volumes:
+      - pg-payment-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
+
   postgres-delivery:
     image: postgres:17.9-alpine
     container_name: postgres-delivery
@@ -256,10 +267,12 @@ services:
       dockerfile: ./orderService/Dockerfile
     container_name: orderService
     environment:
-      <<: [*platform-credentials, *json-logs]
+      <<: [*platform-credentials, *json-logs, *redis-credentials]
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_pass}
     depends_on:
+      redis:
+        condition: service_healthy
       configServer:
         condition: service_healthy
       discoveryServer:
@@ -329,6 +342,34 @@ services:
       timeout: 5s
       retries: 20
 
+  paymentService:
+    image: deliveryhub-payment-service
+    build:
+      context: .
+      dockerfile: ./paymentService/Dockerfile
+    container_name: paymentService
+    environment:
+      <<: [*platform-credentials, *json-logs]
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_pass}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-demo}
+    depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
+      postgres-payment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3336/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   apiGateway:
     image: deliveryhub-api-gateway
     build:
@@ -354,6 +395,8 @@ services:
       deliveryService:
         condition: service_healthy
       userService:
+        condition: service_healthy
+      paymentService:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9335/actuator/health/readiness || exit 1"]
@@ -424,3 +467,4 @@ volumes:
   pg-order-data:
   pg-delivery-data:
   pg-user-data:
+  pg-payment-data:

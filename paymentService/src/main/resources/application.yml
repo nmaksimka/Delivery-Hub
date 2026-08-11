@@ -1,0 +1,90 @@
+server:
+  port: 3336
+
+spring:
+  application:
+    name: paymentService
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
+    inetutils:
+      ignored-interfaces:
+        - .*
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5336}/${DB_NAME:payment_db}
+    username: ${DB_USER:payment_user}
+    password: ${DB_PASSWORD:payment_pass}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: io.confluent.kafka.serializers.KafkaAvroDeserializer
+        specific.avro.reader: true
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8085}
+      avro.use.logical.type.converters: true
+
+app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  payment:
+    provider: ${PAYMENT_PROVIDER:demo}
+    demo:
+      max-balance: 100000.00
+  outbox:
+    poll-interval: 1s
+    batch-size: 50
+    send-timeout: 5s
+    max-attempts: 5
+    retry-backoff: 2s
+    max-backoff: 1m
+  cleanup:
+    interval: 1h
+    outbox-retention: 7d
+    processed-events-retention: 14d
+  kafka:
+    topics:
+      partitions: 3
+      replicas: 1
+      retention: 7d
+      dead-letter-retention: 30d
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

@@ -1,37 +1,22 @@
-import { useEffect, useMemo, useReducer, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { emptyCart } from '../api/cart';
+import { useServerCart } from '../api/queries';
 import { CartContext, type CartContextValue } from './CartContext';
-import { cartCount, cartReducer, cartTotal } from './cartState';
-import { loadCart, saveCart } from './cartStorage';
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(cartReducer, undefined, loadCart);
+  const serverCart = useServerCart();
   const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    saveCart(state);
-  }, [state]);
+  const cart = serverCart.data ?? emptyCart;
+  const isLoading = serverCart.isLoading;
 
   const value = useMemo<CartContextValue>(
     () => ({
-      restaurant: state.restaurant,
-      lines: state.lines,
-      count: cartCount(state),
-      total: cartTotal(state),
+      cart,
+      count: cart.items.reduce((sum, line) => sum + line.quantity, 0),
+      isLoading,
       isOpen,
       quantityOf: (menuItemId) =>
-        state.lines.find((line) => line.menuItemId === menuItemId)?.quantity ?? 0,
-      add: (restaurant, item) => {
-        dispatch({ type: 'added', restaurant, item });
-      },
-      decrement: (menuItemId) => {
-        dispatch({ type: 'decremented', menuItemId });
-      },
-      remove: (menuItemId) => {
-        dispatch({ type: 'removed', menuItemId });
-      },
-      clear: () => {
-        dispatch({ type: 'cleared' });
-      },
+        cart.items.find((line) => line.menuItemId === menuItemId)?.quantity ?? 0,
       open: () => {
         setIsOpen(true);
       },
@@ -39,7 +24,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsOpen(false);
       },
     }),
-    [state, isOpen],
+    [cart, isLoading, isOpen],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

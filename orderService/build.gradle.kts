@@ -8,6 +8,7 @@ dependencies {
 
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.data.redis)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.grpc.client.starter)
     implementation(libs.spring.cloud.starter.circuitbreaker.resilience4j)

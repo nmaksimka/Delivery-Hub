@@ -2,7 +2,6 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
-import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
@@ -12,13 +11,18 @@ import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.CancellationReason;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.ItemNotFoundException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
 import com.deliveryhub.order.outbox.Outbox;
+import com.deliveryhub.order.promo.PromoService;
+import com.deliveryhub.order.promo.PromoUse;
 import com.deliveryhub.order.repository.OrderRepository;
 import com.deliveryhub.order.security.CurrentUser;
 import io.micrometer.core.instrument.Counter;
@@ -54,6 +58,8 @@ public class OrderService {
     private final RestaurantCatalog restaurantCatalog;
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
+    private final PromoService promoService;
+    private final OrderCancellation cancellation;
     private final Clock clock;
     private final TransactionTemplate transaction;
     private final Counter ordersPlaced;
@@ -63,6 +69,8 @@ public class OrderService {
                         RestaurantCatalog restaurantCatalog,
                         Outbox outbox,
                         ProcessedEvents processedEvents,
+                        PromoService promoService,
+                        OrderCancellation cancellation,
                         Clock clock,
                         PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
@@ -71,6 +79,8 @@ public class OrderService {
         this.restaurantCatalog = restaurantCatalog;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
+        this.promoService = promoService;
+        this.cancellation = cancellation;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
         this.ordersPlaced = Counter.builder(ORDERS_PLACED)
@@ -97,33 +107,40 @@ public class OrderService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
+        return createOrder(createRequest, userId, null);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
         Map<Long, Integer> quantities = createRequest.quantitiesByMenuItem();
         MenuQuote quote = restaurantCatalog.quote(restaurantId, quantities.keySet());
         if (!quote.restaurant().active()) {
-            throw new OrderRejectedException("Restaurant " + restaurantId + " is not active");
+            throw new OrderRejectedException(ErrorCode.RESTAURANT_INACTIVE,
+                    "Restaurant " + restaurantId + " is not active");
         }
         if (quote.restaurant().closed()) {
-            throw new OrderRejectedException(closedMessage(quote.restaurant()));
+            throw new OrderRejectedException(ErrorCode.RESTAURANT_CLOSED, closedMessage(quote.restaurant()));
         }
 
         Order order = Order.place(userId, restaurantId, clock.instant());
         quantities.forEach((menuItemId, quantity) -> {
-            MenuItemDto menuItem = quote.item(menuItemId).orElseThrow(() -> new EntityNotFoundException(
+            MenuItemDto menuItem = quote.item(menuItemId).orElseThrow(() -> new ItemNotFoundException(ErrorCode.ITEM_NOT_FOUND,
                     "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId));
             if (!menuItem.available()) {
-                throw new OrderRejectedException("Menu item " + menuItemId + " is not available");
+                throw new OrderRejectedException(ErrorCode.ITEM_UNAVAILABLE,
+                        "Menu item " + menuItemId + " is not available");
             }
             if (quantity > OrderItemRequest.MAX_QUANTITY) {
-                throw new OrderRejectedException("Quantity of menu item " + menuItemId + " exceeds "
-                        + OrderItemRequest.MAX_QUANTITY);
+                throw new OrderRejectedException(ErrorCode.QUANTITY_LIMIT, "Quantity of menu item " + menuItemId
+                        + " exceeds " + OrderItemRequest.MAX_QUANTITY);
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
 
-        Order savedOrder = transaction.execute(status -> store(order));
+        Order savedOrder = transaction.execute(status -> store(order, promoCode));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
@@ -136,9 +153,17 @@ public class OrderService {
                 : closed + ", working hours: " + restaurant.workingHours();
     }
 
-    private Order store(Order order) {
+    private Order store(Order order, String promoCode) {
+        PromoUse promo = null;
+        if (promoCode != null && !promoCode.isBlank()) {
+            promo = promoService.reserve(promoCode, order.getUserId(), order.getRestaurantId(), order.subtotal());
+            order.applyDiscount(promo.code(), promo.discount());
+        }
         long sequence = order.nextEventSequence();
         Order savedOrder = orderRepository.save(order);
+        if (promo != null) {
+            promoService.record(promo, savedOrder.getUserId(), savedOrder.getId());
+        }
         OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
         return savedOrder;
@@ -148,11 +173,10 @@ public class OrderService {
     public OrderDto updateOrderStatus(Long id, OrderStatus newStatus) {
         Order order = findWithItemsOrThrow(id);
 
-        if (order.changeStatus(newStatus, clock.instant())) {
+        if (newStatus == OrderStatus.CANCELLED) {
+            cancellation.cancel(order, CancellationReason.ADMIN);
+        } else if (order.changeStatus(newStatus, clock.instant())) {
             log.info("Order {} status updated to {}", id, newStatus);
-            if (newStatus == OrderStatus.CANCELLED) {
-                appendCancelled(order);
-            }
         }
         return orderMapper.toDto(order);
     }
@@ -162,17 +186,13 @@ public class OrderService {
         Order order = findWithItemsOrThrow(id);
 
         if (currentUser.isAdmin()) {
-            if (!order.changeStatus(OrderStatus.CANCELLED, clock.instant())) {
-                return orderMapper.toDto(order);
-            }
-        } else {
-            if (!order.belongsTo(currentUser.id())) {
-                throw new ForbiddenException("Order " + id + " does not belong to the current user");
-            }
-            order.cancelByCustomer(clock.instant());
+            cancellation.cancel(order, CancellationReason.ADMIN);
+            return orderMapper.toDto(order);
         }
-        log.info("Order {} is cancelled by user {}", id, currentUser.id());
-        appendCancelled(order);
+        if (!order.belongsTo(currentUser.id())) {
+            throw new ForbiddenException("Order " + id + " does not belong to the current user");
+        }
+        cancellation.cancel(order, CancellationReason.CUSTOMER);
         return orderMapper.toDto(order);
     }
 
@@ -191,22 +211,17 @@ public class OrderService {
             return;
         }
         OrderStatus reported = OrderStatusResolver.fromDeliveryStatus(event.getStatus());
+        if (reported == OrderStatus.CANCELLED) {
+            if (!order.getStatus().isFinal()) {
+                cancellation.cancel(order, CancellationReason.DELIVERY_CANCELLED);
+            }
+            return;
+        }
         if (order.followDelivery(reported, clock.instant())) {
             log.info("Order {} status updated to {} after delivery event", order.getId(), reported);
         } else {
             log.info("Order {} stays {}, delivery reported {}", order.getId(), order.getStatus(), reported);
         }
-    }
-
-    private void appendCancelled(Order order) {
-        OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
-                .setEventId(UUID.randomUUID())
-                .setOrderId(order.getId())
-                .setUserId(order.getUserId())
-                .setCancelledAt(order.getUpdatedAt())
-                .setSequence(order.nextEventSequence())
-                .build();
-        outbox.append(AGGREGATE_TYPE, order.getId(), Topics.ORDER_CANCELLED, event.getEventId(), event);
     }
 
     private Order findWithItemsOrThrow(Long id) {

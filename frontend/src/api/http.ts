@@ -9,6 +9,7 @@ type RequestOptions<T> = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   query?: Record<string, QueryValue>;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
@@ -24,12 +25,19 @@ const statusMessages: Record<number, string> = {
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string | null;
+  readonly code: string | null;
 
-  constructor(status: number, message: string, detail: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    detail: string | null = null,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -51,18 +59,23 @@ function buildUrl(path: string, query?: Record<string, QueryValue>) {
   return search ? `${path}?${search}` : path;
 }
 
-async function readDetail(response: Response): Promise<string | null> {
+type Problem = { detail: string | null; code: string | null };
+
+async function readProblem(response: Response): Promise<Problem> {
   try {
     const payload: unknown = await response.json();
     if (payload && typeof payload === 'object') {
       const fields = payload as Record<string, unknown>;
       const detail = fields.detail ?? fields.message ?? fields.error;
-      return typeof detail === 'string' ? detail : null;
+      return {
+        detail: typeof detail === 'string' ? detail : null,
+        code: typeof fields.code === 'string' ? fields.code : null,
+      };
     }
-    return null;
   } catch {
-    return null;
+    return { detail: null, code: null };
   }
+  return { detail: null, code: null };
 }
 
 function messageFor(status: number) {
@@ -111,7 +124,7 @@ function refreshSession(expired: Session): Promise<Session | null> {
 }
 
 async function send<T>(path: string, options: RequestOptions<T>, session: Session | null) {
-  const headers = new Headers({ Accept: 'application/json' });
+  const headers = new Headers({ ...options.headers, Accept: 'application/json' });
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
   }
@@ -147,7 +160,8 @@ export async function request<T>(path: string, options: RequestOptions<T>): Prom
     }
   }
   if (!response.ok) {
-    throw new ApiError(response.status, messageFor(response.status), await readDetail(response));
+    const problem = await readProblem(response);
+    throw new ApiError(response.status, messageFor(response.status), problem.detail, problem.code);
   }
 
   const payload: unknown = response.status === 204 ? undefined : await response.json();

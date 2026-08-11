@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { request } from './http';
 import { pageOf } from './page';
 
+const optionalText = z
+  .string()
+  .nullish()
+  .transform((value) => value ?? null);
+
 const orderItemSchema = z.object({
   id: z.number(),
   menuItemId: z.number(),
@@ -10,12 +15,20 @@ const orderItemSchema = z.object({
   pricePerUnit: z.coerce.number(),
 });
 
-const orderSchema = z.object({
+export const orderSchema = z.object({
   id: z.number(),
   restaurantId: z.number(),
   status: z.string(),
+  cancellationReason: optionalText,
+  refundedAt: optionalText,
   totalAmount: z.coerce.number(),
+  discount: z.coerce
+    .number()
+    .nullish()
+    .transform((value) => value ?? 0),
+  promoCode: optionalText,
   createdAt: z.string(),
+  updatedAt: optionalText,
   orderItems: z
     .array(orderItemSchema)
     .nullish()
@@ -25,20 +38,18 @@ const orderSchema = z.object({
 export type OrderItem = z.infer<typeof orderItemSchema>;
 export type Order = z.infer<typeof orderSchema>;
 
-export type NewOrder = {
-  restaurantId: number;
-  orderItemsRequest: { menuItemId: number; quantity: number }[];
-};
-
 export const ordersApi = {
-  create(order: NewOrder) {
-    return request('/api/orders', { method: 'POST', body: order, schema: orderSchema });
-  },
   mine(options: { page: number; size: number; signal?: AbortSignal }) {
     return request('/api/orders', {
       query: { page: options.page, size: options.size, sort: 'createdAt,desc' },
       schema: pageOf(orderSchema),
       signal: options.signal,
     });
+  },
+  byId(id: number, signal?: AbortSignal) {
+    return request(`/api/orders/${id}`, { schema: orderSchema, signal });
+  },
+  cancel(id: number) {
+    return request(`/api/orders/${id}/cancel`, { method: 'POST', schema: orderSchema });
   },
 };

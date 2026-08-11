@@ -19,7 +19,9 @@ public class KafkaTopicsConfig {
     public KafkaAdmin.NewTopics deliveryTopics(TopicProperties properties) {
         return new KafkaAdmin.NewTopics(
                 topic(Topics.DELIVERY_STATUS_UPDATED, properties, properties.retention()),
-                topic(Topics.deadLetterOf(Topics.ORDER_CREATED), properties, properties.deadLetterRetention()),
+                topic(Topics.COURIER_ASSIGNED, properties, properties.retention()),
+                topic(Topics.DELIVERY_REJECTED, properties, properties.retention()),
+                topic(Topics.deadLetterOf(Topics.PAYMENT_HELD), properties, properties.deadLetterRetention()),
                 topic(Topics.deadLetterOf(Topics.ORDER_CANCELLED), properties, properties.deadLetterRetention()));
     }
 

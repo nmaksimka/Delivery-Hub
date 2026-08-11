@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class DeadLetterIT {
 
-    private static final String TOPIC = Topics.ORDER_CREATED;
+    private static final String TOPIC = Topics.PAYMENT_HELD;
 
     @Autowired
     private KafkaContainer kafka;
