@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { errorMessage } from '../api/http';
-import { useRestaurants } from '../api/queries';
+import { useFavorites, useRestaurants } from '../api/queries';
+import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
 import { Chips } from '../components/Chips';
 import { SearchIcon } from '../components/icons';
@@ -9,7 +10,12 @@ import { RestaurantCard } from '../components/RestaurantCard';
 import { StateMessage } from '../components/StateMessage';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
-import { allFilterId, filterRestaurants, quickFilters } from '../lib/restaurantFilters';
+import {
+  allFilterId,
+  filtersFor,
+  favoritesFilterId,
+  filterRestaurants,
+} from '../lib/restaurantFilters';
 import { closedBadge } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import styles from './HomePage.module.css';
@@ -18,12 +24,21 @@ const skeletons = [1, 2, 3, 4, 5, 6];
 
 export function HomePage() {
   const restaurants = useRestaurants();
+  const { user } = useAuth();
+  const favorites = useFavorites();
   const now = useNow();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filterId, setFilterId] = useState(allFilterId);
   const query = searchParams.get('q') ?? '';
 
-  const visible = filterRestaurants(restaurants.data ?? [], { query, filterId, now });
+  const filterOptions = filtersFor(user !== null);
+  const activeFilterId = !user && filterId === favoritesFilterId ? allFilterId : filterId;
+  const visible = filterRestaurants(restaurants.data ?? [], {
+    query,
+    filterId: activeFilterId,
+    now,
+    favoriteIds: favorites.data,
+  });
 
   function changeQuery(value: string) {
     setSearchParams(value ? { q: value } : {}, { replace: true });
@@ -80,8 +95,8 @@ export function HomePage() {
       <div className={styles.filters}>
         <Chips
           label="Быстрые фильтры"
-          options={quickFilters}
-          activeId={filterId}
+          options={filterOptions}
+          activeId={activeFilterId}
           onSelect={setFilterId}
         />
       </div>
