@@ -101,7 +101,10 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
     case 'IDEMPOTENCY_KEY_REUSED':
       return 'Корзина изменилась во время оформления, нажмите «Оформить заказ» ещё раз';
     case 'IDEMPOTENCY_KEY_INVALID':
+    case 'IDEMPOTENCY_KEY_REQUIRED':
       return 'Не получилось отправить заказ, обновите страницу и попробуйте снова';
+    case 'REQUEST_TOO_LARGE':
+      return 'Слишком большой запрос, сократите комментарий или состав заказа';
     default:
       return null;
   }
