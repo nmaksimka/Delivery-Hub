@@ -168,7 +168,7 @@ services:
     healthcheck: *pg-healthcheck
 
   postgres-delivery:
-    image: postgres:17.9-alpine
+    image: postgis/postgis:17-3.5-alpine
     container_name: postgres-delivery
     environment:
       POSTGRES_DB: delivery_db
