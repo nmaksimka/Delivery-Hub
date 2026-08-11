@@ -1,0 +1,115 @@
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.step::before {
+  position: absolute;
+  top: 20px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: var(--color-line);
+  content: '';
+}
+
+.step:first-child::before {
+  left: 18px;
+}
+
+.step:last-child::before {
+  right: auto;
+  width: 18px;
+}
+
+.mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.done::before {
+  background: var(--color-ink);
+}
+
+.done .mark {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+.done .label {
+  color: var(--color-ink);
+}
+
+.current .mark {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  animation: pulse 1.6s var(--ease) infinite;
+}
+
+.current .label {
+  color: var(--color-accent-strong);
+}
+
+.stopped .mark {
+  text-decoration: line-through;
+}
+
+@keyframes pulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .current .mark {
+    animation: none;
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .step {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .step::before {
+    display: none;
+  }
+}
