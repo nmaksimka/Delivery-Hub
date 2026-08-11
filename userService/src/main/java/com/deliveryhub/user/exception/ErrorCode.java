@@ -1,0 +1,15 @@
+package com.deliveryhub.user.exception;
+
+public enum ErrorCode {
+    NOT_FOUND,
+    USER_NOT_FOUND,
+    ADDRESS_NOT_FOUND,
+    ADDRESS_LIMIT_REACHED,
+    EMAIL_ALREADY_USED,
+    OWN_ROLE_CHANGE,
+    FORBIDDEN,
+    UNAUTHORIZED,
+    INVALID_REFRESH_TOKEN,
+    VALIDATION_FAILED,
+    INTERNAL_ERROR
+}
