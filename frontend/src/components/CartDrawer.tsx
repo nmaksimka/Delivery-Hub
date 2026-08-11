@@ -1,23 +1,63 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { useCreateOrder } from '../api/queries';
+import type { CartLine } from '../api/cart';
+import {
+  useChangeQuantity,
+  useCheckout,
+  useClearCart,
+  useRemoveFromCart,
+  useTopUp,
+  useWallet,
+} from '../api/queries';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
+import { cx } from '../lib/cx';
 import { formatPrice } from '../lib/format';
 import { orderErrorMessage } from '../lib/orderErrors';
+import { shortageOf, topUpErrorMessage } from '../lib/walletErrors';
 import { Button } from './Button';
 import styles from './CartDrawer.module.css';
 import { BagIcon, CloseIcon } from './icons';
+import { PromoCodeForm } from './PromoCodeForm';
 import { QuantityStepper } from './QuantityStepper';
 
+function lineName(line: CartLine) {
+  return line.name ?? 'Блюдо убрали из меню';
+}
+
+function EmptyState({
+  title,
+  text,
+  children,
+}: {
+  title: string;
+  text: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={styles.empty}>
+      <span className={styles.emptyMark} aria-hidden="true">
+        <BagIcon size={30} />
+      </span>
+      <h3 className={styles.emptyTitle}>{title}</h3>
+      <p className={styles.emptyText}>{text}</p>
+      {children}
+    </div>
+  );
+}
+
 export function CartDrawer() {
-  const cart = useCart();
+  const { cart, isLoading, isOpen, close } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const createOrder = useCreateOrder();
-  const { isOpen, close } = cart;
-  const resetOrder = createOrder.reset;
+  const changeQuantity = useChangeQuantity();
+  const removeLine = useRemoveFromCart();
+  const clearCart = useClearCart();
+  const checkout = useCheckout();
+  const wallet = useWallet();
+  const topUp = useTopUp();
+  const resetCheckout = checkout.reset;
 
   useEffect(() => {
     if (!isOpen) {
@@ -34,41 +74,33 @@ export function CartDrawer() {
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', closeOnEscape);
-      resetOrder();
+      resetCheckout();
     };
-  }, [isOpen, close, resetOrder]);
+  }, [isOpen, close, resetCheckout]);
 
   if (!isOpen) {
     return null;
   }
 
-  const restaurant = cart.restaurant;
+  const restaurant = cart.items.length > 0 ? cart.restaurant : null;
+  const unavailable = cart.items.filter((line) => !line.available);
+  const shortage = wallet.data ? shortageOf(cart.total, wallet.data.available) : 0;
+  const writeError = changeQuantity.error ?? removeLine.error ?? clearCart.error;
+  const itemName = (menuItemId: number) =>
+    cart.items.find((line) => line.menuItemId === menuItemId)?.name ?? undefined;
+
+  function goToLogin() {
+    close();
+    void navigate('/login', { state: { from: location.pathname } });
+  }
 
   function placeOrder() {
-    if (!restaurant) {
-      return;
-    }
-    if (!user) {
-      close();
-      void navigate('/login', { state: { from: location.pathname } });
-      return;
-    }
-    createOrder.mutate(
-      {
-        restaurantId: restaurant.id,
-        orderItemsRequest: cart.lines.map((line) => ({
-          menuItemId: line.menuItemId,
-          quantity: line.quantity,
-        })),
+    checkout.mutate(cart, {
+      onSuccess: (order) => {
+        close();
+        void navigate(`/orders/${order.id}`);
       },
-      {
-        onSuccess: (order) => {
-          cart.clear();
-          close();
-          void navigate('/orders', { state: { placedOrderId: order.id } });
-        },
-      },
-    );
+    });
   }
 
   return (
@@ -101,74 +133,171 @@ export function CartDrawer() {
         </div>
 
         <div className={styles.body}>
-          {restaurant ? (
+          {!user && (
+            <EmptyState
+              title="Войдите, чтобы собрать корзину"
+              text="Корзина хранится в аккаунте: блюда не потеряются, а заказ можно оформить с любого устройства."
+            >
+              <Button variant="dark" onClick={goToLogin}>
+                Войти
+              </Button>
+            </EmptyState>
+          )}
+
+          {user && isLoading && <p className={styles.loading}>Загружаем корзину…</p>}
+
+          {user && !isLoading && !restaurant && (
+            <EmptyState
+              title="Пока пусто"
+              text="Добавьте блюда из меню ресторана — они появятся здесь."
+            >
+              <Button variant="dark" onClick={close}>
+                Выбрать блюда
+              </Button>
+            </EmptyState>
+          )}
+
+          {user && restaurant && (
             <>
+              {!restaurant.active && (
+                <p className={styles.warning}>Ресторан временно не принимает заказы.</p>
+              )}
+              {restaurant.active && restaurant.closed && (
+                <p className={styles.warning}>
+                  Ресторан сейчас закрыт
+                  {restaurant.workingHours ? `, часы работы ${restaurant.workingHours}` : ''}.
+                </p>
+              )}
+              {unavailable.length > 0 && (
+                <p className={styles.warning}>
+                  Некоторых блюд нет в наличии — уберите их, чтобы оформить заказ.
+                </p>
+              )}
               <ul>
-                {cart.lines.map((line) => (
-                  <li key={line.menuItemId} className={styles.line}>
+                {cart.items.map((line) => (
+                  <li
+                    key={line.menuItemId}
+                    className={cx(styles.line, !line.available && styles.lineOff)}
+                  >
                     <div>
-                      <p className={styles.lineName}>{line.name}</p>
-                      <p className={styles.linePrice}>{formatPrice(line.price)} за порцию</p>
+                      <p className={styles.lineName}>{lineName(line)}</p>
+                      {line.available && line.price !== null ? (
+                        <p className={styles.linePrice}>{formatPrice(line.price)} за порцию</p>
+                      ) : (
+                        <p className={styles.lineMissing}>Нет в наличии</p>
+                      )}
                     </div>
                     <div className={styles.lineSide}>
-                      <span className={styles.lineTotal}>
-                        {formatPrice(line.price * line.quantity)}
-                      </span>
-                      <QuantityStepper
-                        name={line.name}
-                        quantity={line.quantity}
-                        onIncrement={() => {
-                          cart.add(restaurant, line);
-                        }}
-                        onDecrement={() => {
-                          cart.decrement(line.menuItemId);
-                        }}
-                      />
+                      {line.available ? (
+                        <>
+                          {line.lineTotal !== null && (
+                            <span className={styles.lineTotal}>{formatPrice(line.lineTotal)}</span>
+                          )}
+                          <QuantityStepper
+                            name={lineName(line)}
+                            quantity={line.quantity}
+                            onIncrement={() => {
+                              changeQuantity.mutate({
+                                menuItemId: line.menuItemId,
+                                quantity: line.quantity + 1,
+                              });
+                            }}
+                            onDecrement={() => {
+                              changeQuantity.mutate({
+                                menuItemId: line.menuItemId,
+                                quantity: line.quantity - 1,
+                              });
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="small"
+                          onClick={() => {
+                            removeLine.mutate(line.menuItemId);
+                          }}
+                        >
+                          Убрать
+                        </Button>
+                      )}
                     </div>
                   </li>
                 ))}
               </ul>
-              <button type="button" className={styles.clear} onClick={cart.clear}>
+              <button
+                type="button"
+                className={styles.clear}
+                onClick={() => {
+                  clearCart.mutate(undefined);
+                }}
+              >
                 Очистить корзину
               </button>
+              <div className={styles.promo}>
+                <PromoCodeForm cart={cart} />
+              </div>
             </>
-          ) : (
-            <div className={styles.empty}>
-              <span className={styles.emptyMark} aria-hidden="true">
-                <BagIcon size={30} />
-              </span>
-              <h3 className={styles.emptyTitle}>Пока пусто</h3>
-              <p className={styles.emptyText}>
-                Добавьте блюда из меню ресторана — они появятся здесь.
-              </p>
-              <Button variant="dark" onClick={close}>
-                Выбрать блюда
-              </Button>
-            </div>
           )}
         </div>
 
-        {restaurant && (
+        {user && restaurant && (
           <div className={styles.foot}>
+            {cart.discount > 0 && (
+              <>
+                <p className={styles.row}>
+                  <span>Блюда</span>
+                  <span>{formatPrice(cart.subtotal)}</span>
+                </p>
+                <p className={styles.row}>
+                  <span>Скидка</span>
+                  <span className={styles.discount}>−{formatPrice(cart.discount)}</span>
+                </p>
+              </>
+            )}
             <p className={styles.total}>
               <span>Итого</span>
               <span className={styles.totalValue}>{formatPrice(cart.total)}</span>
             </p>
-            {createOrder.isError && (
+            {writeError && (
               <p className={styles.error} role="alert">
-                {orderErrorMessage(
-                  createOrder.error,
-                  (menuItemId) => cart.lines.find((line) => line.menuItemId === menuItemId)?.name,
-                )}
+                {orderErrorMessage(writeError, itemName)}
               </p>
             )}
-            {!user && <p className={styles.hint}>Чтобы оформить заказ, войдите в аккаунт.</p>}
-            <Button block onClick={placeOrder} disabled={createOrder.isPending}>
-              {user
-                ? createOrder.isPending
-                  ? 'Оформляем…'
-                  : 'Оформить заказ'
-                : 'Войти и оформить'}
+            {checkout.isError && (
+              <p className={styles.error} role="alert">
+                {orderErrorMessage(checkout.error, itemName)}
+              </p>
+            )}
+            {wallet.data && shortage > 0 && (
+              <div className={styles.shortage}>
+                <p>
+                  На кошельке {formatPrice(wallet.data.available)} — не хватает{' '}
+                  <strong>{formatPrice(shortage)}</strong>.
+                </p>
+                <Button
+                  variant="dark"
+                  size="small"
+                  disabled={topUp.isPending}
+                  onClick={() => {
+                    topUp.mutate(shortage);
+                  }}
+                >
+                  {topUp.isPending ? 'Пополняем…' : `Пополнить на ${formatPrice(shortage)}`}
+                </Button>
+                {topUp.isError && (
+                  <p className={styles.error} role="alert">
+                    {topUpErrorMessage(topUp.error)}
+                  </p>
+                )}
+              </div>
+            )}
+            <Button
+              block
+              onClick={placeOrder}
+              disabled={!cart.orderable || shortage > 0 || checkout.isPending}
+            >
+              {checkout.isPending ? 'Оформляем…' : 'Оформить заказ'}
             </Button>
           </div>
         )}

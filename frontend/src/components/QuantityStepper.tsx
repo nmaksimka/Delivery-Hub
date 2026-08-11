@@ -1,4 +1,4 @@
-import { maxQuantity } from '../cart/cartState';
+import { maxQuantity } from '../api/cart';
 import { MinusIcon, PlusIcon } from './icons';
 import styles from './QuantityStepper.module.css';
 

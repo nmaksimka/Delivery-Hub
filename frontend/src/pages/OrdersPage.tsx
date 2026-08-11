@@ -1,24 +1,18 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link } from 'react-router';
 import { errorMessage } from '../api/http';
 import type { Order } from '../api/orders';
 import { useMyOrders, useRestaurants } from '../api/queries';
 import { Button } from '../components/Button';
 import { buttonClass } from '../components/buttonClass';
+import { RepeatOrderButton } from '../components/RepeatOrderButton';
 import { StateMessage } from '../components/StateMessage';
 import { cx } from '../lib/cx';
 import { formatDateTime, formatPrice } from '../lib/format';
-import { statusView } from '../lib/orderStatus';
+import { cancellationText, isFinalStatus, statusView } from '../lib/orderStatus';
 import styles from './OrdersPage.module.css';
 
 const skeletons = [1, 2, 3];
-
-function placedOrderId(state: unknown) {
-  if (state && typeof state === 'object' && 'placedOrderId' in state) {
-    return typeof state.placedOrderId === 'number' ? state.placedOrderId : null;
-  }
-  return null;
-}
 
 function OrderRow({ order, restaurantName }: { order: Order; restaurantName: string | null }) {
   const status = statusView(order.status);
@@ -28,27 +22,44 @@ function OrderRow({ order, restaurantName }: { order: Order; restaurantName: str
     <li className={styles.order}>
       <div>
         <div className={styles.orderTop}>
-          <h2 className={styles.number}>Заказ №{order.id}</h2>
+          <h2 className={styles.number}>
+            <Link to={`/orders/${order.id}`} className={styles.numberLink}>
+              Заказ №{order.id}
+            </Link>
+          </h2>
           <span className={cx(styles.status, styles[status.tone])}>{status.label}</span>
         </div>
         {details && <p className={styles.meta}>{details}</p>}
+        {order.status === 'CANCELLED' && (
+          <p className={styles.reason}>
+            {cancellationText(order.cancellationReason)}
+            {order.refundedAt && ' · деньги возвращены'}
+          </p>
+        )}
         {order.orderItems.length > 0 && (
           <p className={styles.items}>
             {order.orderItems.map((item) => `${item.menuItemName} × ${item.quantity}`).join(', ')}
           </p>
         )}
       </div>
-      <p className={styles.total}>{formatPrice(order.totalAmount)}</p>
+      <div className={styles.side}>
+        <p className={styles.total}>{formatPrice(order.totalAmount)}</p>
+        {isFinalStatus(order.status) ? (
+          <RepeatOrderButton order={order} />
+        ) : (
+          <Link to={`/orders/${order.id}`} className={buttonClass({ size: 'small' })}>
+            Следить
+          </Link>
+        )}
+      </div>
     </li>
   );
 }
 
 export function OrdersPage() {
   const [page, setPage] = useState(0);
-  const location = useLocation();
   const orders = useMyOrders(page);
   const restaurants = useRestaurants(false);
-  const justPlaced = placedOrderId(location.state);
 
   const restaurantNames = new Map(
     (restaurants.data ?? []).map((restaurant) => [restaurant.id, restaurant.name]),
@@ -59,12 +70,6 @@ export function OrdersPage() {
       <div className={styles.head}>
         <h1 className={styles.title}>Мои заказы</h1>
       </div>
-
-      {justPlaced !== null && (
-        <p className={styles.banner} role="status">
-          Заказ №{justPlaced} принят и передан ресторану.
-        </p>
-      )}
 
       {orders.isPending && (
         <div aria-busy="true" aria-label="Загружаем заказы">

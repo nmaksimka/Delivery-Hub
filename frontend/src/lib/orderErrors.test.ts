@@ -126,10 +126,19 @@ describe('orderErrorMessage', () => {
     expect(messageFor(new ApiError(400, 'x', 'invalid', 'IDEMPOTENCY_KEY_INVALID'))).toBe(
       'Не получилось отправить заказ, обновите страницу и попробуйте снова',
     );
+    expect(messageFor(new ApiError(400, 'x', 'required', 'IDEMPOTENCY_KEY_REQUIRED'))).toBe(
+      'Не получилось отправить заказ, обновите страницу и попробуйте снова',
+    );
+  });
+
+  it('explainsTooLargeRequest', () => {
+    expect(messageFor(new ApiError(413, 'x', 'too large', 'REQUEST_TOO_LARGE'))).toBe(
+      'Слишком большой запрос, сократите комментарий или состав заказа',
+    );
   });
 
   it('usesGenericConflictMessageForUnknownCode', () => {
-    expect(messageFor(conflict('Order 1 cannot change status', 'INVALID_STATUS_TRANSITION'))).toBe(
+    expect(messageFor(conflict('Something unexpected happened', 'SOMETHING_NEW'))).toBe(
       'Заказ не принят, обновите страницу и попробуйте ещё раз',
     );
   });

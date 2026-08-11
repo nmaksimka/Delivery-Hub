@@ -32,6 +32,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) {
       queryClient.removeQueries({ queryKey: queryKeys.orders });
+      queryClient.removeQueries({ queryKey: queryKeys.cart });
+      queryClient.removeQueries({ queryKey: queryKeys.wallet });
     }
   }, [user, queryClient]);
 

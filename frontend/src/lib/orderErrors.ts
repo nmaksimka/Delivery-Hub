@@ -90,6 +90,10 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
       return 'Этот промокод действует только в другом ресторане';
     case 'PROMO_CODE_EXISTS':
       return 'Промокод с таким названием уже есть';
+    case 'INVALID_STATUS_TRANSITION':
+      return 'Заказ уже нельзя отменить: курьер в пути или заказ завершён';
+    case 'RESTAURANT_UNAVAILABLE':
+      return 'Не получилось связаться с рестораном, попробуйте через минуту';
     case 'CONCURRENT_UPDATE':
       return 'Данные успели измениться, попробуйте ещё раз';
     case 'IDEMPOTENCY_IN_PROGRESS':
@@ -97,10 +101,17 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
     case 'IDEMPOTENCY_KEY_REUSED':
       return 'Корзина изменилась во время оформления, нажмите «Оформить заказ» ещё раз';
     case 'IDEMPOTENCY_KEY_INVALID':
+    case 'IDEMPOTENCY_KEY_REQUIRED':
       return 'Не получилось отправить заказ, обновите страницу и попробуйте снова';
+    case 'REQUEST_TOO_LARGE':
+      return 'Слишком большой запрос, сократите комментарий или состав заказа';
     default:
       return null;
   }
+}
+
+export function promoProblemMessage(code: string) {
+  return messageByCode(code, '', () => undefined) ?? 'Промокод сейчас не действует';
 }
 
 export function orderErrorMessage(error: unknown, itemName: ItemName) {

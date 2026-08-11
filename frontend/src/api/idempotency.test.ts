@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '../test/renderApp';
+import { cartApi } from './cart';
 import { ApiError } from './http';
 import { createAttemptKeys, isRetryableAttempt } from './idempotency';
-import { ordersApi } from './orders';
+import { walletApi } from './wallet';
 
 const order = { restaurantId: 1, orderItemsRequest: [{ menuItemId: 10, quantity: 2 }] };
 
@@ -51,28 +52,50 @@ describe('createAttemptKeys', () => {
   });
 });
 
-describe('ordersApi.create', () => {
+function stubFetch(body: unknown, status = 200) {
+  const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse(body, status)));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+describe('cartApi.checkout', () => {
   it('sendsIdempotencyKeyHeader', async () => {
-    const fetchMock = vi.fn<typeof fetch>(() =>
-      Promise.resolve(
-        jsonResponse(
-          {
-            id: 7,
-            restaurantId: 1,
-            status: 'CREATED',
-            totalAmount: 25,
-            createdAt: '2026-07-10T10:00:00Z',
-          },
-          201,
-        ),
-      ),
+    const fetchMock = stubFetch(
+      {
+        id: 7,
+        restaurantId: 1,
+        status: 'CREATED',
+        totalAmount: 25,
+        createdAt: '2026-07-10T10:00:00Z',
+      },
+      201,
     );
-    vi.stubGlobal('fetch', fetchMock);
 
-    await ordersApi.create(order, 'attempt-1');
+    await cartApi.checkout('attempt-1');
 
-    const init = fetchMock.mock.calls[0]?.[1];
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('/api/cart/checkout');
+    expect(init?.method).toBe('POST');
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('attempt-1');
     expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+  });
+});
+
+describe('walletApi.topUp', () => {
+  it('sendsAmountWithIdempotencyKeyHeader', async () => {
+    const fetchMock = stubFetch({
+      userId: 5,
+      available: '1500.00',
+      held: '0.00',
+      updatedAt: '2026-07-10T10:00:00Z',
+    });
+
+    const wallet = await walletApi.topUp(500, 'top-up-1');
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('/api/payments/wallet/top-up');
+    expect(JSON.parse(String(init?.body))).toEqual({ amount: 500 });
+    expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('top-up-1');
+    expect(wallet.available).toBe(1500);
   });
 });
