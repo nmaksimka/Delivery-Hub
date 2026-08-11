@@ -1,14 +1,16 @@
 import { Link, NavLink } from 'react-router';
+import { useWallet } from '../api/queries';
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 import { cx } from '../lib/cx';
-import { plural } from '../lib/format';
+import { formatPrice, plural } from '../lib/format';
 import styles from './Header.module.css';
-import { BagIcon, LogoutIcon, PinIcon, ReceiptIcon, UserIcon } from './icons';
+import { BagIcon, LogoutIcon, PinIcon, ReceiptIcon, UserIcon, WalletIcon } from './icons';
 
 export function Header() {
   const { user, logout } = useAuth();
   const cart = useCart();
+  const wallet = useWallet();
   const cartLabel =
     cart.count > 0
       ? `Корзина, ${cart.count} ${plural(cart.count, 'блюдо', 'блюда', 'блюд')}`
@@ -31,6 +33,22 @@ export function Header() {
         <nav className={styles.nav} aria-label="Основная навигация">
           {user ? (
             <>
+              <NavLink
+                to="/wallet"
+                aria-label={
+                  wallet.data
+                    ? `Кошелёк, на счёте ${formatPrice(wallet.data.available)}`
+                    : 'Кошелёк'
+                }
+                className={({ isActive }) =>
+                  cx(styles.link, styles.wallet, isActive && styles.linkActive)
+                }
+              >
+                <WalletIcon />
+                <span className={styles.balance}>
+                  {wallet.data ? formatPrice(wallet.data.available) : 'Кошелёк'}
+                </span>
+              </NavLink>
               <NavLink
                 to="/orders"
                 aria-label="Мои заказы"
