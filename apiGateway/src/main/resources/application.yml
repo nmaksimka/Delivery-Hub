@@ -113,6 +113,10 @@ spring:
               uri: lb://userService
               predicates:
                 - Path=/api/auth/**
+            - id: user-profile
+              uri: lb://userService
+              predicates:
+                - Path=/api/users/**
             - id: restaurant-docs
               uri: lb://restaurantService
               predicates:
