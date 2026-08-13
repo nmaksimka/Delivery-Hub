@@ -135,12 +135,13 @@ class RestaurantServiceTest {
         when(restaurantRepository.save(any(Restaurant.class))).thenAnswer(inv -> inv.getArgument(0));
 
         restaurantService.createRestaurant(new RestaurantRequest(
-                "Pizzeria", "Lenina 1", null, LocalTime.of(10, 0), LocalTime.of(22, 0), null));
+                "Pizzeria", "Lenina 1", null, LocalTime.of(10, 0), LocalTime.of(22, 0), null, 56.4884, 84.948));
 
         ArgumentCaptor<Restaurant> captor = ArgumentCaptor.forClass(Restaurant.class);
         verify(restaurantRepository).save(captor.capture());
         assertThat(captor.getValue().isActive()).isTrue();
         assertThat(captor.getValue().getOpenTime()).isEqualTo(LocalTime.of(10, 0));
+        assertThat(captor.getValue().getLatitude()).isEqualTo(56.4884);
         verify(catalogCache).evictRestaurants();
     }
 
@@ -151,7 +152,7 @@ class RestaurantServiceTest {
         when(restaurantRepository.findById(1L)).thenReturn(Optional.of(existing));
 
         restaurantService.updateRestaurant(1L, new RestaurantRequest(
-                "Trattoria", "Mira 5", "+79991112233", null, null, false));
+                "Trattoria", "Mira 5", "+79991112233", null, null, false, null, null));
 
         assertThat(existing.getName()).isEqualTo("Trattoria");
         assertThat(existing.getAddress()).isEqualTo("Mira 5");
@@ -241,10 +242,10 @@ class RestaurantServiceTest {
     }
 
     private static RestaurantView view() {
-        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true);
+        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true, null, null);
     }
 
     private static RestaurantDto dto() {
-        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true);
+        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true, null, null);
     }
 }
