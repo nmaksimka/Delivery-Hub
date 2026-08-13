@@ -24,6 +24,12 @@ message QuoteResponse {
   string opens_at = 6;
   string closes_at = 7;
   string time_zone = 8;
+  GeoPoint location = 9;
+}
+
+message GeoPoint {
+  double latitude = 1;
+  double longitude = 2;
 }
 
 message QuotedItem {
