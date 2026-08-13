@@ -4,6 +4,7 @@ import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
@@ -91,8 +92,16 @@ class EventPayloadsTest {
     }
 
     @Test
+    void restaurantLocationIsOptionalForOldProducers() {
+        assertThat(OrderCreatedEvent.getClassSchema().getField("restaurantLocation").hasDefaultValue()).isTrue();
+        assertThat(PaymentHeldEvent.getClassSchema().getField("restaurantLocation").hasDefaultValue()).isTrue();
+        assertThat(PaymentHeldEvent.getClassSchema().getField("restaurantId").hasDefaultValue()).isTrue();
+    }
+
+    @Test
     void sagaEventsSurviveRoundTrip() {
-        PaymentHeldEvent held = new PaymentHeldEvent(UUID.randomUUID(), 15L, 42L, new BigDecimal("256.00"), "demo", NOW);
+        PaymentHeldEvent held = new PaymentHeldEvent(UUID.randomUUID(), 15L, 42L, new BigDecimal("256.00"), "demo", NOW,
+                3L, new GeoPoint(56.4884, 84.948));
         CourierAssignedEvent assigned = new CourierAssignedEvent(UUID.randomUUID(), 7L, 15L, 9001L, NOW, 1L);
         DeliveryRejectedEvent rejected = new DeliveryRejectedEvent(UUID.randomUUID(), 15L, 42L, "NO_FREE_COURIER", NOW);
 
