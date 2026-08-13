@@ -35,4 +35,13 @@ class TomskRestaurantsTest {
         assertThat(TomskRestaurants.categoryName("Fusion")).isEqualTo("Fusion");
         assertThat(TomskRestaurants.categoryName(null)).isEqualTo("Разное");
     }
+
+    @Test
+    void locationIsInsideTomskAndStable() {
+        TomskRestaurants.Location location = TomskRestaurants.locationFor("Japanese");
+
+        assertThat(location).isEqualTo(TomskRestaurants.locationFor("Japanese"));
+        assertThat(location.latitude()).isBetween(56.45, 56.51);
+        assertThat(location.longitude()).isBetween(84.93, 85.03);
+    }
 }
