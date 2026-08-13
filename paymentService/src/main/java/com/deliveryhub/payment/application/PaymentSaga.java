@@ -58,20 +58,21 @@ public class PaymentSaga {
         }
         long orderId = event.getOrderId();
         try {
-            announce(paymentService.open(orderId, event.getUserId(), event.getTotalAmount()));
+            announce(paymentService.open(orderId, event.getUserId(), event.getTotalAmount()), event);
         } catch (PaymentException ex) {
             log.info("Order {} cannot be paid: {}", orderId, ex.getMessage());
             publishRejected(orderId, event.getUserId(), event.getTotalAmount(), ex.getCode().name());
         }
     }
 
-    private void announce(Payment payment) {
+    private void announce(Payment payment, OrderCreatedEvent order) {
         long orderId = payment.getOrderId();
         switch (payment.getStatus()) {
             case HELD -> {
                 UUID eventId = UUID.randomUUID();
                 publish(orderId, Topics.PAYMENT_HELD, eventId, new PaymentHeldEvent(eventId, orderId,
-                        payment.getUserId(), payment.getAmount(), payment.getProvider(), clock.instant()));
+                        payment.getUserId(), payment.getAmount(), payment.getProvider(), clock.instant(),
+                        order.getRestaurantId(), order.getRestaurantLocation()));
             }
             case REJECTED -> publishRejected(orderId, payment.getUserId(), payment.getAmount(),
                     payment.getDeclineReason().name());

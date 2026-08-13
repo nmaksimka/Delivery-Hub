@@ -3,6 +3,7 @@ package com.deliveryhub.payment;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.PaymentCapturedEvent;
@@ -52,6 +53,8 @@ class PaymentSagaIT extends PaymentApiSupport {
                 event -> event.getOrderId() == orderId);
         assertThat(held).isPresent();
         assertThat(held.get().getAmount()).isEqualByComparingTo("120.00");
+        assertThat(held.get().getRestaurantId()).isEqualTo(1L);
+        assertThat(held.get().getRestaurantLocation()).isEqualTo(new GeoPoint(56.4884, 84.948));
         assertThat(held(userId)).isEqualByComparingTo("120.00");
     }
 
@@ -187,6 +190,6 @@ class PaymentSagaIT extends PaymentApiSupport {
 
     private static OrderCreatedEvent orderCreated(UUID eventId, long orderId, long userId, String amount) {
         return new OrderCreatedEvent(eventId, orderId, userId, 1L, new BigDecimal(amount), Instant.now(),
-                List.of(), 1L);
+                List.of(), 1L, new GeoPoint(56.4884, 84.948));
     }
 }
