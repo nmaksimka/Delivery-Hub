@@ -2,10 +2,12 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.GeoLocation;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -140,7 +142,7 @@ public class OrderService {
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
 
-        Order savedOrder = transaction.execute(status -> store(order, promoCode));
+        Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
@@ -153,7 +155,7 @@ public class OrderService {
                 : closed + ", working hours: " + restaurant.workingHours();
     }
 
-    private Order store(Order order, String promoCode) {
+    private Order store(Order order, String promoCode, GeoLocation restaurantLocation) {
         PromoUse promo = null;
         if (promoCode != null && !promoCode.isBlank()) {
             promo = promoService.reserve(promoCode, order.getUserId(), order.getRestaurantId(), order.subtotal());
@@ -164,7 +166,7 @@ public class OrderService {
         if (promo != null) {
             promoService.record(promo, savedOrder.getUserId(), savedOrder.getId());
         }
-        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
+        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence, restaurantLocation);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
         return savedOrder;
     }
@@ -235,7 +237,7 @@ public class OrderService {
         return ids.map(id -> orderMapper.toDto(ordersById.get(id)));
     }
 
-    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence) {
+    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence, GeoLocation restaurantLocation) {
         List<OrderItemPayload> items = order.getOrderItems().stream()
                 .map(item -> OrderItemPayload.newBuilder()
                         .setMenuItemId(item.getMenuItemId())
@@ -253,6 +255,9 @@ public class OrderService {
                 .setCreatedAt(order.getCreatedAt())
                 .setItems(items)
                 .setSequence(sequence)
+                .setRestaurantLocation(restaurantLocation == null
+                        ? null
+                        : new GeoPoint(restaurantLocation.latitude(), restaurantLocation.longitude()))
                 .build();
     }
 }

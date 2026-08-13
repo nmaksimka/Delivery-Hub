@@ -1,10 +1,12 @@
 package com.deliveryhub.order.client;
 
+import com.deliveryhub.contracts.pricing.GeoPoint;
 import com.deliveryhub.contracts.pricing.ItemStatus;
 import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
 import com.deliveryhub.contracts.pricing.QuoteRequest;
 import com.deliveryhub.contracts.pricing.QuoteResponse;
 import com.deliveryhub.contracts.pricing.QuotedItem;
+import com.deliveryhub.order.client.dto.GeoLocation;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryConfig;
@@ -95,6 +97,18 @@ class RestaurantCatalogTest {
         assertThat(quote.item(11L)).hasValueSatisfying(soup -> assertThat(soup.available()).isFalse());
         assertThat(quote.item(12L)).isEmpty();
         assertThat(quote.item(13L)).isEmpty();
+    }
+
+    @Test
+    void readsRestaurantLocation() {
+        behaviour = answer -> reply(answer, QuoteResponse.newBuilder()
+                .setRestaurantId(1L).setRestaurantName("Pizzeria").setRestaurantActive(true)
+                .setLocation(GeoPoint.newBuilder().setLatitude(56.4884).setLongitude(84.948))
+                .build());
+
+        MenuQuote quote = catalog.quote(1L, List.of(10L));
+
+        assertThat(quote.restaurant().location()).isEqualTo(new GeoLocation(56.4884, 84.948));
     }
 
     @Test
