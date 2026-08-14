@@ -15,6 +15,7 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
+import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -48,6 +49,7 @@ public class DeliveryService {
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final CancelledOrders cancelledOrders;
+    private final CourierRepository courierRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
 
@@ -56,6 +58,7 @@ public class DeliveryService {
                            Outbox outbox,
                            ProcessedEvents processedEvents,
                            CancelledOrders cancelledOrders,
+                           CourierRepository courierRepository,
                            Clock clock,
                            MeterRegistry meterRegistry) {
         this.deliveryRepository = deliveryRepository;
@@ -63,6 +66,7 @@ public class DeliveryService {
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.cancelledOrders = cancelledOrders;
+        this.courierRepository = courierRepository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
     }
@@ -103,6 +107,7 @@ public class DeliveryService {
             throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
+        occupyCourier(delivery.getCourierId(), delivery.getCreatedAt());
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
         return deliveryMapper.toDto(delivery);
@@ -113,11 +118,15 @@ public class DeliveryService {
         Delivery delivery = findByIdOrThrow(id);
 
         Instant now = clock.instant();
-        if (request.courierId() != null) {
+        if (request.courierId() != null && !request.courierId().equals(delivery.getCourierId())) {
+            Long previousCourierId = delivery.getCourierId();
             delivery.assignCourier(request.courierId(), now);
+            releaseCourier(previousCourierId, now);
+            occupyCourier(request.courierId(), now);
         }
         if (request.status() != null && delivery.changeStatus(request.status(), now)) {
             log.info("Delivery {} status updated to {}", id, request.status());
+            releaseCourierOfFinished(delivery, now);
             publishStatusChange(delivery);
         }
         return deliveryMapper.toDto(delivery);
@@ -147,9 +156,29 @@ public class DeliveryService {
                     delivery.getId(), delivery.getStatus());
             return;
         }
-        delivery.changeStatus(DeliveryStatus.CANCELLED, clock.instant());
+        Instant now = clock.instant();
+        delivery.changeStatus(DeliveryStatus.CANCELLED, now);
+        releaseCourierOfFinished(delivery, now);
         log.info("Delivery {} is cancelled together with order {}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
+    }
+
+    private void occupyCourier(Long courierId, Instant now) {
+        if (courierId != null) {
+            courierRepository.findById(courierId).ifPresent(courier -> courier.occupy(now));
+        }
+    }
+
+    private void releaseCourier(Long courierId, Instant now) {
+        if (courierId != null) {
+            courierRepository.findById(courierId).ifPresent(courier -> courier.release(now));
+        }
+    }
+
+    private void releaseCourierOfFinished(Delivery delivery, Instant now) {
+        if (delivery.isFinished()) {
+            releaseCourier(delivery.getCourierId(), now);
+        }
     }
 
     private void publishStatusChange(Delivery delivery) {
