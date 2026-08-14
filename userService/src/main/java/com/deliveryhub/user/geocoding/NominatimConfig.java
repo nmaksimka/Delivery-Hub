@@ -43,7 +43,7 @@ public class NominatimConfig {
 
     static RateLimiter rateLimiter(NominatimProperties properties) {
         return RateLimiter.of(NAME, RateLimiterConfig.custom()
-                .limitForPeriod(1)
+                .limitForPeriod(properties.requestsPerSecond())
                 .limitRefreshPeriod(Duration.ofSeconds(1))
                 .timeoutDuration(properties.rateLimitWait())
                 .build());

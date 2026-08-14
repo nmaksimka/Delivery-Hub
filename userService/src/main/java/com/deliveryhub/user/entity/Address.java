@@ -89,7 +89,7 @@ public class Address {
         String previousLocation = mapQuery();
         apply(details);
         if (!previousLocation.equals(mapQuery())) {
-            forgetLocation();
+            awaitGeocoding();
         }
         this.updatedAt = Objects.requireNonNull(now, "now");
     }
@@ -108,14 +108,18 @@ public class Address {
     }
 
     public String mapQuery() {
-        return street + ", " + house;
+        return mapQueryOf(street, house);
+    }
+
+    public static String mapQueryOf(String street, String house) {
+        return street.strip() + ", " + house.strip();
     }
 
     public boolean isGeocoded() {
         return geoStatus == GeoStatus.LOCATED;
     }
 
-    private void forgetLocation() {
+    public void awaitGeocoding() {
         this.latitude = null;
         this.longitude = null;
         this.geoStatus = GeoStatus.PENDING;

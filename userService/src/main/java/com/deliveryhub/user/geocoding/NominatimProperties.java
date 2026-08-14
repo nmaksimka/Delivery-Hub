@@ -13,6 +13,7 @@ public record NominatimProperties(
         String viewbox,
         Duration connectTimeout,
         Duration readTimeout,
+        int requestsPerSecond,
         Duration rateLimitWait,
         int cacheSize,
         Duration cacheTtl,

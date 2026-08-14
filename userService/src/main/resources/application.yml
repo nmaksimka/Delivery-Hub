@@ -41,6 +41,7 @@ app:
     viewbox: 84.80,56.62,85.20,56.36
     connect-timeout: 2s
     read-timeout: 4s
+    requests-per-second: 1
     rate-limit-wait: 3s
     cache-size: 2000
     cache-ttl: 7d

@@ -1,12 +1,19 @@
 package com.deliveryhub.user;
 
+import com.deliveryhub.user.service.GeocodingRetry;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
@@ -14,6 +21,11 @@ import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.UUID;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
@@ -22,9 +34,90 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AddressApiIT {
 
     private static final String BASE = "/api/users/me/addresses";
+    private static final WireMockServer NOMINATIM = new WireMockServer(options().dynamicPort());
+    private static final String FOUND = "[{\"lat\": \"56.4846453\", \"lon\": \"84.9476493\"}]";
+
+    static {
+        NOMINATIM.start();
+    }
 
     @Autowired
     private MockMvcTester mvc;
+
+    @Autowired
+    private GeocodingRetry geocodingRetry;
+
+    @DynamicPropertySource
+    static void nominatimIsWireMock(DynamicPropertyRegistry registry) {
+        registry.add("app.geocoding.base-url", NOMINATIM::baseUrl);
+        registry.add("app.geocoding.requests-per-second", () -> 100);
+        registry.add("app.geocoding.cache-size", () -> 0);
+    }
+
+    @AfterAll
+    static void stopNominatim() {
+        NOMINATIM.stop();
+    }
+
+    @BeforeEach
+    void stubNominatim() {
+        NOMINATIM.resetAll();
+        NOMINATIM.stubFor(WireMock.get(urlPathEqualTo("/search")).willReturn(okJson(FOUND)));
+    }
+
+    @Test
+    void createdAddressGetsCoordinatesFromNominatim() {
+        int userId = register();
+
+        MvcTestResult created = post(userId, BASE, addressJson("Дом", "Томск"));
+
+        assertThat(created).hasStatus(201);
+        assertThat(created).bodyJson().extractingPath("$.geocoded").isEqualTo(true);
+        assertThat(created).bodyJson().extractingPath("$.latitude").isEqualTo(56.484645);
+        assertThat(created).bodyJson().extractingPath("$.longitude").isEqualTo(84.947649);
+    }
+
+    @Test
+    void rejectsAddressThatIsNotOnMap() {
+        NOMINATIM.stubFor(WireMock.get(urlPathEqualTo("/search")).withQueryParam("street", equalTo("12 Ленина"))
+                .willReturn(okJson("[]")));
+        int userId = register();
+
+        MvcTestResult rejected = post(userId, BASE, addressJson("Дом", "Томск"));
+
+        assertThat(rejected).hasStatus(422).bodyJson().extractingPath("$.code").isEqualTo("ADDRESS_NOT_FOUND_ON_MAP");
+        assertThat(ids(get(userId))).isEmpty();
+    }
+
+    @Test
+    void keepsAddressWithoutCoordinatesWhileNominatimIsDownAndLocatesItLater() {
+        NOMINATIM.stubFor(WireMock.get(urlPathEqualTo("/search")).willReturn(aResponse().withStatus(503)));
+        int userId = register();
+
+        MvcTestResult saved = post(userId, BASE, addressJson("Дом", "Томск"));
+
+        assertThat(saved).hasStatus(201).bodyJson().extractingPath("$.geocoded").isEqualTo(false);
+        NOMINATIM.resetAll();
+        NOMINATIM.stubFor(WireMock.get(urlPathEqualTo("/search")).willReturn(okJson(FOUND)));
+        geocodingRetry.retryPending();
+        MvcTestResult list = get(userId);
+        assertThat(list).bodyJson().extractingPath("$[0].geocoded").isEqualTo(true);
+    }
+
+    @Test
+    void internalEndpointGivesAddressOnlyWithInternalToken() {
+        int userId = register();
+        int address = createAddress(userId, "Дом");
+
+        MvcTestResult internal = mvc.get().uri("/internal/users/{userId}/addresses/{id}", userId, address).exchange();
+        MvcTestResult foreign = mvc.get().uri("/internal/users/{userId}/addresses/{id}", userId + 1000, address).exchange();
+        MvcTestResult anonymous = mvc.get().uri("/internal/users/{userId}/addresses/{id}", userId, address)
+                .header("X-Internal-Token", "wrong").exchange();
+
+        assertThat(internal).hasStatusOk().bodyJson().extractingPath("$.street").isEqualTo("Ленина");
+        assertThat(foreign).hasStatus(404);
+        assertThat(anonymous).hasStatus(401);
+    }
 
     @Test
     void firstAddressIsPrimaryAndListPutsPrimaryFirst() {
