@@ -105,6 +105,14 @@ spring:
               uri: lb://deliveryService
               predicates:
                 - Path=/api/deliveries/**
+            - id: courier-service
+              uri: lb://deliveryService
+              predicates:
+                - Path=/api/couriers/**
+            - id: courier-admin
+              uri: lb://deliveryService
+              predicates:
+                - Path=/api/admin/couriers/**
             - id: payment-service
               uri: lb://paymentService
               predicates:
