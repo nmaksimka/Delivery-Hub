@@ -1,36 +1,54 @@
 package com.deliveryhub.delivery.dispatch;
 
-import com.deliveryhub.contracts.enums.DeliveryStatus;
-import com.deliveryhub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.contracts.events.GeoPoint;
+import com.deliveryhub.contracts.events.PaymentHeldEvent;
+import com.deliveryhub.delivery.entity.Courier;
+import com.deliveryhub.delivery.entity.GeoPosition;
+import com.deliveryhub.delivery.repository.CourierRepository;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumSet;
-import java.util.HashSet;
+import java.time.Instant;
 import java.util.Optional;
-import java.util.Set;
 
 @Component
 @EnableConfigurationProperties(DispatchProperties.class)
 public class CourierPool {
 
-    private static final Set<DeliveryStatus> FINISHED = EnumSet.of(DeliveryStatus.DELIVERED, DeliveryStatus.CANCELLED);
-
-    private final DeliveryRepository deliveryRepository;
+    private final CourierRepository courierRepository;
+    private final DeliveryZones deliveryZones;
     private final DispatchProperties properties;
 
-    public CourierPool(DeliveryRepository deliveryRepository, DispatchProperties properties) {
-        this.deliveryRepository = deliveryRepository;
+    public CourierPool(CourierRepository courierRepository, DeliveryZones deliveryZones,
+                       DispatchProperties properties) {
+        this.courierRepository = courierRepository;
+        this.deliveryZones = deliveryZones;
         this.properties = properties;
     }
 
-    public Optional<Long> freeCourier() {
-        if (properties.courierIds().isEmpty()) {
-            return Optional.empty();
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Courier> occupyNearest(PaymentHeldEvent event, Instant now) {
+        Optional<DeliveryZone> zone = searchZone(event, now);
+        Optional<Courier> courier = zone.isPresent()
+                ? courierRepository.lockNearestAvailable(zone.get().center().latitude(),
+                        zone.get().center().longitude(), zone.get().maxDistanceMeters())
+                : courierRepository.lockAnyAvailable();
+        courier.ifPresent(found -> found.occupy(now));
+        return courier;
+    }
+
+    private Optional<DeliveryZone> searchZone(PaymentHeldEvent event, Instant now) {
+        Long restaurantId = event.getRestaurantId();
+        GeoPoint location = event.getRestaurantLocation();
+        if (location == null) {
+            return restaurantId == null ? Optional.empty() : deliveryZones.find(restaurantId);
         }
-        Set<Long> busy = new HashSet<>(deliveryRepository.findBusyCouriers(properties.courierIds(), FINISHED));
-        return properties.courierIds().stream()
-                .filter(courierId -> !busy.contains(courierId))
-                .findFirst();
+        GeoPosition center = new GeoPosition(location.getLatitude(), location.getLongitude());
+        if (restaurantId == null) {
+            return Optional.of(new DeliveryZone(center, properties.zoneRadiusMeters()));
+        }
+        return Optional.of(deliveryZones.remember(restaurantId, center, properties.zoneRadiusMeters(), now));
     }
 }

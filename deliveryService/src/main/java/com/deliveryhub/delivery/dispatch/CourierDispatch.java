@@ -4,6 +4,7 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
+import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.outbox.Outbox;
@@ -58,17 +59,18 @@ public class CourierDispatch {
             return;
         }
         Instant now = clock.instant();
-        Optional<Long> courier = courierPool.freeCourier();
+        Optional<Courier> courier = courierPool.occupyNearest(event, now);
         if (courier.isEmpty()) {
             reject(event, now);
             return;
         }
+        Long courierId = courier.get().getId();
         Delivery delivery = deliveryRepository.save(
-                Delivery.forOrder(event.getOrderId(), event.getUserId(), courier.get(), null, now));
+                Delivery.forOrder(event.getOrderId(), event.getUserId(), courierId, null, now));
         UUID eventId = UUID.randomUUID();
         outbox.append("Delivery", delivery.getId(), Topics.COURIER_ASSIGNED, eventId, new CourierAssignedEvent(
-                eventId, delivery.getId(), delivery.getOrderId(), courier.get(), now, delivery.nextEventSequence()));
-        log.info("Courier {} assigned to order {}, delivery {}", courier.get(), event.getOrderId(), delivery.getId());
+                eventId, delivery.getId(), delivery.getOrderId(), courierId, now, delivery.nextEventSequence()));
+        log.info("Courier {} assigned to order {}, delivery {}", courierId, event.getOrderId(), delivery.getId());
     }
 
     private void reject(PaymentHeldEvent event, Instant now) {
