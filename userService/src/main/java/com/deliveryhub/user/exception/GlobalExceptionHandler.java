@@ -38,6 +38,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, ex.getMessage(), ErrorCode.ADDRESS_NOT_FOUND);
     }
 
+    @ExceptionHandler(AddressNotOnMapException.class)
+    public ProblemDetail handleAddressNotOnMap(AddressNotOnMapException ex) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage(), ErrorCode.ADDRESS_NOT_FOUND_ON_MAP);
+    }
+
     @ExceptionHandler(AddressLimitReachedException.class)
     public ProblemDetail handleAddressLimit(AddressLimitReachedException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage(), ErrorCode.ADDRESS_LIMIT_REACHED);
