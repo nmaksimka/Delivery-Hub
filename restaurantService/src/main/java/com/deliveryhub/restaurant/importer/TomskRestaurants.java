@@ -80,6 +80,13 @@ public final class TomskRestaurants {
         return "г. Томск, " + STREETS.get(seed % STREETS.size()) + ", " + (1 + seed % 120);
     }
 
+    public static Location locationFor(String key) {
+        int seed = Math.floorMod(key.hashCode(), 1_000_000);
+        double latitude = 56.455 + (seed % 5000) / 100_000.0;
+        double longitude = 84.94 + (seed / 5000 % 8000) / 100_000.0;
+        return new Location(latitude, longitude);
+    }
+
     public static String phoneFor(String area) {
         int seed = Math.floorMod(areaKey(area).hashCode(), 900_000);
         return "+73822" + String.format("%06d", 100_000 + seed);
@@ -93,5 +100,8 @@ public final class TomskRestaurants {
     }
 
     public record Profile(String name, String cuisine) {
+    }
+
+    public record Location(double latitude, double longitude) {
     }
 }

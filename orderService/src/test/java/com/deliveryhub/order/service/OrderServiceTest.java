@@ -3,11 +3,13 @@ package com.deliveryhub.order.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.GeoLocation;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -173,6 +175,23 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("передаёт точку ресторана в order-created")
+        void putsRestaurantLocationIntoOrderCreated() {
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, false, "",
+                    new GeoLocation(56.4884, 84.948)));
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID);
+
+            ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
+            assertThat(captor.getValue().getRestaurantLocation()).isEqualTo(new GeoPoint(56.4884, 84.948));
+        }
+
+        @Test
         @DisplayName("считает созданные заказы в метрике orders.placed")
         void countsCreatedOrders() {
             givenActiveRestaurant();
@@ -289,7 +308,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("отклоняет заказ в закрытый ресторан и называет часы работы")
         void failsWhenRestaurantClosed() {
-            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk"));
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk", null));
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(OrderRejectedException.class)
@@ -302,7 +321,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("закрытый ресторан без расписания отклоняется без часов в сообщении")
         void failsWhenRestaurantClosedWithoutHours() {
-            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, ""));
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "", null));
 
             assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
                     .isInstanceOf(OrderRejectedException.class)

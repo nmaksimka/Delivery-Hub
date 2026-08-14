@@ -63,6 +63,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/deliveries").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers(HttpMethod.POST, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers(HttpMethod.PATCH, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
+                        .pathMatchers("/api/couriers/**").hasRole("COURIER")
 
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2

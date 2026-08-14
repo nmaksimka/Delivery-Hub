@@ -7,6 +7,8 @@ import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
+import com.deliveryhub.delivery.entity.Courier;
+import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
@@ -14,6 +16,7 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
+import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
@@ -60,6 +63,8 @@ class DeliveryServiceTest {
     private ProcessedEvents processedEvents;
     @Mock
     private CancelledOrders cancelledOrders;
+    @Mock
+    private CourierRepository courierRepository;
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -68,7 +73,7 @@ class DeliveryServiceTest {
     @BeforeEach
     void setUp() {
         deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents, cancelledOrders,
-                Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
+                courierRepository, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
     }
 
     @Nested
@@ -88,6 +93,21 @@ class DeliveryServiceTest {
 
             assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
             assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("отмена освобождает курьера")
+        void cancellationReleasesCourier() {
+            Delivery delivery = deliveryWithCourier(9001L);
+            Courier courier = busyCourier();
+            OrderCancelledEvent event = orderCancelled(2L);
+            when(processedEvents.registerFirstDelivery(event.getEventId(), Topics.ORDER_CANCELLED)).thenReturn(true);
+            when(deliveryRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(delivery));
+            when(courierRepository.findById(9001L)).thenReturn(Optional.of(courier));
+
+            deliveryService.cancelDeliveryOfOrder(event);
+
+            assertThat(courier.getStatus()).isEqualTo(CourierStatus.AVAILABLE);
         }
 
         @Test
@@ -195,6 +215,37 @@ class DeliveryServiceTest {
         }
 
         @Test
+        @DisplayName("доставленный заказ освобождает курьера")
+        void deliveredReleasesCourier() {
+            Delivery delivery = deliveryWithCourier(9001L);
+            ReflectionTestUtils.setField(delivery, "status", DeliveryStatus.IN_TRANSIT);
+            Courier courier = busyCourier();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+            when(courierRepository.findById(9001L)).thenReturn(Optional.of(courier));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null));
+
+            assertThat(courier.getStatus()).isEqualTo(CourierStatus.AVAILABLE);
+        }
+
+        @Test
+        @DisplayName("смена курьера освобождает прежнего и занимает нового")
+        void reassignmentMovesBusyFlag() {
+            Delivery delivery = deliveryWithCourier(9001L);
+            Courier previous = busyCourier();
+            Courier next = Courier.register(null, "Ирина", "+79990000002", NOW);
+            next.goOnline(NOW);
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+            when(courierRepository.findById(9001L)).thenReturn(Optional.of(previous));
+            when(courierRepository.findById(9002L)).thenReturn(Optional.of(next));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 9002L));
+
+            assertThat(previous.getStatus()).isEqualTo(CourierStatus.AVAILABLE);
+            assertThat(next.getStatus()).isEqualTo(CourierStatus.BUSY);
+        }
+
+        @Test
         @DisplayName("обновляет курьера, если он передан")
         void updatesCourierWhenProvided() {
             Delivery delivery = existingDelivery();
@@ -267,6 +318,18 @@ class DeliveryServiceTest {
         verify(outbox).append(eq("Delivery"), eq(deliveryId), eq(Topics.DELIVERY_STATUS_UPDATED), any(),
                 captor.capture());
         return captor.getValue();
+    }
+
+    private static Delivery deliveryWithCourier(long courierId) {
+        Delivery delivery = Delivery.forOrder(ORDER_ID, 42L, courierId, null, NOW);
+        ReflectionTestUtils.setField(delivery, "id", 1L);
+        return delivery;
+    }
+
+    private static Courier busyCourier() {
+        Courier courier = Courier.register(null, "Алексей", "+79990000001", NOW);
+        courier.occupy(NOW);
+        return courier;
     }
 
     private static Delivery existingDelivery() {

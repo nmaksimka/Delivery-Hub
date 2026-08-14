@@ -12,5 +12,7 @@ public record RestaurantDto(
         String imageUrl,
         LocalTime openTime,
         LocalTime closeTime,
-        boolean active) {
+        boolean active,
+        Double latitude,
+        Double longitude) {
 }

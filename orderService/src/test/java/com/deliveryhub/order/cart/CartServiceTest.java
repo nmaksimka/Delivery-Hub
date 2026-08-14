@@ -145,7 +145,7 @@ class CartServiceTest {
     @Test
     void closedRestaurantMakesCartNotOrderable() {
         storeBacksCart();
-        menuIs(new RestaurantDto(RESTAURANT, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk"), pizza(true));
+        menuIs(new RestaurantDto(RESTAURANT, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk", null), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
 
         CartDto cart = service.get(USER);

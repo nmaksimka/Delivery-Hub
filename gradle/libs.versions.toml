@@ -15,6 +15,7 @@ grpc = "1.77.1"
 protobuf = "4.33.4"
 protobuf-plugin = "0.9.6"
 openapi-generator = "7.23.0"
+hibernate = "7.2.19.Final"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -50,6 +51,7 @@ spring-cloud-starter-gateway = { module = "org.springframework.cloud:spring-clou
 
 postgresql = { module = "org.postgresql:postgresql" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+hibernate-spatial = { module = "org.hibernate.orm:hibernate-spatial", version.ref = "hibernate" }
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 
 mapstruct = { module = "org.mapstruct:mapstruct", version.ref = "mapstruct" }

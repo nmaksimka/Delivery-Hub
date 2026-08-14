@@ -1,5 +1,6 @@
 package com.deliveryhub.restaurant.grpc;
 
+import com.deliveryhub.contracts.pricing.GeoPoint;
 import com.deliveryhub.contracts.pricing.ItemStatus;
 import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
 import com.deliveryhub.contracts.pricing.QuoteRequest;
@@ -77,6 +78,11 @@ public class MenuPricingGrpcService extends MenuPricingGrpc.MenuPricingImplBase 
             response.setOpensAt(HOURS.format(restaurant.getOpenTime()))
                     .setClosesAt(HOURS.format(restaurant.getCloseTime()))
                     .setTimeZone(workingHours.zone().getId());
+        }
+        if (restaurant.hasLocation()) {
+            response.setLocation(GeoPoint.newBuilder()
+                    .setLatitude(restaurant.getLatitude())
+                    .setLongitude(restaurant.getLongitude()));
         }
         menuItemIds.forEach(id -> response.addItems(quoted(id, found.get(id), restaurant.getId())));
 

@@ -10,6 +10,7 @@
     {"name": "totalAmount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
     {"name": "createdAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
     {"name": "items", "type": {"type": "array", "items": "com.deliveryhub.contracts.events.OrderItemPayload"}},
-    {"name": "sequence", "type": "long", "default": 0}
+    {"name": "sequence", "type": "long", "default": 0},
+    {"name": "restaurantLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null}
   ]
 }

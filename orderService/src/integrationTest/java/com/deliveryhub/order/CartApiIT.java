@@ -166,7 +166,7 @@ class CartApiIT {
     @Test
     void checkoutOfClosedRestaurantKeepsCartAndReturnsCode() {
         add(1012L, 1, 10, 1, false);
-        pizzeria = new RestaurantDto(1L, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk");
+        pizzeria = new RestaurantDto(1L, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk", null);
 
         assertThat(checkout(1012L)).hasStatus(409).bodyJson().extractingPath("$.code").isEqualTo("RESTAURANT_CLOSED");
         assertThat(get(1012L)).bodyJson().extractingPath("$.items").asArray().hasSize(1);

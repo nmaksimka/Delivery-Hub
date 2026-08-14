@@ -29,9 +29,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler({InvalidStatusTransitionException.class, DeliveryAlreadyExistsException.class,
-            DeliveryFinishedException.class, OrderAlreadyCancelledException.class})
+            DeliveryFinishedException.class, OrderAlreadyCancelledException.class, CourierBusyException.class,
+            CourierAlreadyRegisteredException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleBadRequest(IllegalArgumentException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(ForbiddenException.class)

@@ -82,6 +82,8 @@ public class MealCatalogWriter {
                 TomskRestaurants.addressFor(area), TomskRestaurants.phoneFor(area));
         restaurant.describe(profile.cuisine(), TomskRestaurants.CITY, null);
         restaurant.changeWorkingHours(TomskRestaurants.OPENS_AT, TomskRestaurants.CLOSES_AT);
+        TomskRestaurants.Location location = TomskRestaurants.locationFor(area);
+        restaurant.locate(location.latitude(), location.longitude());
         return restaurant;
     }
 
