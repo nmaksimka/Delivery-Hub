@@ -1,5 +1,6 @@
 package com.deliveryhub.delivery.exception;
 
+import com.deliveryhub.delivery.quote.OutOfDeliveryZoneException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -33,6 +34,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             CourierAlreadyRegisteredException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(OutOfDeliveryZoneException.class)
+    public ProblemDetail handleOutOfZone(OutOfDeliveryZoneException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setProperty("code", "OUT_OF_DELIVERY_ZONE");
+        return problem;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
