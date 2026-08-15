@@ -4,6 +4,7 @@ import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.exception.DependencyUnavailableException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ItemNotFoundException;
+import com.deliveryhub.order.exception.UnprocessableOrderException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -15,6 +16,15 @@ public class UserAddresses {
 
     public UserAddresses(RestClient restClient) {
         this.restClient = restClient;
+    }
+
+    public UserAddressDto deliverableAddress(Long userId, Long addressId) {
+        UserAddressDto address = address(userId, addressId);
+        if (!address.onMap()) {
+            throw new UnprocessableOrderException(ErrorCode.ADDRESS_NOT_GEOCODED,
+                    "Address " + addressId + " has no coordinates yet, delivery cannot be calculated");
+        }
+        return address;
     }
 
     public UserAddressDto address(Long userId, Long addressId) {

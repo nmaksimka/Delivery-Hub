@@ -17,6 +17,9 @@ public record OrderDto(
         BigDecimal totalAmount,
         BigDecimal discount,
         String promoCode,
+        BigDecimal deliveryFee,
+        Integer etaMinutes,
+        String deliveryAddress,
         Instant createdAt,
         Instant updatedAt,
         List<OrderItemDto> orderItems) {

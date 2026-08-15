@@ -2,6 +2,7 @@ package com.deliveryhub.order.client;
 
 import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.client.dto.GeoLocation;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.exception.DependencyUnavailableException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.UnprocessableOrderException;
@@ -19,6 +20,15 @@ public class DeliveryQuotes {
 
     public DeliveryQuotes(RestClient restClient) {
         this.restClient = restClient;
+    }
+
+    public DeliveryQuoteDto quote(Long restaurantId, GeoLocation restaurant, UserAddressDto address) {
+        if (restaurant == null) {
+            throw new UnprocessableOrderException(ErrorCode.RESTAURANT_LOCATION_UNKNOWN,
+                    "Restaurant " + restaurantId + " has no location, delivery cannot be calculated");
+        }
+        return quote(restaurantId, restaurant,
+                new GeoLocation(address.latitude().doubleValue(), address.longitude().doubleValue()));
     }
 
     public DeliveryQuoteDto quote(Long restaurantId, GeoLocation restaurant, GeoLocation customer) {
