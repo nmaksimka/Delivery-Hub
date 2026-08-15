@@ -35,7 +35,8 @@ public class InternalServicesConfig {
 
     private RestClient client(RestClient.Builder builder, String baseUrl) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build());
+                HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+                        .connectTimeout(properties.connectTimeout()).build());
         requestFactory.setReadTimeout(properties.readTimeout());
         return builder.clone()
                 .baseUrl(baseUrl)

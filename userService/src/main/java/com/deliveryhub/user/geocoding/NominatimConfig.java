@@ -29,7 +29,8 @@ public class NominatimConfig {
     public Geocoder geocoder(RestClient.Builder builder, NominatimProperties properties, MeterRegistry meterRegistry,
                              Clock clock) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build());
+                HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+                        .connectTimeout(properties.connectTimeout()).build());
         requestFactory.setReadTimeout(properties.readTimeout());
         RestClient restClient = builder.baseUrl(properties.baseUrl())
                 .requestFactory(requestFactory)

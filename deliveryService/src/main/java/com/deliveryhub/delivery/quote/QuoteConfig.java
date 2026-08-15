@@ -62,7 +62,7 @@ public class QuoteConfig {
 
     private static JdkClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+                HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(connectTimeout).build());
         requestFactory.setReadTimeout(readTimeout);
         return requestFactory;
     }
