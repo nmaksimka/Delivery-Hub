@@ -103,6 +103,17 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
     case 'IDEMPOTENCY_KEY_INVALID':
     case 'IDEMPOTENCY_KEY_REQUIRED':
       return 'Не получилось отправить заказ, обновите страницу и попробуйте снова';
+    case 'ADDRESS_NOT_FOUND':
+      return 'Этого адреса уже нет, выберите другой';
+    case 'ADDRESS_NOT_GEOCODED':
+      return 'Адрес ещё не нашёлся на карте — попробуйте через пару минут или выберите другой';
+    case 'OUT_OF_DELIVERY_ZONE':
+      return 'Ресторан не доставляет по этому адресу — он вне зоны доставки';
+    case 'RESTAURANT_LOCATION_UNKNOWN':
+      return 'Не знаем, где находится ресторан, поэтому не можем рассчитать доставку';
+    case 'USER_SERVICE_UNAVAILABLE':
+    case 'DELIVERY_UNAVAILABLE':
+      return 'Не получилось рассчитать доставку, попробуйте через минуту';
     case 'REQUEST_TOO_LARGE':
       return 'Слишком большой запрос, сократите комментарий или состав заказа';
     default:

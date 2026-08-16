@@ -24,6 +24,8 @@ export const queryKeys = {
   order: (id: number) => ['orders', id] as const,
   cart: ['cart'] as const,
   userCart: (userId: number) => ['cart', userId] as const,
+  deliveryQuote: (userId: number, restaurantId: number, addressId: number) =>
+    ['cart', userId, 'delivery-quote', restaurantId, addressId] as const,
   wallet: ['wallet'] as const,
   userWallet: (userId: number) => ['wallet', userId] as const,
   addresses: ['addresses'] as const,
@@ -155,18 +157,31 @@ export function useRepeatOrder() {
   });
 }
 
+export function useDeliveryQuote(restaurantId: number | null, addressId: number | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.deliveryQuote(userId ?? 0, restaurantId ?? 0, addressId ?? 0),
+    queryFn: ({ signal }) => cartApi.deliveryQuote(addressId ?? 0, signal),
+    enabled: userId !== null && restaurantId !== null && addressId !== null,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function useCheckout() {
   const queryClient = useQueryClient();
   const userId = useUserId();
   const [attempts] = useState(createAttemptKeys);
   return useMutation({
-    mutationFn: (cart: Cart) =>
+    mutationFn: ({ cart, addressId }: { cart: Cart; addressId: number }) =>
       cartApi.checkout(
         attempts.keyFor({
           restaurantId: cart.restaurant?.id,
           items: cart.items.map((line) => [line.menuItemId, line.quantity]),
           promoCode: cart.promoCode,
+          addressId,
         }),
+        addressId,
       ),
     onSettled: (_order, error) => attempts.settle(error),
     onSuccess: (order) => {
