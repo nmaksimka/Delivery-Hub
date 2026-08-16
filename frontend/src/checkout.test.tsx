@@ -22,6 +22,32 @@ const pizzeria = {
 
 const sushiBar = { ...pizzeria, id: 2, name: 'Суши Томь' };
 
+const homeAddress = {
+  id: 3,
+  label: 'Дом',
+  city: 'Томск',
+  street: 'Ленина',
+  house: '12',
+  apartment: '4',
+  entrance: null,
+  floor: null,
+  courierComment: null,
+  primary: true,
+};
+
+const snowyQuote = {
+  distanceMeters: 2793,
+  etaMinutes: 50,
+  deliveryFee: '190.00',
+  routeSource: 'OSRM',
+  weather: { condition: 'SNOW', temperatureCelsius: -6, surcharge: '49.00', extraMinutes: 10 },
+};
+
+const deliveryStubs = {
+  'GET /api/users/me/addresses': { body: [homeAddress] },
+  'GET /api/cart/delivery-quote': { body: snowyQuote },
+};
+
 const sushiMenu = [
   {
     id: 20,
@@ -254,6 +280,7 @@ describe('checkout', () => {
       'GET /api/restaurants/1': { body: pizzeria },
       'GET /api/payments/wallet': { body: richWallet },
       'GET /api/cart': { body: cartOf() },
+      ...deliveryStubs,
       'POST /api/cart/checkout': { status: 201, body: placedOrder },
       'GET /api/orders/77': { body: placedOrder },
     });
@@ -267,6 +294,48 @@ describe('checkout', () => {
     expect(screen.getByRole('button', { name: 'Корзина пуста' })).toBeInTheDocument();
     const [, init] = callsTo(fetchMock, 'POST', '/api/cart/checkout')[0] ?? [];
     expect(new Headers(init?.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.parse(String(init?.body))).toEqual({ addressId: 3 });
+  });
+
+  it('showsDeliveryFeeTimeAndWeatherSurcharge', async () => {
+    sessionStore.set(session);
+    const fetchMock = stubApi({
+      'GET /api/restaurants': { body: [pizzeria] },
+      'GET /api/payments/wallet': { body: richWallet },
+      'GET /api/cart': { body: cartOf() },
+      ...deliveryStubs,
+    });
+    const user = userEvent.setup();
+    renderApp('/');
+
+    const drawer = await openCart(user, 'Корзина, 2 блюда');
+
+    expect(await within(drawer).findByText('Снег: +49 ₽, +10 мин')).toBeInTheDocument();
+    expect(within(drawer).getByText('Доставка, ≈ 50 мин')).toBeInTheDocument();
+    expect(within(drawer).getByText(/1\s?288\s₽/)).toBeInTheDocument();
+    const [url] = callsTo(fetchMock, 'GET', '/api/cart/delivery-quote')[0] ?? [];
+    expect(String(url)).toContain('addressId=3');
+  });
+
+  it('blocksCheckoutOutsideDeliveryZone', async () => {
+    sessionStore.set(session);
+    stubApi({
+      'GET /api/restaurants': { body: [pizzeria] },
+      'GET /api/payments/wallet': { body: richWallet },
+      'GET /api/cart': { body: cartOf() },
+      'GET /api/users/me/addresses': { body: [homeAddress] },
+      'GET /api/cart/delivery-quote': {
+        status: 422,
+        body: { detail: 'outside', code: 'OUT_OF_DELIVERY_ZONE' },
+      },
+    });
+    const user = userEvent.setup();
+    renderApp('/');
+
+    const drawer = await openCart(user, 'Корзина, 2 блюда');
+
+    expect(await within(drawer).findByRole('alert')).toHaveTextContent('вне зоны доставки');
+    expect(within(drawer).getByRole('button', { name: 'Оформить заказ' })).toBeDisabled();
   });
 
   it('explainsOutOfStockRejection', async () => {
@@ -275,6 +344,7 @@ describe('checkout', () => {
       'GET /api/restaurants': { body: [pizzeria] },
       'GET /api/payments/wallet': { body: richWallet },
       'GET /api/cart': { body: cartOf() },
+      ...deliveryStubs,
       'POST /api/cart/checkout': {
         status: 409,
         body: { detail: 'Menu item 10 is not available', code: 'ITEM_UNAVAILABLE' },
@@ -301,6 +371,8 @@ describe('wallet', () => {
         body: { ...richWallet, available: '100.50' },
       },
       'GET /api/cart': { body: cartOf() },
+      'GET /api/users/me/addresses': { body: [homeAddress] },
+      'GET /api/cart/delivery-quote': { body: { ...snowyQuote, deliveryFee: '0.00' } },
       'POST /api/payments/wallet/top-up': { body: { ...richWallet, available: '1098.50' } },
     });
     const user = userEvent.setup();

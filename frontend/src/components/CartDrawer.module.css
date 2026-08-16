@@ -208,6 +208,12 @@
   font-size: var(--text-sm);
 }
 
+.weather {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
 .discount {
   color: var(--color-success);
   font-weight: 700;

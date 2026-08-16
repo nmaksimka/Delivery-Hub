@@ -2,9 +2,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { CartLine } from '../api/cart';
 import {
+  useAddresses,
   useChangeQuantity,
   useCheckout,
   useClearCart,
+  useDeliveryQuote,
   useRemoveFromCart,
   useTopUp,
   useWallet,
@@ -12,6 +14,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { useCart } from '../cart/CartContext';
 import { cx } from '../lib/cx';
+import { weatherNote } from '../lib/deliveryQuote';
 import { formatPrice } from '../lib/format';
 import { orderErrorMessage } from '../lib/orderErrors';
 import { shortageOf, topUpErrorMessage } from '../lib/walletErrors';
@@ -60,6 +63,11 @@ export function CartDrawer() {
   const topUp = useTopUp();
   const resetCheckout = checkout.reset;
   const [addressId, setAddressId] = useState<number | null>(null);
+  const addresses = useAddresses();
+  const chosenAddressId =
+    addressId ?? addresses.data?.find((address) => address.primary)?.id ?? null;
+  const restaurantId = cart.items.length > 0 ? (cart.restaurant?.id ?? null) : null;
+  const delivery = useDeliveryQuote(restaurantId, chosenAddressId);
 
   useEffect(() => {
     if (!isOpen) {
@@ -86,7 +94,10 @@ export function CartDrawer() {
 
   const restaurant = cart.items.length > 0 ? cart.restaurant : null;
   const unavailable = cart.items.filter((line) => !line.available);
-  const shortage = wallet.data ? shortageOf(cart.total, wallet.data.available) : 0;
+  const deliveryFee = delivery.data?.deliveryFee ?? 0;
+  const total = cart.total + deliveryFee;
+  const shortage = wallet.data ? shortageOf(total, wallet.data.available) : 0;
+  const weather = delivery.data ? weatherNote(delivery.data) : null;
   const writeError = changeQuantity.error ?? removeLine.error ?? clearCart.error;
   const itemName = (menuItemId: number) =>
     cart.items.find((line) => line.menuItemId === menuItemId)?.name ?? undefined;
@@ -97,12 +108,18 @@ export function CartDrawer() {
   }
 
   function placeOrder() {
-    checkout.mutate(cart, {
-      onSuccess: (order) => {
-        close();
-        void navigate(`/orders/${order.id}`);
+    if (chosenAddressId === null) {
+      return;
+    }
+    checkout.mutate(
+      { cart, addressId: chosenAddressId },
+      {
+        onSuccess: (order) => {
+          close();
+          void navigate(`/orders/${order.id}`);
+        },
       },
-    });
+    );
   }
 
   return (
@@ -239,7 +256,11 @@ export function CartDrawer() {
               <div className={styles.promo}>
                 <PromoCodeForm cart={cart} />
               </div>
-              <AddressPicker selectedId={addressId} onSelect={setAddressId} onNavigate={close} />
+              <AddressPicker
+                selectedId={chosenAddressId}
+                onSelect={setAddressId}
+                onNavigate={close}
+              />
             </>
           )}
         </div>
@@ -258,9 +279,23 @@ export function CartDrawer() {
                 </p>
               </>
             )}
+            {delivery.data && (
+              <>
+                <p className={styles.row}>
+                  <span>Доставка, ≈ {delivery.data.etaMinutes} мин</span>
+                  <span>{formatPrice(delivery.data.deliveryFee)}</span>
+                </p>
+                {weather && <p className={styles.weather}>{weather}</p>}
+              </>
+            )}
+            {delivery.isError && (
+              <p className={styles.error} role="alert">
+                {orderErrorMessage(delivery.error, itemName)}
+              </p>
+            )}
             <p className={styles.total}>
               <span>Итого</span>
-              <span className={styles.totalValue}>{formatPrice(cart.total)}</span>
+              <span className={styles.totalValue}>{formatPrice(total)}</span>
             </p>
             {writeError && (
               <p className={styles.error} role="alert">
@@ -298,7 +333,13 @@ export function CartDrawer() {
             <Button
               block
               onClick={placeOrder}
-              disabled={!cart.orderable || shortage > 0 || checkout.isPending}
+              disabled={
+                !cart.orderable ||
+                shortage > 0 ||
+                checkout.isPending ||
+                chosenAddressId === null ||
+                delivery.isError
+              }
             >
               {checkout.isPending ? 'Оформляем…' : 'Оформить заказ'}
             </Button>
