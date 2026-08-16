@@ -3,6 +3,7 @@ package com.deliveryhub.order.entity;
 import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -47,6 +48,15 @@ public class Order {
     @Column(name = "promo_code", length = 64)
     private String promoCode;
 
+    @Column(name = "delivery_fee", nullable = false, precision = 10, scale = 2)
+    private BigDecimal deliveryFee;
+
+    @Column(name = "eta_minutes")
+    private Integer etaMinutes;
+
+    @Embedded
+    private DeliveryDestination destination;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "cancellation_reason", length = 32)
     private CancellationReason cancellationReason;
@@ -82,6 +92,7 @@ public class Order {
         this.status = OrderStatus.CREATED;
         this.totalAmount = BigDecimal.ZERO;
         this.discount = BigDecimal.ZERO;
+        this.deliveryFee = BigDecimal.ZERO;
         this.createdAt = Objects.requireNonNull(placedAt, "placedAt");
         this.updatedAt = placedAt;
     }
@@ -108,16 +119,34 @@ public class Order {
         if (promoCode != null) {
             throw new IllegalStateException("Order already has promo code " + promoCode);
         }
-        if (amount.signum() < 0 || amount.compareTo(totalAmount) > 0) {
-            throw new IllegalArgumentException("Discount must be between 0 and the order amount " + totalAmount);
+        if (amount.signum() < 0 || amount.compareTo(subtotal()) > 0) {
+            throw new IllegalArgumentException("Discount must be between 0 and the dishes amount " + subtotal());
         }
         promoCode = code;
         discount = amount;
         totalAmount = totalAmount.subtract(amount);
     }
 
+    public void deliverTo(DeliveryDestination destination, BigDecimal fee, int etaMinutes) {
+        Objects.requireNonNull(destination, "destination");
+        Objects.requireNonNull(fee, "fee");
+        if (status != OrderStatus.CREATED) {
+            throw new IllegalStateException("Delivery can be set only for a new order, current status: " + status);
+        }
+        if (this.destination != null) {
+            throw new IllegalStateException("Order already has a delivery address");
+        }
+        if (fee.signum() < 0 || etaMinutes <= 0) {
+            throw new IllegalArgumentException("Delivery fee must not be negative and ETA must be positive");
+        }
+        this.destination = destination;
+        this.deliveryFee = fee;
+        this.etaMinutes = etaMinutes;
+        this.totalAmount = totalAmount.add(fee);
+    }
+
     public BigDecimal subtotal() {
-        return totalAmount.add(discount);
+        return totalAmount.add(discount).subtract(deliveryFee);
     }
 
     public boolean hasPromo() {
@@ -263,6 +292,18 @@ public class Order {
 
     public String getPromoCode() {
         return promoCode;
+    }
+
+    public BigDecimal getDeliveryFee() {
+        return deliveryFee;
+    }
+
+    public Integer getEtaMinutes() {
+        return etaMinutes;
+    }
+
+    public DeliveryDestination getDestination() {
+        return destination;
     }
 
     public CancellationReason getCancellationReason() {

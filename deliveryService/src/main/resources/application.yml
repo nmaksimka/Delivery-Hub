@@ -48,6 +48,35 @@ app:
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   dispatch:
     zone-radius-meters: ${DISPATCH_ZONE_RADIUS_METERS:5000}
+  routing:
+    base-url: ${OSRM_BASE_URL:https://router.project-osrm.org}
+    profile: car
+    user-agent: DeliveryHub/1.0 (portfolio demo)
+    connect-timeout: 2s
+    read-timeout: 3s
+    fallback-detour-factor: 1.4
+    fallback-speed-kmh: 25
+  weather:
+    base-url: ${OPEN_METEO_BASE_URL:https://api.open-meteo.com}
+    latitude: 56.4977
+    longitude: 84.9744
+    connect-timeout: 2s
+    read-timeout: 3s
+    cache-ttl: 10m
+    frost-below-celsius: -25
+  pricing:
+    base-fee: 99
+    per-km: 15
+    weather:
+      RAIN:
+        surcharge: 39
+        eta-percent: 15
+      SNOW:
+        surcharge: 49
+        eta-percent: 25
+      FROST:
+        surcharge: 59
+        eta-percent: 20
   outbox:
     poll-interval: 1s
     batch-size: 50

@@ -1,7 +1,12 @@
 package com.deliveryhub.order.cart;
 
 import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.GeoLocation;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -9,6 +14,7 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.exception.Coded;
 import com.deliveryhub.order.exception.ErrorCode;
+import com.deliveryhub.order.exception.UnprocessableOrderException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.promo.PromoService;
 import com.deliveryhub.order.promo.PromoUse;
@@ -42,6 +48,9 @@ class CartServiceTest {
 
     private static final long USER = 42L;
     private static final long RESTAURANT = 1L;
+    private static final long ADDRESS_ID = 9L;
+    private static final UserAddressDto ADDRESS = new UserAddressDto(ADDRESS_ID, "Томск", "Ленина", "12", "4", null, null,
+            null, new BigDecimal("56.484645"), new BigDecimal("84.947649"), true);
 
     @Mock
     private CartStore store;
@@ -51,13 +60,18 @@ class CartServiceTest {
     private OrderService orderService;
     @Mock
     private PromoService promoService;
+    @Mock
+    private UserAddresses userAddresses;
+    @Mock
+    private DeliveryQuotes deliveryQuotes;
 
     private CartService service;
     private Cart stored = Cart.empty();
 
     @BeforeEach
     void setUp() {
-        service = new CartService(store, restaurantCatalog, orderService, promoService);
+        service = new CartService(store, restaurantCatalog, orderService, promoService, userAddresses, deliveryQuotes);
+        lenient().when(userAddresses.deliverableAddress(USER, ADDRESS_ID)).thenReturn(ADDRESS);
     }
 
     private void storeBacksCart() {
@@ -190,14 +204,14 @@ class CartServiceTest {
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
-                null, null, List.of());
-        when(orderService.createOrder(any(), eq(USER), any())).thenReturn(created);
+                BigDecimal.ZERO, null, null, null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(created);
 
-        OrderDto order = service.checkout(USER);
+        OrderDto order = service.checkout(USER, ADDRESS_ID);
 
         assertThat(order.id()).isEqualTo(5L);
         ArgumentCaptor<CreateOrderRequest> request = ArgumentCaptor.forClass(CreateOrderRequest.class);
-        verify(orderService).createOrder(request.capture(), eq(USER), any());
+        verify(orderService).createOrder(request.capture(), eq(USER), any(), eq(ADDRESS));
         assertThat(request.getValue().restaurantId()).isEqualTo(RESTAURANT);
         assertThat(request.getValue().orderItemsRequest())
                 .containsExactly(new OrderItemRequest(10L, 2), new OrderItemRequest(11L, 1));
@@ -210,11 +224,11 @@ class CartServiceTest {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
-        when(orderService.createOrder(any(), eq(USER), any()))
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS)))
                 .thenThrow(new OrderRejectedException(
                         ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
 
-        assertThatThrownBy(() -> service.checkout(USER)).isInstanceOf(Coded.class);
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID)).isInstanceOf(Coded.class);
 
         assertThat(stored.lines()).extracting(CartLine::menuItemId).containsExactly(10L);
     }
@@ -224,34 +238,67 @@ class CartServiceTest {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
-        when(orderService.createOrder(any(), eq(USER), any()))
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS)))
                 .thenThrow(new OrderRejectedException(ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
         when(store.restore(eq(USER), any())).thenThrow(new RedisConnectionFailureException("redis is down"));
 
-        assertThatThrownBy(() -> service.checkout(USER))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.RESTAURANT_CLOSED));
     }
 
     @Test
     void secondCheckoutOfSameCartFindsItEmpty() {
         cartWithTwoPizzas();
-        when(orderService.createOrder(any(), eq(USER), any())).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
-                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, null, null, List.of()));
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
+                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, BigDecimal.ZERO, null, null, null, null, List.of()));
 
-        service.checkout(USER);
+        service.checkout(USER, ADDRESS_ID);
 
-        assertThatThrownBy(() -> service.checkout(USER))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
-        verify(orderService).createOrder(any(), eq(USER), any());
+        verify(orderService).createOrder(any(), eq(USER), any(), eq(ADDRESS));
     }
 
     @Test
     void checkoutOfEmptyCartIsRejected() {
         storeBacksCart();
 
-        assertThatThrownBy(() -> service.checkout(USER))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
-        verify(orderService, never()).createOrder(any(), any(), any());
+        verify(orderService, never()).createOrder(any(), any(), any(), eq(ADDRESS));
+    }
+
+    @Test
+    void addressWithoutCoordinatesKeepsCartUntouched() {
+        cartWithTwoPizzas();
+        when(userAddresses.deliverableAddress(USER, ADDRESS_ID)).thenThrow(
+                new UnprocessableOrderException(ErrorCode.ADDRESS_NOT_GEOCODED, "no coordinates"));
+
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.ADDRESS_NOT_GEOCODED));
+        assertThat(stored.hasLines()).isTrue();
+        verify(orderService, never()).createOrder(any(), any(), any(), any());
+    }
+
+    @Test
+    void deliveryQuoteGoesFromRestaurantToChosenAddress() {
+        storeBacksCart();
+        GeoLocation restaurantPoint = new GeoLocation(56.47, 84.95);
+        menuIs(new RestaurantDto(RESTAURANT, "Pizzeria", true, false, "", restaurantPoint), pizza(true));
+        service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
+        DeliveryQuoteDto quote = new DeliveryQuoteDto(2793, 12, new BigDecimal("190.00"), "OSRM",
+                new DeliveryQuoteDto.Weather("SNOW", -6.0, new BigDecimal("49.00"), 3));
+        when(deliveryQuotes.quote(RESTAURANT, restaurantPoint, ADDRESS)).thenReturn(quote);
+
+        assertThat(service.deliveryQuote(USER, ADDRESS_ID)).isEqualTo(quote);
+    }
+
+    @Test
+    void deliveryQuoteOfEmptyCartIsRejected() {
+        storeBacksCart();
+
+        assertThatThrownBy(() -> service.deliveryQuote(USER, ADDRESS_ID))
+                .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
     }
 
     private void cartWithTwoPizzas() {
@@ -329,9 +376,9 @@ class CartServiceTest {
         cartWithTwoPizzas();
         stored = stored.withPromo("SPRING10");
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
-                "SPRING10", null, null, List.of());
-        when(orderService.createOrder(any(), eq(USER), eq("SPRING10"))).thenReturn(created);
+                "SPRING10", BigDecimal.ZERO, null, null, null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), eq("SPRING10"), eq(ADDRESS))).thenReturn(created);
 
-        assertThat(service.checkout(USER).promoCode()).isEqualTo("SPRING10");
+        assertThat(service.checkout(USER, ADDRESS_ID).promoCode()).isEqualTo("SPRING10");
     }
 }

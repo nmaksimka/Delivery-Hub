@@ -291,6 +291,40 @@ class OrderTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void deliveryFeeGoesToTotalButPromoDiscountsOnlyDishes() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.addItem(10L, "Pizza", 2, new BigDecimal("300.00"));
+
+        order.deliverTo(destination(), new BigDecimal("190.00"), 12);
+        order.applyDiscount("ALL", new BigDecimal("600.00"));
+
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("190.00");
+        assertThat(order.subtotal()).isEqualByComparingTo("600.00");
+        assertThat(order.getDeliveryFee()).isEqualByComparingTo("190.00");
+        assertThat(order.getEtaMinutes()).isEqualTo(12);
+        assertThat(order.getDestination().line()).isEqualTo("Томск, Ленина, 12");
+        assertThatThrownBy(() -> Order.place(42L, 1L, NOW).applyDiscount("BIG", BigDecimal.ONE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void deliveryIsSetOnceAndOnlyForNewOrder() {
+        Order order = Order.place(42L, 1L, NOW);
+        order.deliverTo(destination(), BigDecimal.TEN, 10);
+
+        assertThatThrownBy(() -> order.deliverTo(destination(), BigDecimal.TEN, 10))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> orderIn(OrderStatus.CONFIRMED).deliverTo(destination(), BigDecimal.TEN, 10))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> Order.place(42L, 1L, NOW).deliverTo(destination(), BigDecimal.ONE.negate(), 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static DeliveryDestination destination() {
+        return new DeliveryDestination(5L, "Томск, Ленина, 12", null, new BigDecimal("56.484645"), new BigDecimal("84.947649"));
+    }
+
     private static Order orderIn(OrderStatus status) {
         Order order = Order.place(42L, 1L, NOW);
         ReflectionTestUtils.setField(order, "status", status);

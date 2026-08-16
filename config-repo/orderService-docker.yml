@@ -13,3 +13,7 @@ spring:
       channels:
         restaurant:
           address: static://restaurantService:9331
+app:
+  internal-services:
+    users-base-url: http://userService:3334
+    delivery-base-url: http://deliveryService:3333

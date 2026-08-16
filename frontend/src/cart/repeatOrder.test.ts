@@ -13,6 +13,9 @@ const order: Order = {
   totalAmount: 1218,
   discount: 0,
   promoCode: null,
+  deliveryFee: 0,
+  etaMinutes: null,
+  deliveryAddress: null,
   createdAt: '2026-07-01T12:00:00Z',
   updatedAt: null,
   orderItems: [

@@ -15,6 +15,7 @@ public record AddressDto(
         String courierComment,
         BigDecimal latitude,
         BigDecimal longitude,
+        boolean geocoded,
         boolean primary,
         Instant createdAt) {
 }

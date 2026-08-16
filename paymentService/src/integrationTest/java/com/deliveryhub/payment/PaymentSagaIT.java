@@ -190,6 +190,6 @@ class PaymentSagaIT extends PaymentApiSupport {
 
     private static OrderCreatedEvent orderCreated(UUID eventId, long orderId, long userId, String amount) {
         return new OrderCreatedEvent(eventId, orderId, userId, 1L, new BigDecimal(amount), Instant.now(),
-                List.of(), 1L, new GeoPoint(56.4884, 84.948));
+                List.of(), 1L, new GeoPoint(56.4884, 84.948), null);
     }
 }

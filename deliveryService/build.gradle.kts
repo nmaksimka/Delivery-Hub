@@ -10,6 +10,9 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.hibernate.spatial)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.restclient)
+    implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.micrometer)
     implementation(libs.spring.boot.starter.kafka)
     implementation(libs.kafka.avro.serializer)
 
@@ -23,4 +26,5 @@ dependencies {
     annotationProcessor(libs.mapstruct.processor)
 
     integrationTestImplementation(libs.testcontainers.kafka)
+    testImplementation(libs.wiremock)
 }

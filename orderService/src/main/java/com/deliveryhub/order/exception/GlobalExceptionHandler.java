@@ -93,6 +93,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(UnprocessableOrderException.class)
+    public ProblemDetail handleUnprocessable(UnprocessableOrderException ex) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage(), ex.code());
+    }
+
+    @ExceptionHandler(DependencyUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleDependencyUnavailable(DependencyUnavailableException ex) {
+        log.warn("Dependency is unavailable: {}", ex.getMessage());
+        ProblemDetail problem = problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), ex.code());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .body(problem);
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);

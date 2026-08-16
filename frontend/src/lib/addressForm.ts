@@ -80,6 +80,8 @@ export function addressErrorMessage(error: unknown) {
         return 'Можно сохранить не больше 10 адресов — удалите ненужный';
       case 'ADDRESS_NOT_FOUND':
         return 'Этого адреса уже нет, обновите страницу';
+      case 'ADDRESS_NOT_FOUND_ON_MAP':
+        return 'Не нашли такой дом на карте Томска — проверьте улицу и номер дома';
       case 'VALIDATION_FAILED':
         return 'Проверьте поля адреса: доставляем только по Томску';
       default:

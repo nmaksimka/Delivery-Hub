@@ -8,8 +8,11 @@ import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.client.dto.GeoLocation;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
@@ -88,6 +91,8 @@ class OrderServiceTest {
     private ProcessedEvents processedEvents;
     @Mock
     private PromoService promoService;
+    @Mock
+    private DeliveryQuotes deliveryQuotes;
 
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -108,7 +113,7 @@ class OrderServiceTest {
                 restaurantCatalog, outbox,
                 processedEvents, promoService,
                 new OrderCancellation(outbox, promoService, Clock.fixed(NOW, ZoneOffset.UTC)),
-                Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
+                deliveryQuotes, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
@@ -189,6 +194,35 @@ class OrderServiceTest {
             ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
             verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
             assertThat(captor.getValue().getRestaurantLocation()).isEqualTo(new GeoPoint(56.4884, 84.948));
+        }
+
+        @Test
+        @DisplayName("добавляет доставку к сумме и кладёт точку клиента в order-created")
+        void addsDeliveryFeeAndDeliveryLocation() {
+            GeoLocation restaurantPoint = new GeoLocation(56.4884, 84.948);
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, false, "", restaurantPoint));
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            UserAddressDto address = new UserAddressDto(9L, "Томск", "Ленина", "12", "4", null, null, "домофон",
+                    new BigDecimal("56.470000"), new BigDecimal("84.970000"), true);
+            when(deliveryQuotes.quote(RESTAURANT_ID, restaurantPoint, address)).thenReturn(new DeliveryQuoteDto(
+                    2793, 12, new BigDecimal("190.00"), "OSRM", new DeliveryQuoteDto.Weather("SNOW", -6.0, new BigDecimal("49.00"), 3)));
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID, null, address);
+
+            verify(orderRepository).save(orderCaptor.capture());
+            Order saved = orderCaptor.getValue();
+            assertThat(saved.getTotalAmount()).isEqualByComparingTo("225.00");
+            assertThat(saved.getDeliveryFee()).isEqualByComparingTo("190.00");
+            assertThat(saved.getEtaMinutes()).isEqualTo(12);
+            assertThat(saved.getDestination().line()).isEqualTo("Томск, Ленина, 12, кв. 4");
+            assertThat(saved.getDestination().comment()).isEqualTo("домофон");
+            ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
+            assertThat(captor.getValue().getDeliveryLocation()).isEqualTo(new GeoPoint(56.47, 84.97));
+            assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("225.00");
         }
 
         @Test
@@ -635,7 +669,7 @@ class OrderServiceTest {
 
     private static OrderDto dto() {
         return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, null, null, BigDecimal.TEN, BigDecimal.ZERO, null,
-                Instant.EPOCH, Instant.EPOCH, List.of());
+                BigDecimal.ZERO, null, null, Instant.EPOCH, Instant.EPOCH, List.of());
     }
 
     private static Order savedWithId(InvocationOnMock invocation) {

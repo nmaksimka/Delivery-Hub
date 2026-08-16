@@ -95,6 +95,11 @@ app:
       - POST /api/cart/checkout
   restaurant-grpc:
     deadline: 2s
+  internal-services:
+    users-base-url: ${USER_SERVICE_URL:http://localhost:3334}
+    delivery-base-url: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+    connect-timeout: 1s
+    read-timeout: 8s
   saga:
     check-interval: 15s
     payment-timeout: 2m

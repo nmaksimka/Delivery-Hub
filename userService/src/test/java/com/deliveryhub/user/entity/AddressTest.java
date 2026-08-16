@@ -2,6 +2,7 @@ package com.deliveryhub.user.entity;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +39,37 @@ class AddressTest {
         assertThat(address.getLabel()).isEqualTo("Работа");
         assertThat(address.getCreatedAt()).isEqualTo(NOW);
         assertThat(address.getUpdatedAt()).isEqualTo(later);
+    }
+
+    @Test
+    void newAddressWaitsForGeocoding() {
+        Address address = Address.create(1L, details("Томск", null, null), false, NOW);
+
+        assertThat(address.getGeoStatus()).isEqualTo(GeoStatus.PENDING);
+        assertThat(address.isGeocoded()).isFalse();
+    }
+
+    @Test
+    void movingAddressForgetsOldCoordinates() {
+        Address address = Address.create(1L, details("Томск", null, null), false, NOW);
+        address.locate(new GeoPoint(new BigDecimal("56.48"), new BigDecimal("84.95")));
+
+        address.change(new AddressDetails("Дом", "Томск", "Фрунзе", "20", null, null, null, null), NOW.plusSeconds(1));
+
+        assertThat(address.getGeoStatus()).isEqualTo(GeoStatus.PENDING);
+        assertThat(address.getLatitude()).isNull();
+        assertThat(address.getLongitude()).isNull();
+    }
+
+    @Test
+    void changingOnlyApartmentKeepsCoordinates() {
+        Address address = Address.create(1L, details("Томск", null, null), false, NOW);
+        address.locate(new GeoPoint(new BigDecimal("56.48"), new BigDecimal("84.95")));
+
+        address.change(details("Томск", "7", null), NOW.plusSeconds(1));
+
+        assertThat(address.isGeocoded()).isTrue();
+        assertThat(address.getLatitude()).isEqualByComparingTo("56.48");
     }
 
     private static AddressDetails details(String city, String apartment, String entrance) {

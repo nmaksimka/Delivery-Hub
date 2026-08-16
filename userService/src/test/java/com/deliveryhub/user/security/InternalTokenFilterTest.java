@@ -58,6 +58,28 @@ class InternalTokenFilterTest {
         assertThat(chain.getRequest()).isSameAs(request);
     }
 
+    @Test
+    void rejectsInternalPathWithoutToken() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/internal/users/1/addresses/2"), response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void passesInternalPathWithToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/users/1/addresses/2");
+        request.addHeader(InternalTokenFilter.HEADER_INTERNAL_TOKEN, "gateway-secret");
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
     private static MockHttpServletRequest request() {
         return new MockHttpServletRequest("GET", "/api/restaurants");
     }

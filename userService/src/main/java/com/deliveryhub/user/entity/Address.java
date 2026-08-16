@@ -2,6 +2,8 @@ package com.deliveryhub.user.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -54,6 +56,10 @@ public class Address {
     @Column(precision = 9, scale = 6)
     private BigDecimal longitude;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "geo_status", nullable = false, length = 20)
+    private GeoStatus geoStatus;
+
     @Column(name = "is_default", nullable = false)
     private boolean primary;
 
@@ -71,6 +77,7 @@ public class Address {
         this.primary = primary;
         this.createdAt = Objects.requireNonNull(now, "now");
         this.updatedAt = now;
+        this.geoStatus = GeoStatus.PENDING;
         apply(details);
     }
 
@@ -79,8 +86,43 @@ public class Address {
     }
 
     public void change(AddressDetails details, Instant now) {
+        String previousLocation = mapQuery();
         apply(details);
+        if (!previousLocation.equals(mapQuery())) {
+            awaitGeocoding();
+        }
         this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void locate(GeoPoint point) {
+        Objects.requireNonNull(point, "point");
+        this.latitude = point.latitude();
+        this.longitude = point.longitude();
+        this.geoStatus = GeoStatus.LOCATED;
+    }
+
+    public void markNotOnMap() {
+        this.latitude = null;
+        this.longitude = null;
+        this.geoStatus = GeoStatus.NOT_FOUND;
+    }
+
+    public String mapQuery() {
+        return mapQueryOf(street, house);
+    }
+
+    public static String mapQueryOf(String street, String house) {
+        return street.strip() + ", " + house.strip();
+    }
+
+    public boolean isGeocoded() {
+        return geoStatus == GeoStatus.LOCATED;
+    }
+
+    public void awaitGeocoding() {
+        this.latitude = null;
+        this.longitude = null;
+        this.geoStatus = GeoStatus.PENDING;
     }
 
     public void markPrimary(Instant now) {
@@ -153,6 +195,10 @@ public class Address {
 
     public BigDecimal getLongitude() {
         return longitude;
+    }
+
+    public GeoStatus getGeoStatus() {
+        return geoStatus;
     }
 
     public boolean isPrimary() {

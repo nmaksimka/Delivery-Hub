@@ -5,15 +5,19 @@ import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.client.dto.GeoLocation;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.CancellationReason;
+import com.deliveryhub.order.entity.DeliveryDestination;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ErrorCode;
@@ -62,6 +66,7 @@ public class OrderService {
     private final ProcessedEvents processedEvents;
     private final PromoService promoService;
     private final OrderCancellation cancellation;
+    private final DeliveryQuotes deliveryQuotes;
     private final Clock clock;
     private final TransactionTemplate transaction;
     private final Counter ordersPlaced;
@@ -73,6 +78,7 @@ public class OrderService {
                         ProcessedEvents processedEvents,
                         PromoService promoService,
                         OrderCancellation cancellation,
+                        DeliveryQuotes deliveryQuotes,
                         Clock clock,
                         PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
@@ -83,6 +89,7 @@ public class OrderService {
         this.processedEvents = processedEvents;
         this.promoService = promoService;
         this.cancellation = cancellation;
+        this.deliveryQuotes = deliveryQuotes;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
         this.ordersPlaced = Counter.builder(ORDERS_PLACED)
@@ -114,6 +121,12 @@ public class OrderService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
+        return createOrder(createRequest, userId, promoCode, null);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode,
+                                UserAddressDto address) {
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
@@ -141,6 +154,11 @@ public class OrderService {
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
+        if (address != null) {
+            DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
+            order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
+                    address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes());
+        }
 
         Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
@@ -258,6 +276,10 @@ public class OrderService {
                 .setRestaurantLocation(restaurantLocation == null
                         ? null
                         : new GeoPoint(restaurantLocation.latitude(), restaurantLocation.longitude()))
+                .setDeliveryLocation(order.getDestination() == null
+                        ? null
+                        : new GeoPoint(order.getDestination().latitude().doubleValue(),
+                        order.getDestination().longitude().doubleValue()))
                 .build();
     }
 }

@@ -1,7 +1,11 @@
 package com.deliveryhub.order;
 
 import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.idempotency.IdempotencyFilter;
@@ -53,9 +57,17 @@ class PromoApiIT {
     private PromoRedemptionRepository redemptions;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
+    @MockitoBean
+    private UserAddresses userAddresses;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @BeforeEach
     void stubRestaurants() {
+        when(userAddresses.deliverableAddress(any(), any())).thenReturn(new UserAddressDto(77L, "Томск", "Ленина",
+                "12", null, null, null, null, new BigDecimal("56.47"), new BigDecimal("84.97"), true));
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         when(restaurantCatalog.quote(eq(1L), any())).thenReturn(new MenuQuote(new RestaurantDto(1L, "Pizzeria", true),
                 Map.of(10L, new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true))));
         when(restaurantCatalog.quote(eq(2L), any())).thenReturn(new MenuQuote(new RestaurantDto(2L, "Sushi", true),
@@ -279,6 +291,8 @@ class PromoApiIT {
 
     private MvcTestResult checkout(long user) {
         return mvc.post().uri("/api/cart/checkout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"addressId\": 77}")
                 .header("X-User-Id", Long.toString(user))
                 .header(IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, UUID.randomUUID().toString())
                 .exchange();
