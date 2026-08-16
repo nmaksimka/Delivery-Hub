@@ -3,9 +3,11 @@ package com.deliveryhub.delivery.dispatch;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.DeliveryRejectedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
@@ -65,12 +67,17 @@ public class CourierDispatch {
             return;
         }
         Long courierId = courier.get().getId();
-        Delivery delivery = deliveryRepository.save(
-                Delivery.forOrder(event.getOrderId(), event.getUserId(), courierId, null, now));
+        Delivery delivery = Delivery.forOrder(event.getOrderId(), event.getUserId(), courierId, null, now);
+        delivery.routeBetween(position(event.getRestaurantLocation()), position(event.getDeliveryLocation()));
+        delivery = deliveryRepository.save(delivery);
         UUID eventId = UUID.randomUUID();
         outbox.append("Delivery", delivery.getId(), Topics.COURIER_ASSIGNED, eventId, new CourierAssignedEvent(
                 eventId, delivery.getId(), delivery.getOrderId(), courierId, now, delivery.nextEventSequence()));
         log.info("Courier {} assigned to order {}, delivery {}", courierId, event.getOrderId(), delivery.getId());
+    }
+
+    private static GeoPosition position(GeoPoint point) {
+        return point == null ? null : new GeoPosition(point.getLatitude(), point.getLongitude());
     }
 
     private void reject(PaymentHeldEvent event, Instant now) {
