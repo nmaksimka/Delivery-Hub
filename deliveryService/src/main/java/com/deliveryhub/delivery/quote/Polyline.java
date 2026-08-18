@@ -56,7 +56,7 @@ public final class Polyline {
         GeoPosition to = points.get(segment + 1);
         double segmentLength = distances[segment + 1] - distances[segment];
         double fraction = segmentLength == 0 ? 1 : (at - distances[segment]) / segmentLength;
-        GeoPosition position = new GeoPosition(
+        GeoPosition position = fraction >= 1 ? to : new GeoPosition(
                 from.latitude() + (to.latitude() - from.latitude()) * fraction,
                 from.longitude() + (to.longitude() - from.longitude()) * fraction);
         return new PathPoint(position, heading(from, to));
