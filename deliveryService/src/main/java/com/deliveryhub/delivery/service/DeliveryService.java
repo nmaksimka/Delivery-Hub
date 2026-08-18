@@ -18,10 +18,12 @@ import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
+import com.deliveryhub.delivery.tracking.TrackingUpdate;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +54,7 @@ public class DeliveryService {
     private final CourierRepository courierRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final ApplicationEventPublisher events;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
@@ -60,7 +63,8 @@ public class DeliveryService {
                            CancelledOrders cancelledOrders,
                            CourierRepository courierRepository,
                            Clock clock,
-                           MeterRegistry meterRegistry) {
+                           MeterRegistry meterRegistry,
+                           ApplicationEventPublisher events) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
@@ -69,6 +73,7 @@ public class DeliveryService {
         this.courierRepository = courierRepository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.events = events;
     }
 
     public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
@@ -192,6 +197,7 @@ public class DeliveryService {
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
         countAfterCommit(delivery.getStatus());
+        events.publishEvent(TrackingUpdate.status(delivery));
     }
 
     private void countAfterCommit(DeliveryStatus status) {

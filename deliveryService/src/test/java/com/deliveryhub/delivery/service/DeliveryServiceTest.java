@@ -18,6 +18,7 @@ import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.delivery.tracking.TrackingUpdate;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -65,6 +67,8 @@ class DeliveryServiceTest {
     private CancelledOrders cancelledOrders;
     @Mock
     private CourierRepository courierRepository;
+    @Mock
+    private ApplicationEventPublisher events;
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -73,7 +77,7 @@ class DeliveryServiceTest {
     @BeforeEach
     void setUp() {
         deliveryService = new DeliveryService(deliveryRepository, deliveryMapper, outbox, processedEvents, cancelledOrders,
-                courierRepository, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
+                courierRepository, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry, events);
     }
 
     @Nested
@@ -174,6 +178,21 @@ class DeliveryServiceTest {
 
             assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
             assertThat(appendedEvent(1L).getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+        }
+
+        @Test
+        @DisplayName("рассылает новый статус подписчикам трекинга")
+        void publishesTrackingStatus() {
+            Delivery delivery = existingDelivery();
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, null));
+
+            ArgumentCaptor<TrackingUpdate> update = ArgumentCaptor.forClass(TrackingUpdate.class);
+            verify(events).publishEvent(update.capture());
+            assertThat(update.getValue().type()).isEqualTo(TrackingUpdate.Type.STATUS);
+            assertThat(update.getValue().orderId()).isEqualTo(ORDER_ID);
+            assertThat(update.getValue().status()).isEqualTo(DeliveryStatus.PICKED_UP);
         }
 
         @Test
