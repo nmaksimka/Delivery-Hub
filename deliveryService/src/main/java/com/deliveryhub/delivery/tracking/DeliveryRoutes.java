@@ -1,6 +1,7 @@
 package com.deliveryhub.delivery.tracking;
 
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.quote.RoutePath;
 import com.deliveryhub.delivery.quote.RoutePlanner;
 import com.deliveryhub.delivery.quote.RoutingProperties;
@@ -36,7 +37,11 @@ public class DeliveryRoutes {
         return Optional.of(remember(delivery.getId(), new TrackedRoute(path, speed)));
     }
 
-    public TrackedRoute remember(long deliveryId, TrackedRoute route) {
+    public TrackedRoute plan(long deliveryId, GeoPosition from, GeoPosition to, double metersPerSecond) {
+        return remember(deliveryId, new TrackedRoute(routePlanner.path(from, to), metersPerSecond));
+    }
+
+    private TrackedRoute remember(long deliveryId, TrackedRoute route) {
         routes.put(deliveryId, route);
         return route;
     }
