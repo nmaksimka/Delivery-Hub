@@ -46,6 +46,21 @@ public class Delivery {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "pickup_latitude")
+    private Double pickupLatitude;
+
+    @Column(name = "pickup_longitude")
+    private Double pickupLongitude;
+
+    @Column(name = "dropoff_latitude")
+    private Double dropoffLatitude;
+
+    @Column(name = "dropoff_longitude")
+    private Double dropoffLongitude;
+
+    @Column(name = "order_confirmed_at")
+    private Instant orderConfirmedAt;
+
     @Column(name = "event_sequence", nullable = false)
     private long eventSequence;
 
@@ -98,6 +113,29 @@ public class Delivery {
         }
         this.courierId = Objects.requireNonNull(courierId, "courierId");
         this.updatedAt = Objects.requireNonNull(at, "at");
+    }
+
+    public void routeBetween(GeoPosition pickup, GeoPosition dropoff) {
+        if (pickup != null) {
+            pickupLatitude = pickup.latitude();
+            pickupLongitude = pickup.longitude();
+        }
+        if (dropoff != null) {
+            dropoffLatitude = dropoff.latitude();
+            dropoffLongitude = dropoff.longitude();
+        }
+    }
+
+    public boolean markOrderConfirmed(Instant at) {
+        if (orderConfirmedAt != null || isFinished()) {
+            return false;
+        }
+        orderConfirmedAt = Objects.requireNonNull(at, "at");
+        return true;
+    }
+
+    public boolean isOnTheWay() {
+        return status == DeliveryStatus.PICKED_UP || status == DeliveryStatus.IN_TRANSIT;
     }
 
     public long nextEventSequence() {
@@ -153,6 +191,18 @@ public class Delivery {
 
     public Instant getEstimatedDeliveryTime() {
         return estimatedDeliveryTime;
+    }
+
+    public GeoPosition getPickup() {
+        return pickupLatitude == null ? null : new GeoPosition(pickupLatitude, pickupLongitude);
+    }
+
+    public GeoPosition getDropoff() {
+        return dropoffLatitude == null ? null : new GeoPosition(dropoffLatitude, dropoffLongitude);
+    }
+
+    public Instant getOrderConfirmedAt() {
+        return orderConfirmedAt;
     }
 
     public Instant getCreatedAt() {

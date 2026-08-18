@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":apiContracts"))
 
     implementation(libs.spring.boot.starter.webmvc)
+    implementation(libs.spring.boot.starter.websocket)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.hibernate.spatial)
     implementation(libs.spring.boot.starter.validation)

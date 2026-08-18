@@ -10,6 +10,7 @@ import com.deliveryhub.delivery.exception.CourierBusyException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
+import com.deliveryhub.delivery.tracking.CourierTracking;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,12 +41,14 @@ class CourierServiceTest {
 
     @Mock
     private CourierRepository courierRepository;
+    @Mock
+    private CourierTracking courierTracking;
 
     private CourierService courierService;
 
     @BeforeEach
     void setUp() {
-        courierService = new CourierService(courierRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+        courierService = new CourierService(courierRepository, courierTracking, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test

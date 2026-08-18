@@ -10,6 +10,7 @@
     {"name": "provider", "type": "string"},
     {"name": "heldAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
     {"name": "restaurantId", "type": ["null", "long"], "default": null},
-    {"name": "restaurantLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null}
+    {"name": "restaurantLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null},
+    {"name": "deliveryLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null}
   ]
 }

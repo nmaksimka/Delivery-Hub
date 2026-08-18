@@ -146,6 +146,6 @@ class CourierDispatchIT {
 
     private static PaymentHeldEvent paymentHeld(long orderId, long restaurantId, GeoPoint location) {
         return new PaymentHeldEvent(UUID.randomUUID(), orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now(),
-                restaurantId, location);
+                restaurantId, location, null);
     }
 }

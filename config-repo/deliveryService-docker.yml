@@ -5,3 +5,7 @@ spring:
     bootstrap-servers: kafka:9092
     properties:
       schema.registry.url: http://schema-registry:8081
+
+app:
+  simulator:
+    enabled: ${TRACKING_SIMULATOR_ENABLED:true}

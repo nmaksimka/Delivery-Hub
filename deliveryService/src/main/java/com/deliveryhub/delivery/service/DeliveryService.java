@@ -4,6 +4,7 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
+import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
@@ -18,10 +19,12 @@ import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
+import com.deliveryhub.delivery.tracking.TrackingUpdate;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +55,7 @@ public class DeliveryService {
     private final CourierRepository courierRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final ApplicationEventPublisher events;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
@@ -60,7 +64,8 @@ public class DeliveryService {
                            CancelledOrders cancelledOrders,
                            CourierRepository courierRepository,
                            Clock clock,
-                           MeterRegistry meterRegistry) {
+                           MeterRegistry meterRegistry,
+                           ApplicationEventPublisher events) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
@@ -69,6 +74,7 @@ public class DeliveryService {
         this.courierRepository = courierRepository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.events = events;
     }
 
     public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
@@ -163,6 +169,20 @@ public class DeliveryService {
         publishStatusChange(delivery);
     }
 
+    @Transactional
+    public void markOrderConfirmed(PaymentCapturedEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.PAYMENT_CAPTURED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
+            return;
+        }
+        deliveryRepository.findByOrderId(event.getOrderId())
+                .filter(delivery -> delivery.markOrderConfirmed(clock.instant()))
+                .ifPresentOrElse(
+                        delivery -> log.info("Order {} is paid, delivery {} may be picked up",
+                                event.getOrderId(), delivery.getId()),
+                        () -> log.info("Order {} is paid, but there is no open delivery for it", event.getOrderId()));
+    }
+
     private void occupyCourier(Long courierId, Instant now) {
         if (courierId != null) {
             courierRepository.findById(courierId).ifPresent(courier -> courier.occupy(now));
@@ -192,6 +212,7 @@ public class DeliveryService {
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
         countAfterCommit(delivery.getStatus());
+        events.publishEvent(TrackingUpdate.status(delivery));
     }
 
     private void countAfterCommit(DeliveryStatus status) {

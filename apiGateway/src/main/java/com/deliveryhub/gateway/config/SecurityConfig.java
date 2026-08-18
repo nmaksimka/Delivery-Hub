@@ -30,6 +30,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private static final String AUTH_API = "/api/auth/";
+    private static final String WEB_SOCKETS = "/ws/";
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http,
@@ -64,10 +65,11 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers(HttpMethod.PATCH, "/api/deliveries/**").hasAnyRole("ADMIN", "COURIER")
                         .pathMatchers("/api/couriers/**").hasRole("COURIER")
+                        .pathMatchers("/ws/tracking/**").authenticated()
 
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .bearerTokenConverter(bearerTokenOutsideAuthApi())
+                        .bearerTokenConverter(bearerToken())
                         .authenticationEntryPoint(unauthorized)
                         .jwt(jwt -> jwt
                                 .jwtDecoder(jwtDecoder)
@@ -80,11 +82,17 @@ public class SecurityConfig {
                 .build();
     }
 
-    private static ServerAuthenticationConverter bearerTokenOutsideAuthApi() {
-        ServerBearerTokenAuthenticationConverter bearerToken = new ServerBearerTokenAuthenticationConverter();
-        return exchange -> exchange.getRequest().getPath().value().startsWith(AUTH_API)
-                ? Mono.empty()
-                : bearerToken.convert(exchange);
+    private static ServerAuthenticationConverter bearerToken() {
+        ServerBearerTokenAuthenticationConverter fromHeader = new ServerBearerTokenAuthenticationConverter();
+        ServerBearerTokenAuthenticationConverter fromHeaderOrQuery = new ServerBearerTokenAuthenticationConverter();
+        fromHeaderOrQuery.setAllowUriQueryParameter(true);
+        return exchange -> {
+            String path = exchange.getRequest().getPath().value();
+            if (path.startsWith(AUTH_API)) {
+                return Mono.empty();
+            }
+            return path.startsWith(WEB_SOCKETS) ? fromHeaderOrQuery.convert(exchange) : fromHeader.convert(exchange);
+        };
     }
 
     @Bean

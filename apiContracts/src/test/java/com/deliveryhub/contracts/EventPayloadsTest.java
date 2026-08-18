@@ -96,12 +96,13 @@ class EventPayloadsTest {
         assertThat(OrderCreatedEvent.getClassSchema().getField("restaurantLocation").hasDefaultValue()).isTrue();
         assertThat(PaymentHeldEvent.getClassSchema().getField("restaurantLocation").hasDefaultValue()).isTrue();
         assertThat(PaymentHeldEvent.getClassSchema().getField("restaurantId").hasDefaultValue()).isTrue();
+        assertThat(PaymentHeldEvent.getClassSchema().getField("deliveryLocation").hasDefaultValue()).isTrue();
     }
 
     @Test
     void sagaEventsSurviveRoundTrip() {
         PaymentHeldEvent held = new PaymentHeldEvent(UUID.randomUUID(), 15L, 42L, new BigDecimal("256.00"), "demo", NOW,
-                3L, new GeoPoint(56.4884, 84.948));
+                3L, new GeoPoint(56.4884, 84.948), new GeoPoint(56.4697, 84.9483));
         CourierAssignedEvent assigned = new CourierAssignedEvent(UUID.randomUUID(), 7L, 15L, 9001L, NOW, 1L);
         DeliveryRejectedEvent rejected = new DeliveryRejectedEvent(UUID.randomUUID(), 15L, 42L, "NO_FREE_COURIER", NOW);
 
