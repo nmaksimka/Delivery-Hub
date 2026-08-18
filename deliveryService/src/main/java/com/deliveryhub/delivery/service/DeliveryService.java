@@ -4,6 +4,7 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
+import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
@@ -166,6 +167,20 @@ public class DeliveryService {
         releaseCourierOfFinished(delivery, now);
         log.info("Delivery {} is cancelled together with order {}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
+    }
+
+    @Transactional
+    public void markOrderConfirmed(PaymentCapturedEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.PAYMENT_CAPTURED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
+            return;
+        }
+        deliveryRepository.findByOrderId(event.getOrderId())
+                .filter(delivery -> delivery.markOrderConfirmed(clock.instant()))
+                .ifPresentOrElse(
+                        delivery -> log.info("Order {} is paid, delivery {} may be picked up",
+                                event.getOrderId(), delivery.getId()),
+                        () -> log.info("Order {} is paid, but there is no open delivery for it", event.getOrderId()));
     }
 
     private void occupyCourier(Long courierId, Instant now) {
