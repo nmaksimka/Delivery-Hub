@@ -77,6 +77,11 @@ app:
       FROST:
         surcharge: 59
         eta-percent: 20
+  simulator:
+    enabled: ${TRACKING_SIMULATOR_ENABLED:false}
+    tick: 2s
+    speed-kmh: 30
+    pickup-delay: 15s
   outbox:
     poll-interval: 1s
     batch-size: 50
