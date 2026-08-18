@@ -47,6 +47,28 @@ public class RoutePlanner {
         return estimate(from, to);
     }
 
+    public RoutePath path(GeoPosition from, GeoPosition to) {
+        try {
+            OsrmResponse response = circuitBreaker.executeSupplier(() -> restClient.get()
+                    .uri("/route/v1/" + properties.profile() + "/" + coordinate(from) + ";" + coordinate(to)
+                            + "?overview=full&geometries=geojson")
+                    .retrieve()
+                    .body(OsrmResponse.class));
+            if (response != null && "Ok".equals(response.code()) && response.routes() != null
+                    && !response.routes().isEmpty() && response.routes().getFirst().hasGeometry()) {
+                OsrmRoute best = response.routes().getFirst();
+                return new RoutePath(Polyline.of(best.geometry().positions()), (int) Math.round(best.duration()),
+                        Route.RouteSource.OSRM);
+            }
+            log.info("OSRM returned no geometry, courier goes by straight line: {}",
+                    response == null ? null : response.code());
+        } catch (RestClientException | CallNotPermittedException e) {
+            log.warn("OSRM is unavailable, courier goes by straight line: {}", e.getMessage());
+        }
+        Route estimate = estimate(from, to);
+        return new RoutePath(Polyline.straight(from, to), estimate.durationSeconds(), Route.RouteSource.STRAIGHT_LINE);
+    }
+
     private Route estimate(GeoPosition from, GeoPosition to) {
         double roadMeters = straightLine.meters(from, to) * properties.fallbackDetourFactor();
         double seconds = roadMeters / (properties.fallbackSpeedKmh() * 1000 / 3600);
@@ -60,6 +82,17 @@ public class RoutePlanner {
     record OsrmResponse(String code, List<OsrmRoute> routes) {
     }
 
-    record OsrmRoute(double distance, double duration) {
+    record OsrmRoute(double distance, double duration, OsrmGeometry geometry) {
+
+        boolean hasGeometry() {
+            return geometry != null && geometry.coordinates() != null && geometry.coordinates().size() > 1;
+        }
+    }
+
+    record OsrmGeometry(List<List<Double>> coordinates) {
+
+        List<GeoPosition> positions() {
+            return coordinates.stream().map(pair -> new GeoPosition(pair.get(1), pair.get(0))).toList();
+        }
     }
 }
