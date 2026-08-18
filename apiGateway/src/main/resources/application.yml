@@ -105,6 +105,12 @@ spring:
               uri: lb://deliveryService
               predicates:
                 - Path=/api/deliveries/**
+            - id: delivery-tracking
+              uri: lb:ws://deliveryService
+              predicates:
+                - Path=/ws/tracking/**
+              filters:
+                - RemoveRequestParameter=access_token
             - id: courier-service
               uri: lb://deliveryService
               predicates:
