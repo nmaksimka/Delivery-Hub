@@ -9,6 +9,7 @@ import com.deliveryhub.delivery.exception.CourierAlreadyRegisteredException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
+import com.deliveryhub.delivery.tracking.CourierTracking;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +29,12 @@ public class CourierService {
     private static final Logger log = LoggerFactory.getLogger(CourierService.class);
 
     private final CourierRepository courierRepository;
+    private final CourierTracking courierTracking;
     private final Clock clock;
 
-    public CourierService(CourierRepository courierRepository, Clock clock) {
+    public CourierService(CourierRepository courierRepository, CourierTracking courierTracking, Clock clock) {
         this.courierRepository = courierRepository;
+        this.courierTracking = courierTracking;
         this.clock = clock;
     }
 
@@ -50,8 +53,7 @@ public class CourierService {
 
     @Transactional
     public void moveOwnPosition(CurrentUser currentUser, GeoPosition position) {
-        Courier courier = courierOf(currentUser);
-        courierRepository.moveTo(courier.getId(), position.latitude(), position.longitude(), clock.instant());
+        courierTracking.report(courierOf(currentUser), position, null);
     }
 
     public Page<CourierDto> list(CurrentUser currentUser, CourierStatus status, Pageable pageable) {
