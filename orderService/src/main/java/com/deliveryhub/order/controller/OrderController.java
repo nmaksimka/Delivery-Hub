@@ -1,6 +1,7 @@
 package com.deliveryhub.order.controller;
 
-import com.deliveryhub.order.dto.CreateOrderRequest;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.dto.PlaceOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.UpdateOrderStatusRequest;
 import com.deliveryhub.order.security.CurrentUser;
@@ -24,9 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/orders")
 public class OrderController {
     private final OrderService orderService;
+    private final UserAddresses userAddresses;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, UserAddresses userAddresses) {
         this.orderService = orderService;
+        this.userAddresses = userAddresses;
     }
 
     @GetMapping("/{id}")
@@ -49,9 +52,10 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderDto createOrder(@Valid @RequestBody CreateOrderRequest createOrderRequest,
+    public OrderDto createOrder(@Valid @RequestBody PlaceOrderRequest request,
                                 @RequestHeader("X-User-Id") Long userId) {
-        return orderService.createOrder(createOrderRequest, userId);
+        return orderService.createOrder(request.toCreateRequest(), userId, null,
+                userAddresses.deliverableAddress(userId, request.addressId()));
     }
 
     @PostMapping("/{id}/cancel")

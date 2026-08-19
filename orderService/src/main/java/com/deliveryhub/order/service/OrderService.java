@@ -47,6 +47,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -115,18 +116,9 @@ public class OrderService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
-        return createOrder(createRequest, userId, null);
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
-        return createOrder(createRequest, userId, promoCode, null);
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode,
                                 UserAddressDto address) {
+        Objects.requireNonNull(address, "Delivery address is required");
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
@@ -154,11 +146,9 @@ public class OrderService {
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
-        if (address != null) {
-            DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
-            order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
-                    address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes());
-        }
+        DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
+        order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
+                address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes());
 
         Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
