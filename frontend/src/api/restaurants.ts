@@ -6,6 +6,11 @@ const optionalText = z
   .nullish()
   .transform((value) => value ?? null);
 
+const optionalCoordinate = z
+  .number()
+  .nullish()
+  .transform((value) => value ?? null);
+
 const restaurantSchema = z.object({
   id: z.number(),
   name: z.string(),
@@ -17,6 +22,8 @@ const restaurantSchema = z.object({
   openTime: optionalText,
   closeTime: optionalText,
   active: z.boolean(),
+  latitude: optionalCoordinate,
+  longitude: optionalCoordinate,
 });
 
 const optionalAmount = z.coerce
