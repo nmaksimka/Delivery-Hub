@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.restclient)
     implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.ratelimiter)
     implementation(libs.resilience4j.micrometer)
     implementation(libs.spring.boot.starter.kafka)
     implementation(libs.kafka.avro.serializer)
