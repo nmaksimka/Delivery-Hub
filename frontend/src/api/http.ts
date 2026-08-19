@@ -171,3 +171,12 @@ export async function request<T>(path: string, options: RequestOptions<T>): Prom
   }
   return parsed.data;
 }
+
+export async function renewAccessToken(): Promise<string | null> {
+  const session = sessionStore.get();
+  if (!session) {
+    return null;
+  }
+  const renewed = await refreshSession(session);
+  return renewed?.accessToken ?? null;
+}
