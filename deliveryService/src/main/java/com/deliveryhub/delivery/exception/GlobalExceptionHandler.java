@@ -36,6 +36,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(CourierUnavailableException.class)
+    public ProblemDetail handleCourierUnavailable(CourierUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("code", "COURIER_BUSY");
+        return problem;
+    }
+
     @ExceptionHandler(OutOfDeliveryZoneException.class)
     public ProblemDetail handleOutOfZone(OutOfDeliveryZoneException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());

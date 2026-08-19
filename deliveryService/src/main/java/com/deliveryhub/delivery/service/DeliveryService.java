@@ -9,7 +9,9 @@ import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Courier;
+import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.CourierUnavailableException;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.exception.OrderAlreadyCancelledException;
@@ -136,6 +138,7 @@ public class DeliveryService {
             throw new OrderAlreadyCancelledException(request.orderId());
         }
 
+        occupyCourier(request.courierId(), clock.instant());
         Delivery delivery;
         try {
             delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(
@@ -145,7 +148,6 @@ public class DeliveryService {
             throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
-        occupyCourier(delivery.getCourierId(), delivery.getCreatedAt());
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
         return deliveryMapper.toDto(delivery);
@@ -158,9 +160,9 @@ public class DeliveryService {
         Instant now = clock.instant();
         if (request.courierId() != null && !request.courierId().equals(delivery.getCourierId())) {
             Long previousCourierId = delivery.getCourierId();
+            occupyCourier(request.courierId(), now);
             delivery.assignCourier(request.courierId(), now);
             releaseCourier(previousCourierId, now);
-            occupyCourier(request.courierId(), now);
         }
         if (request.status() != null && delivery.changeStatus(request.status(), now)) {
             log.info("Delivery {} status updated to {}", id, request.status());
@@ -216,9 +218,15 @@ public class DeliveryService {
     }
 
     private void occupyCourier(Long courierId, Instant now) {
-        if (courierId != null) {
-            courierRepository.findById(courierId).ifPresent(courier -> courier.occupy(now));
+        if (courierId == null) {
+            return;
         }
+        Courier courier = courierRepository.lockById(courierId)
+                .orElseThrow(() -> new EntityNotFoundException("Courier with ID: " + courierId + " was not found"));
+        if (courier.getStatus() != CourierStatus.AVAILABLE) {
+            throw new CourierUnavailableException(courierId, courier.getStatus());
+        }
+        courier.occupy(now);
     }
 
     private void releaseCourier(Long courierId, Instant now) {

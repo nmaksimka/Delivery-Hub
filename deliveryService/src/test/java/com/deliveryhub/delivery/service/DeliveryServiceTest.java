@@ -10,6 +10,7 @@ import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.CourierUnavailableException;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
@@ -214,6 +215,8 @@ class DeliveryServiceTest {
             Delivery delivery = existingDelivery();
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
 
+            when(courierRepository.lockById(55L)).thenReturn(Optional.of(availableCourier()));
+
             deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 55L));
 
             assertThat(delivery.getCourierId()).isEqualTo(55L);
@@ -258,7 +261,7 @@ class DeliveryServiceTest {
             next.goOnline(NOW);
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
             when(courierRepository.findById(9001L)).thenReturn(Optional.of(previous));
-            when(courierRepository.findById(9002L)).thenReturn(Optional.of(next));
+            when(courierRepository.lockById(9002L)).thenReturn(Optional.of(next));
 
             deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 9002L));
 
@@ -272,6 +275,8 @@ class DeliveryServiceTest {
             Delivery delivery = existingDelivery();
             when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
             when(deliveryMapper.toDto(delivery)).thenReturn(dto());
+
+            when(courierRepository.lockById(55L)).thenReturn(Optional.of(availableCourier()));
 
             deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, 55L));
 
@@ -331,6 +336,43 @@ class DeliveryServiceTest {
                     new CreateDeliveryRequest(ORDER_ID, null, null, null)))
                     .isInstanceOf(DeliveryAlreadyExistsException.class);
             verifyNoInteractions(outbox);
+        }
+    }
+
+    @Nested
+    @DisplayName("назначение курьера")
+    class CourierAssignment {
+
+        @Test
+        @DisplayName("занятого курьера нельзя назначить второй раз")
+        void rejectsBusyCourier() {
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(existingDelivery()));
+            when(courierRepository.lockById(9002L)).thenReturn(Optional.of(busyCourier()));
+
+            assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 9002L)))
+                    .isInstanceOf(CourierUnavailableException.class);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("курьер не на смене не назначается")
+        void rejectsOfflineCourier() {
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(existingDelivery()));
+            when(courierRepository.lockById(9002L))
+                    .thenReturn(Optional.of(Courier.register(null, "Ирина", "+79990000002", NOW)));
+
+            assertThatThrownBy(() -> deliveryService.updateDeliveryStatus(1L, new UpdateDeliveryStatusRequest(null, 9002L)))
+                    .isInstanceOf(CourierUnavailableException.class);
+        }
+
+        @Test
+        @DisplayName("несуществующий курьер даёт 404")
+        void rejectsUnknownCourier() {
+            when(deliveryRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(courierRepository.lockById(404L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.createDelivery(new CreateDeliveryRequest(ORDER_ID, 42L, 404L, null)))
+                    .isInstanceOf(EntityNotFoundException.class);
         }
     }
 
@@ -401,6 +443,12 @@ class DeliveryServiceTest {
         Delivery delivery = Delivery.forOrder(ORDER_ID, 42L, courierId, null, NOW);
         ReflectionTestUtils.setField(delivery, "id", 1L);
         return delivery;
+    }
+
+    private static Courier availableCourier() {
+        Courier courier = Courier.register(null, "Ирина", "+79990000002", NOW);
+        courier.goOnline(NOW);
+        return courier;
     }
 
     private static Courier busyCourier() {

@@ -2,9 +2,11 @@ package com.deliveryhub.delivery.repository;
 
 import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.CourierStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -14,6 +16,10 @@ import java.util.Optional;
 public interface CourierRepository extends JpaRepository<Courier, Long> {
 
     Optional<Courier> findByUserId(Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Courier c where c.id = :id")
+    Optional<Courier> lockById(Long id);
 
     Page<Courier> findByStatus(CourierStatus status, Pageable pageable);
 
