@@ -57,6 +57,9 @@ public class Order {
     @Embedded
     private DeliveryDestination destination;
 
+    @Embedded
+    private DeliveryFeeBreakdown feeBreakdown;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "cancellation_reason", length = 32)
     private CancellationReason cancellationReason;
@@ -127,8 +130,10 @@ public class Order {
         totalAmount = totalAmount.subtract(amount);
     }
 
-    public void deliverTo(DeliveryDestination destination, BigDecimal fee, int etaMinutes) {
+    public void deliverTo(DeliveryDestination destination, BigDecimal fee, int etaMinutes,
+                          DeliveryFeeBreakdown breakdown) {
         Objects.requireNonNull(destination, "destination");
+        Objects.requireNonNull(breakdown, "breakdown");
         Objects.requireNonNull(fee, "fee");
         if (status != OrderStatus.CREATED) {
             throw new IllegalStateException("Delivery can be set only for a new order, current status: " + status);
@@ -139,7 +144,11 @@ public class Order {
         if (fee.signum() < 0 || etaMinutes <= 0) {
             throw new IllegalArgumentException("Delivery fee must not be negative and ETA must be positive");
         }
+        if (breakdown.weatherSurcharge().compareTo(fee) > 0) {
+            throw new IllegalArgumentException("Weather surcharge must not exceed the delivery fee");
+        }
         this.destination = destination;
+        this.feeBreakdown = breakdown;
         this.deliveryFee = fee;
         this.etaMinutes = etaMinutes;
         this.totalAmount = totalAmount.add(fee);
@@ -304,6 +313,14 @@ public class Order {
 
     public DeliveryDestination getDestination() {
         return destination;
+    }
+
+    public DeliveryFeeBreakdown getFeeBreakdown() {
+        return feeBreakdown;
+    }
+
+    public BigDecimal getDeliveryBaseFee() {
+        return feeBreakdown == null ? deliveryFee : deliveryFee.subtract(feeBreakdown.weatherSurcharge());
     }
 
     public CancellationReason getCancellationReason() {

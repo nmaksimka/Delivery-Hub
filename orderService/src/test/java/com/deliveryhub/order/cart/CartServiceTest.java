@@ -204,7 +204,7 @@ class CartServiceTest {
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
-                BigDecimal.ZERO, null, null, null, null, List.of());
+                BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of());
         when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(created);
 
         OrderDto order = service.checkout(USER, ADDRESS_ID);
@@ -250,7 +250,7 @@ class CartServiceTest {
     void secondCheckoutOfSameCartFindsItEmpty() {
         cartWithTwoPizzas();
         when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
-                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, BigDecimal.ZERO, null, null, null, null, List.of()));
+                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of()));
 
         service.checkout(USER, ADDRESS_ID);
 
@@ -376,7 +376,7 @@ class CartServiceTest {
         cartWithTwoPizzas();
         stored = stored.withPromo("SPRING10");
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
-                "SPRING10", BigDecimal.ZERO, null, null, null, null, List.of());
+                "SPRING10", BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of());
         when(orderService.createOrder(any(), eq(USER), eq("SPRING10"), eq(ADDRESS))).thenReturn(created);
 
         assertThat(service.checkout(USER, ADDRESS_ID).promoCode()).isEqualTo("SPRING10");

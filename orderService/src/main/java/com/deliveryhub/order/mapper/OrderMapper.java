@@ -9,5 +9,10 @@ import org.mapstruct.Mapping;
 public interface OrderMapper {
 
     @Mapping(target = "deliveryAddress", source = "destination.line")
+    @Mapping(target = "deliveryLatitude", source = "destination.latitude")
+    @Mapping(target = "deliveryLongitude", source = "destination.longitude")
+    @Mapping(target = "weatherSurcharge", source = "feeBreakdown.weatherSurcharge")
+    @Mapping(target = "deliveryDistanceMeters", source = "feeBreakdown.distanceMeters")
+    @Mapping(target = "routeSource", source = "feeBreakdown.routeSource")
     OrderDto toDto(Order order);
 }

@@ -18,6 +18,7 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.CancellationReason;
 import com.deliveryhub.order.entity.DeliveryDestination;
+import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ErrorCode;
@@ -44,6 +45,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -148,12 +150,19 @@ public class OrderService {
         });
         DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
         order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
-                address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes());
+                address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes(),
+                new DeliveryFeeBreakdown(delivery.distanceMeters(), weatherSurcharge(delivery), delivery.routeSource()));
 
         Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
+    }
+
+    private static BigDecimal weatherSurcharge(DeliveryQuoteDto delivery) {
+        return delivery.weather() == null || delivery.weather().surcharge() == null
+                ? BigDecimal.ZERO
+                : delivery.weather().surcharge();
     }
 
     private static String closedMessage(RestaurantDto restaurant) {

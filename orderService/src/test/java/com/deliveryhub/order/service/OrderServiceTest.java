@@ -18,6 +18,7 @@ import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ErrorCode;
@@ -223,6 +224,8 @@ class OrderServiceTest {
             assertThat(saved.getTotalAmount()).isEqualByComparingTo("225.00");
             assertThat(saved.getDeliveryFee()).isEqualByComparingTo("190.00");
             assertThat(saved.getEtaMinutes()).isEqualTo(12);
+            assertThat(saved.getFeeBreakdown()).isEqualTo(new DeliveryFeeBreakdown(2793, new BigDecimal("49.00"), "OSRM"));
+            assertThat(saved.getDeliveryBaseFee()).isEqualByComparingTo("141.00");
             assertThat(saved.getDestination().line()).isEqualTo("Томск, Ленина, 12, кв. 4");
             assertThat(saved.getDestination().comment()).isEqualTo("домофон");
             ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
@@ -675,7 +678,7 @@ class OrderServiceTest {
 
     private static OrderDto dto() {
         return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, null, null, BigDecimal.TEN, BigDecimal.ZERO, null,
-                BigDecimal.ZERO, null, null, Instant.EPOCH, Instant.EPOCH, List.of());
+                BigDecimal.ZERO, null, null, null, null, null, null, null, null, Instant.EPOCH, Instant.EPOCH, List.of());
     }
 
     private static Order savedWithId(InvocationOnMock invocation) {
