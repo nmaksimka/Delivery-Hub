@@ -11,6 +11,7 @@ import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
+import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.exception.InvalidStatusTransitionException;
 import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
@@ -18,6 +19,7 @@ import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
+import com.deliveryhub.delivery.security.CurrentUser;
 import com.deliveryhub.delivery.tracking.TrackingUpdate;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
@@ -329,6 +331,62 @@ class DeliveryServiceTest {
                     new CreateDeliveryRequest(ORDER_ID, null, null, null)))
                     .isInstanceOf(DeliveryAlreadyExistsException.class);
             verifyNoInteractions(outbox);
+        }
+    }
+
+    @Nested
+    @DisplayName("доступ к изменению доставки")
+    class Access {
+
+        @Test
+        @DisplayName("курьер не может закрыть чужую доставку")
+        void courierCannotChangeForeignDelivery() {
+            Courier courier = Courier.register(501L, "Алексей", "+79990000001", NOW);
+            ReflectionTestUtils.setField(courier, "id", 7L);
+            when(courierRepository.findByUserId(501L)).thenReturn(Optional.of(courier));
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(deliveryWithCourier(8L)));
+
+            assertThatThrownBy(() -> deliveryService.updateDeliveryStatusAs(1L,
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null), new CurrentUser(501L, "COURIER")))
+                    .isInstanceOf(ForbiddenException.class);
+            verifyNoInteractions(outbox);
+        }
+
+        @Test
+        @DisplayName("курьер меняет статус своей доставки")
+        void courierChangesOwnDelivery() {
+            Courier courier = Courier.register(501L, "Алексей", "+79990000001", NOW);
+            ReflectionTestUtils.setField(courier, "id", 7L);
+            Delivery delivery = deliveryWithCourier(7L);
+            when(courierRepository.findByUserId(501L)).thenReturn(Optional.of(courier));
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(delivery));
+
+            deliveryService.updateDeliveryStatusAs(1L,
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.PICKED_UP, null), new CurrentUser(501L, "COURIER"));
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+        }
+
+        @Test
+        @DisplayName("курьер не может переназначить доставку")
+        void courierCannotReassign() {
+            assertThatThrownBy(() -> deliveryService.updateDeliveryStatusAs(1L,
+                    new UpdateDeliveryStatusRequest(null, 9L), new CurrentUser(501L, "COURIER")))
+                    .isInstanceOf(ForbiddenException.class);
+        }
+
+        @Test
+        @DisplayName("покупатель не может менять статус и создавать доставку")
+        void customerIsRejected() {
+            CurrentUser customer = new CurrentUser(42L, "USER");
+
+            assertThatThrownBy(() -> deliveryService.updateDeliveryStatusAs(1L,
+                    new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERED, null), customer))
+                    .isInstanceOf(ForbiddenException.class);
+            assertThatThrownBy(() -> deliveryService.createDeliveryAs(
+                    new CreateDeliveryRequest(ORDER_ID, 42L, null, null), customer))
+                    .isInstanceOf(ForbiddenException.class);
+            verifyNoInteractions(deliveryRepository);
         }
     }
 

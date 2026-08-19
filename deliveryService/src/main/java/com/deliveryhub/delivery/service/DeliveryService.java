@@ -8,6 +8,7 @@ import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
+import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.Delivery;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
@@ -93,6 +94,37 @@ public class DeliveryService {
             throw new ForbiddenException("Only couriers and administrators can list deliveries");
         }
         return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
+    }
+
+    @Transactional
+    public DeliveryDto createDeliveryAs(CreateDeliveryRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            throw new ForbiddenException("Only administrators can create deliveries manually");
+        }
+        return createDelivery(request);
+    }
+
+    @Transactional
+    public DeliveryDto updateDeliveryStatusAs(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            requireOwnDeliveryOfCourier(id, request, currentUser);
+        }
+        return updateDeliveryStatus(id, request);
+    }
+
+    private void requireOwnDeliveryOfCourier(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isCourier()) {
+            throw new ForbiddenException("Only couriers and administrators can change delivery status");
+        }
+        if (request.courierId() != null) {
+            throw new ForbiddenException("Only administrators can reassign deliveries");
+        }
+        Long courierId = courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .orElseThrow(() -> new ForbiddenException("Current user is not registered as a courier"));
+        if (!courierId.equals(findByIdOrThrow(id).getCourierId())) {
+            throw new ForbiddenException("Delivery " + id + " is assigned to another courier");
+        }
     }
 
     @Transactional
