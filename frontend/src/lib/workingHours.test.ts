@@ -14,6 +14,8 @@ function restaurant(overrides: Partial<Restaurant>): Restaurant {
     openTime: '10:00:00',
     closeTime: '22:00:00',
     active: true,
+    latitude: null,
+    longitude: null,
     ...overrides,
   };
 }
