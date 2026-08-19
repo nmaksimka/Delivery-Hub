@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -78,9 +79,13 @@ public class Geocoder {
         try {
             return CircuitBreaker.decorateSupplier(circuitBreaker, RateLimiter.decorateSupplier(rateLimiter, call)).get();
         } catch (RestClientException | CallNotPermittedException | RequestNotPermitted e) {
-            log.warn("Nominatim is unavailable: {}", e.getMessage());
-            throw new GeocoderUnavailableException("Geocoding service is unavailable", e);
+            log.warn("Nominatim is unavailable: {} status={}", e.getClass().getSimpleName(), statusOf(e));
+            throw new GeocoderUnavailableException("Geocoding service is unavailable", null);
         }
+    }
+
+    private static String statusOf(RuntimeException e) {
+        return e instanceof RestClientResponseException response ? String.valueOf(response.getStatusCode().value()) : "-";
     }
 
     private static Optional<GeoPoint> firstPlace(List<NominatimPlace> places) {
