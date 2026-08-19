@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -48,9 +49,14 @@ public class InternalTokenFilter extends OncePerRequestFilter {
     }
 
     private static boolean requiresToken(HttpServletRequest request) {
-        return request.getRequestURI().startsWith(INTERNAL_PATH)
+        return isInternalPath(request)
                 || Collections.list(request.getHeaderNames()).stream()
                 .anyMatch(name -> name.toLowerCase(Locale.ROOT).startsWith(IDENTITY_HEADER_PREFIX));
+    }
+
+    private static boolean isInternalPath(HttpServletRequest request) {
+        String path = UrlPathHelper.defaultInstance.getPathWithinApplication(request).replaceAll("/{2,}", "/");
+        return path.startsWith(INTERNAL_PATH) || path.equals(INTERNAL_PATH.substring(0, INTERNAL_PATH.length() - 1));
     }
 
     private boolean hasValidToken(HttpServletRequest request) {
