@@ -86,6 +86,14 @@ class DeliveryQuotesTest {
     }
 
     @Test
+    void rejectsRouteMuchLongerThanZoneRadius() {
+        when(routePlanner.route(RESTAURANT, CUSTOMER)).thenReturn(new Route(15_001, 1800, Route.RouteSource.OSRM));
+
+        assertThatThrownBy(() -> quotes.quote(new QuoteRequest(7L, RESTAURANT, CUSTOMER)))
+                .isInstanceOf(OutOfDeliveryZoneException.class);
+    }
+
+    @Test
     void usesDefaultRadiusAroundRestaurantWhenZoneIsNotStoredYet() {
         when(straightLine.meters(RESTAURANT, CUSTOMER)).thenReturn(5001.0);
 

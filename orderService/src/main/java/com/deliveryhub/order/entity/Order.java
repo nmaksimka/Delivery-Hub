@@ -48,7 +48,7 @@ public class Order {
     @Column(name = "promo_code", length = 64)
     private String promoCode;
 
-    @Column(name = "delivery_fee", nullable = false, precision = 10, scale = 2)
+    @Column(name = "delivery_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal deliveryFee;
 
     @Column(name = "eta_minutes")
