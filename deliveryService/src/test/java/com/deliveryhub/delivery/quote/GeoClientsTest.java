@@ -119,6 +119,16 @@ class GeoClientsTest {
     }
 
     @Test
+    void unreadableGeometryFallsBackToStraightPath() {
+        SERVER.stubFor(get(urlPathMatching("/route/.*")).willReturn(okJson(
+                "{\"code\": \"Ok\", \"routes\": [{\"distance\": 10, \"duration\": 5,"
+                        + " \"geometry\": {\"coordinates\": [[84.9], [84.97]]}}]}")));
+        when(straightLine.meters(FROM, TO)).thenReturn(1000.0);
+
+        assertThat(routePlanner.path(FROM, TO).source()).isEqualTo(Route.RouteSource.STRAIGHT_LINE);
+    }
+
+    @Test
     void fallsBackToStraightLineWhenOsrmFails() {
         SERVER.stubFor(get(urlPathMatching("/route/.*")).willReturn(aResponse().withStatus(502)));
         when(straightLine.meters(FROM, TO)).thenReturn(2000.0);

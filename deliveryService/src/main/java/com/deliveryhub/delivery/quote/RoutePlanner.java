@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -78,10 +79,7 @@ public class RoutePlanner {
             if (response != null && "Ok".equals(response.code()) && response.routes() != null
                     && !response.routes().isEmpty() && response.routes().getFirst().hasGeometry()) {
                 OsrmRoute best = response.routes().getFirst();
-                RoutePath path = new RoutePath(Polyline.of(best.geometry().positions()),
-                        (int) Math.round(best.duration()), Route.RouteSource.OSRM);
-                remember(paths, key, path);
-                return path;
+                return rememberPath(key, readPath(best)).orElseGet(() -> straightPath(from, to));
             }
             log.info("OSRM returned no geometry, courier goes by straight line: {}",
                     response == null ? null : response.code());
@@ -112,6 +110,21 @@ public class RoutePlanner {
             cache.clear();
         }
         cache.put(key, new Cached<>(value, clock.instant().plus(CACHE_TTL)));
+    }
+
+    private Optional<RoutePath> rememberPath(String key, Optional<RoutePath> path) {
+        path.ifPresent(value -> remember(paths, key, value));
+        return path;
+    }
+
+    private static Optional<RoutePath> readPath(OsrmRoute route) {
+        try {
+            return Optional.of(new RoutePath(Polyline.of(route.geometry().positions()),
+                    (int) Math.round(route.duration()), Route.RouteSource.OSRM));
+        } catch (RuntimeException e) {
+            log.warn("OSRM geometry is unreadable, courier goes by straight line: {}", e.getClass().getSimpleName());
+            return Optional.empty();
+        }
     }
 
     private static String key(GeoPosition from, GeoPosition to) {
