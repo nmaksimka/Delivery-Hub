@@ -21,6 +21,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +46,7 @@ public class CourierSimulator {
     private final Clock clock;
     private final Map<Long, Trip> trips = new HashMap<>();
     private final Set<Long> stranded = new HashSet<>();
+    private Instant previousTick;
 
     public CourierSimulator(DeliveryRepository deliveryRepository, CourierRepository courierRepository,
                             DeliveryService deliveryService, CourierTracking courierTracking, DeliveryRoutes routes,
@@ -60,12 +63,13 @@ public class CourierSimulator {
     @Scheduled(fixedDelayString = "${app.simulator.tick}", scheduler = SchedulingConfig.SIMULATOR_SCHEDULER)
     public void tick() {
         pickUpConfirmedOrders();
+        Duration elapsed = elapsedSincePreviousTick();
         List<Delivery> onTheWay = deliveryRepository.findSimulatedOnTheWay();
         Set<Long> active = new HashSet<>();
         for (Delivery delivery : onTheWay) {
             active.add(delivery.getId());
             try {
-                drive(delivery);
+                drive(delivery, elapsed);
             } catch (RuntimeException e) {
                 log.warn("Simulated courier of delivery {} skipped a tick: {}", delivery.getId(), e.getMessage());
             }
@@ -87,7 +91,19 @@ public class CourierSimulator {
         }
     }
 
-    private void drive(Delivery delivery) {
+    private Duration elapsedSincePreviousTick() {
+        Instant now = clock.instant();
+        Instant previous = previousTick;
+        previousTick = now;
+        if (previous == null || !now.isAfter(previous)) {
+            return properties.tick();
+        }
+        Duration elapsed = Duration.between(previous, now);
+        Duration longest = properties.tick().multipliedBy(3);
+        return elapsed.compareTo(longest) > 0 ? longest : elapsed;
+    }
+
+    private void drive(Delivery delivery, Duration elapsed) {
         Optional<Courier> courier = courierRepository.findById(delivery.getCourierId());
         if (courier.isEmpty()) {
             return;
@@ -104,7 +120,7 @@ public class CourierSimulator {
             deliveryService.updateDeliveryStatus(delivery.getId(),
                     new UpdateDeliveryStatusRequest(DeliveryStatus.IN_TRANSIT, null));
         }
-        Polyline.PathPoint point = trip.advance(properties.tick());
+        Polyline.PathPoint point = trip.advance(elapsed);
         courierTracking.report(courier.get(), point.position(), point.heading());
         if (trip.arrived()) {
             deliveryService.updateDeliveryStatus(delivery.getId(),
