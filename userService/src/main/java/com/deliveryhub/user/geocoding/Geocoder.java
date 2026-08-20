@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,10 +22,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 public class Geocoder {
 
     private static final Logger log = LoggerFactory.getLogger(Geocoder.class);
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final ParameterizedTypeReference<List<NominatimPlace>> PLACES = new ParameterizedTypeReference<>() {
     };
 
@@ -51,7 +54,7 @@ public class Geocoder {
     }
 
     public Optional<GeoPoint> locate(String street, String house) {
-        String streetLine = house.strip() + " " + street.strip();
+        String streetLine = WHITESPACE.matcher(house.strip() + " " + street.strip()).replaceAll(" ");
         String key = streetLine.toLowerCase(Locale.ROOT);
         Instant now = clock.instant();
         CachedLookup cached = cached(key, now);
@@ -59,7 +62,8 @@ public class Geocoder {
             return cached.point();
         }
         Optional<GeoPoint> point = firstPlace(search(streetLine));
-        remember(key, new CachedLookup(point, now.plus(properties.cacheTtl())));
+        Duration ttl = point.isPresent() ? properties.cacheTtl() : properties.notFoundCacheTtl();
+        remember(key, new CachedLookup(point, now.plus(ttl)));
         return point;
     }
 

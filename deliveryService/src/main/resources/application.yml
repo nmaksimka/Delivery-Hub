@@ -51,7 +51,7 @@ app:
   routing:
     base-url: ${OSRM_BASE_URL:https://router.project-osrm.org}
     profile: car
-    user-agent: DeliveryHub/1.0 (portfolio demo)
+    user-agent: DeliveryHub/1.0 (+https://github.com/nmaksimka/Delivery-Hub)
     connect-timeout: 1s
     read-timeout: 2s
     fallback-detour-factor: 1.4
