@@ -48,6 +48,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, ex.getMessage(), ErrorCode.ADDRESS_LIMIT_REACHED);
     }
 
+    @ExceptionHandler(GeocodingQuotaExceededException.class)
+    public ProblemDetail handleGeocodingQuota(GeocodingQuotaExceededException ex) {
+        return problem(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), ErrorCode.GEOCODING_QUOTA_EXCEEDED);
+    }
+
     @ExceptionHandler(AdminOnlyException.class)
     public ProblemDetail handleAdminOnly(AdminOnlyException ex) {
         return problem(HttpStatus.FORBIDDEN, ex.getMessage(), ErrorCode.FORBIDDEN);

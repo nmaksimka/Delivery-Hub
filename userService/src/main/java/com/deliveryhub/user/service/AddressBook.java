@@ -11,6 +11,7 @@ import com.deliveryhub.user.exception.AddressNotOnMapException;
 import com.deliveryhub.user.exception.UserNotFoundException;
 import com.deliveryhub.user.geocoding.Geocoder;
 import com.deliveryhub.user.geocoding.GeocoderUnavailableException;
+import com.deliveryhub.user.geocoding.GeocodingQuota;
 import com.deliveryhub.user.mapper.AddressMapper;
 import com.deliveryhub.user.repository.AddressRepository;
 import com.deliveryhub.user.repository.UserRepository;
@@ -32,15 +33,17 @@ public class AddressBook {
     private final UserRepository users;
     private final AddressMapper mapper;
     private final Geocoder geocoder;
+    private final GeocodingQuota quota;
     private final TransactionOperations transactions;
     private final Clock clock;
 
     public AddressBook(AddressRepository addresses, UserRepository users, AddressMapper mapper, Geocoder geocoder,
-                       TransactionOperations transactions, Clock clock) {
+                       GeocodingQuota quota, TransactionOperations transactions, Clock clock) {
         this.addresses = addresses;
         this.users = users;
         this.mapper = mapper;
         this.geocoder = geocoder;
+        this.quota = quota;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -57,7 +60,10 @@ public class AddressBook {
 
     public AddressDto add(Long userId, AddressRequest request) {
         AddressDetails details = mapper.toDetails(request);
-        Optional<GeoPoint> point = locate(details);
+        if (addresses.countByUserId(userId) >= MAX_ADDRESSES) {
+            throw new AddressLimitReachedException(MAX_ADDRESSES);
+        }
+        Optional<GeoPoint> point = locate(userId, details);
         return transactions.execute(status -> {
             lockUser(userId);
             long existing = addresses.countByUserId(userId);
@@ -75,7 +81,7 @@ public class AddressBook {
         Address current = owned(userId, addressId);
         boolean alreadyLocated = current.isGeocoded()
                 && current.mapQuery().equals(Address.mapQueryOf(details.street(), details.house()));
-        Consumer<Address> placeOnMap = alreadyLocated ? address -> { } : placement(locate(details));
+        Consumer<Address> placeOnMap = alreadyLocated ? address -> { } : placement(locate(userId, details));
         return transactions.execute(status -> {
             Address address = owned(userId, addressId);
             address.change(details, clock.instant());
@@ -111,7 +117,8 @@ public class AddressBook {
         return mapper.toDto(address);
     }
 
-    private Optional<GeoPoint> locate(AddressDetails details) {
+    private Optional<GeoPoint> locate(Long userId, AddressDetails details) {
+        quota.consume(userId);
         try {
             return Optional.of(geocoder.locate(details.street(), details.house())
                     .orElseThrow(() -> new AddressNotOnMapException(details.street(), details.house())));

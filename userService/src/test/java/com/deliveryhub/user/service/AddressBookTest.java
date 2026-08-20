@@ -6,9 +6,11 @@ import com.deliveryhub.user.entity.AddressDetails;
 import com.deliveryhub.user.entity.GeoPoint;
 import com.deliveryhub.user.entity.GeoStatus;
 import com.deliveryhub.user.exception.AddressLimitReachedException;
+import com.deliveryhub.user.exception.GeocodingQuotaExceededException;
 import com.deliveryhub.user.exception.AddressNotFoundException;
 import com.deliveryhub.user.exception.AddressNotOnMapException;
 import com.deliveryhub.user.geocoding.Geocoder;
+import com.deliveryhub.user.geocoding.GeocodingQuota;
 import com.deliveryhub.user.geocoding.GeocoderUnavailableException;
 import com.deliveryhub.user.mapper.AddressMapperImpl;
 import com.deliveryhub.user.repository.AddressRepository;
@@ -58,7 +60,7 @@ class AddressBookTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        addressBook = new AddressBook(addresses, users, new AddressMapperImpl(), geocoder,
+        addressBook = new AddressBook(addresses, users, new AddressMapperImpl(), geocoder, new GeocodingQuota(clock),
                 TransactionOperations.withoutTransaction(), clock);
         when(users.lockById(USER_ID)).thenReturn(Optional.of(USER_ID));
         when(geocoder.locate(anyString(), anyString())).thenReturn(Optional.of(LENINA));
@@ -86,6 +88,18 @@ class AddressBookTest {
 
         assertThatThrownBy(() -> addressBook.add(USER_ID, request())).isInstanceOf(AddressLimitReachedException.class);
         verify(addresses, never()).save(any());
+        verify(geocoder, never()).locate(anyString(), anyString());
+    }
+
+    @Test
+    void limitsAddressLookupsPerUser() {
+        when(addresses.save(any(Address.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        for (int i = 0; i < GeocodingQuota.LOOKUPS_PER_HOUR; i++) {
+            addressBook.add(USER_ID, request());
+        }
+
+        assertThatThrownBy(() -> addressBook.add(USER_ID, request()))
+                .isInstanceOf(GeocodingQuotaExceededException.class);
     }
 
     @Test
