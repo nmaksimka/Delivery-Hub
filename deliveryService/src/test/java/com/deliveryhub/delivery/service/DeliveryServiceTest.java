@@ -410,6 +410,22 @@ class DeliveryServiceTest {
         }
 
         @Test
+        @DisplayName("адрес клиента видит только курьер этой доставки")
+        void addressIsHiddenFromOtherCouriers() {
+            Courier courier = Courier.register(501L, "Алексей", "+79990000001", NOW);
+            ReflectionTestUtils.setField(courier, "id", 7L);
+            when(courierRepository.findByUserId(501L)).thenReturn(Optional.of(courier));
+            Delivery own = deliveryWithCourier(7L);
+            Delivery foreign = deliveryWithCourier(8L);
+            when(deliveryMapper.toDto(any(Delivery.class))).thenReturn(dto());
+            when(deliveryRepository.findById(1L)).thenReturn(Optional.of(own), Optional.of(foreign));
+            CurrentUser courierUser = new CurrentUser(501L, "COURIER");
+
+            assertThat(deliveryService.getDeliveryById(1L, courierUser).address()).isEqualTo("Томск, Ленина, 12");
+            assertThat(deliveryService.getDeliveryById(1L, courierUser).address()).isNull();
+        }
+
+        @Test
         @DisplayName("курьер не может переназначить доставку")
         void courierCannotReassign() {
             assertThatThrownBy(() -> deliveryService.updateDeliveryStatusAs(1L,
@@ -464,6 +480,7 @@ class DeliveryServiceTest {
     }
 
     private static DeliveryDto dto() {
-        return new DeliveryDto(1L, ORDER_ID, 42L, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH);
+        return new DeliveryDto(1L, ORDER_ID, 42L, null, DeliveryStatus.ASSIGNED, null, Instant.EPOCH, Instant.EPOCH,
+                "Томск, Ленина, 12", "домофон");
     }
 }

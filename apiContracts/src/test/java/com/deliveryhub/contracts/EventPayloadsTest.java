@@ -102,7 +102,7 @@ class EventPayloadsTest {
     @Test
     void sagaEventsSurviveRoundTrip() {
         PaymentHeldEvent held = new PaymentHeldEvent(UUID.randomUUID(), 15L, 42L, new BigDecimal("256.00"), "demo", NOW,
-                3L, new GeoPoint(56.4884, 84.948), new GeoPoint(56.4697, 84.9483));
+                3L, new GeoPoint(56.4884, 84.948), new GeoPoint(56.4697, 84.9483), null, null);
         CourierAssignedEvent assigned = new CourierAssignedEvent(UUID.randomUUID(), 7L, 15L, 9001L, NOW, 1L);
         DeliveryRejectedEvent rejected = new DeliveryRejectedEvent(UUID.randomUUID(), 15L, 42L, "NO_FREE_COURIER", NOW);
 

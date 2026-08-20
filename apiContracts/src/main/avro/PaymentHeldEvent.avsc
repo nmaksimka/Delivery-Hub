@@ -11,6 +11,8 @@
     {"name": "heldAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
     {"name": "restaurantId", "type": ["null", "long"], "default": null},
     {"name": "restaurantLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null},
-    {"name": "deliveryLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null}
+    {"name": "deliveryLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null},
+    {"name": "deliveryAddress", "type": ["null", "string"], "default": null},
+    {"name": "deliveryComment", "type": ["null", "string"], "default": null}
   ]
 }

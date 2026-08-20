@@ -213,6 +213,6 @@ class OrderSagaIT {
     }
 
     private static PaymentHeldEvent held(UUID eventId, long orderId) {
-        return new PaymentHeldEvent(eventId, orderId, USER_ID, AMOUNT, "demo", Instant.now(), null, null, null);
+        return new PaymentHeldEvent(eventId, orderId, USER_ID, AMOUNT, "demo", Instant.now(), null, null, null, null, null);
     }
 }

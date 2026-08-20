@@ -283,6 +283,8 @@ public class OrderService {
                         ? null
                         : new GeoPoint(order.getDestination().latitude().doubleValue(),
                         order.getDestination().longitude().doubleValue()))
+                .setDeliveryAddress(order.getDestination() == null ? null : order.getDestination().line())
+                .setDeliveryComment(order.getDestination() == null ? null : order.getDestination().comment())
                 .build();
     }
 }

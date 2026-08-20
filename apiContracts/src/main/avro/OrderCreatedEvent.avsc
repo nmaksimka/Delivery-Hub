@@ -12,6 +12,8 @@
     {"name": "items", "type": {"type": "array", "items": "com.deliveryhub.contracts.events.OrderItemPayload"}},
     {"name": "sequence", "type": "long", "default": 0},
     {"name": "restaurantLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null},
-    {"name": "deliveryLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null}
+    {"name": "deliveryLocation", "type": ["null", "com.deliveryhub.contracts.events.GeoPoint"], "default": null},
+    {"name": "deliveryAddress", "type": ["null", "string"], "default": null},
+    {"name": "deliveryComment", "type": ["null", "string"], "default": null}
   ]
 }

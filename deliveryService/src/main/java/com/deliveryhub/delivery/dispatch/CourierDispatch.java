@@ -69,6 +69,7 @@ public class CourierDispatch {
         Long courierId = courier.get().getId();
         Delivery delivery = Delivery.forOrder(event.getOrderId(), event.getUserId(), courierId, null, now);
         delivery.routeBetween(position(event.getRestaurantLocation()), position(event.getDeliveryLocation()));
+        delivery.deliverTo(event.getDeliveryAddress(), event.getDeliveryComment());
         delivery = deliveryRepository.save(delivery);
         UUID eventId = UUID.randomUUID();
         outbox.append("Delivery", delivery.getId(), Topics.COURIER_ASSIGNED, eventId, new CourierAssignedEvent(

@@ -81,21 +81,34 @@ public class DeliveryService {
     }
 
     public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
-        return deliveryMapper.toDto(visibleTo(currentUser, findByIdOrThrow(id)));
+        return toDtoFor(currentUser, visibleTo(currentUser, findByIdOrThrow(id)));
     }
 
     public DeliveryDto getDeliveryByOrderId(Long orderId, CurrentUser currentUser) {
         Delivery delivery = deliveryRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Delivery for order ID: " + orderId + " was not found"));
-        return deliveryMapper.toDto(visibleTo(currentUser, delivery));
+        return toDtoFor(currentUser, visibleTo(currentUser, delivery));
     }
 
     public Page<DeliveryDto> getAllDeliveries(Pageable pageable, CurrentUser currentUser) {
         if (!currentUser.seesEveryDelivery()) {
             throw new ForbiddenException("Only couriers and administrators can list deliveries");
         }
-        return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
+        return deliveryRepository.findAll(pageable).map(delivery -> toDtoFor(currentUser, delivery));
+    }
+
+    private DeliveryDto toDtoFor(CurrentUser currentUser, Delivery delivery) {
+        DeliveryDto dto = deliveryMapper.toDto(delivery);
+        if (dto == null || currentUser.isAdmin() || delivery.belongsTo(currentUser.id())) {
+            return dto;
+        }
+        boolean ownActiveDelivery = currentUser.isCourier() && !delivery.isFinished()
+                && courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .filter(delivery::isAssignedTo)
+                .isPresent();
+        return ownActiveDelivery ? dto : dto.withoutAddress();
     }
 
     @Transactional

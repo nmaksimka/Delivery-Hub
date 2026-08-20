@@ -176,7 +176,7 @@ class CourierDispatchTest {
 
     private static PaymentHeldEvent paymentHeld(Long restaurantId, GeoPoint location) {
         return new PaymentHeldEvent(UUID.randomUUID(), ORDER_ID, 42L, new BigDecimal("34.00"), "demo", NOW,
-                restaurantId, location, null);
+                restaurantId, location, null, null, null);
     }
 
     private static Courier availableCourier(long id) {

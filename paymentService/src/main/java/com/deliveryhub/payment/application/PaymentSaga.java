@@ -72,7 +72,8 @@ public class PaymentSaga {
                 UUID eventId = UUID.randomUUID();
                 publish(orderId, Topics.PAYMENT_HELD, eventId, new PaymentHeldEvent(eventId, orderId,
                         payment.getUserId(), payment.getAmount(), payment.getProvider(), clock.instant(),
-                        order.getRestaurantId(), order.getRestaurantLocation(), order.getDeliveryLocation()));
+                        order.getRestaurantId(), order.getRestaurantLocation(), order.getDeliveryLocation(),
+                        order.getDeliveryAddress(), order.getDeliveryComment()));
             }
             case REJECTED -> publishRejected(orderId, payment.getUserId(), payment.getAmount(),
                     payment.getDeclineReason().name());
