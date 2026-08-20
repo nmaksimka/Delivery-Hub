@@ -103,4 +103,12 @@ class GeocoderTest {
 
         assertThatThrownBy(() -> geocoder.locate("Ленина", "1")).isInstanceOf(GeocoderUnavailableException.class);
     }
+
+    @Test
+    void unreadableCoordinatesMeanAddressIsNotOnMap() {
+        NOMINATIM.stubFor(get(urlPathEqualTo("/search"))
+                .willReturn(okJson("[{\"lat\": \"999\", \"lon\": \"84.95\"}]")));
+
+        assertThat(geocoder.locate("Кривая", "1")).isEmpty();
+    }
 }

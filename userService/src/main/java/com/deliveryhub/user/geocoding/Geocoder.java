@@ -95,8 +95,9 @@ public class Geocoder {
         NominatimPlace place = places.getFirst();
         try {
             return Optional.of(new GeoPoint(new BigDecimal(place.lat()), new BigDecimal(place.lon())));
-        } catch (NumberFormatException | NullPointerException e) {
-            throw new GeocoderUnavailableException("Nominatim answered with unreadable coordinates", e);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            log.warn("Nominatim answered with unreadable coordinates: {}", e.getClass().getSimpleName());
+            return Optional.empty();
         }
     }
 
