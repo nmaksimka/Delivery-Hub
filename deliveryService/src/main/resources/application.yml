@@ -46,6 +46,8 @@ spring:
 
 app:
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  tracking:
+    allowed-origin-patterns: ${TRACKING_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   dispatch:
     zone-radius-meters: ${DISPATCH_ZONE_RADIUS_METERS:5000}
   routing:
