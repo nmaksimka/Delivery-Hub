@@ -55,7 +55,7 @@ public class OrderController {
     public OrderDto createOrder(@Valid @RequestBody PlaceOrderRequest request,
                                 @RequestHeader("X-User-Id") Long userId) {
         return orderService.createOrder(request.toCreateRequest(), userId, null,
-                userAddresses.deliverableAddress(userId, request.addressId()));
+                userAddresses.deliverableAddress(userId, request.addressId()), null);
     }
 
     @PostMapping("/{id}/cancel")

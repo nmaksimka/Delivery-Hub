@@ -21,6 +21,7 @@ import com.deliveryhub.order.entity.DeliveryDestination;
 import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.DeliveryFeeChangedException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
 import com.deliveryhub.order.exception.ItemNotFoundException;
@@ -119,7 +120,7 @@ public class OrderService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode,
-                                UserAddressDto address) {
+                                UserAddressDto address, BigDecimal expectedDeliveryFee) {
         Objects.requireNonNull(address, "Delivery address is required");
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
@@ -149,6 +150,9 @@ public class OrderService {
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
         DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
+        if (expectedDeliveryFee != null && delivery.deliveryFee().compareTo(expectedDeliveryFee) > 0) {
+            throw new DeliveryFeeChangedException(expectedDeliveryFee, delivery.deliveryFee());
+        }
         order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
                 address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes(),
                 new DeliveryFeeBreakdown(delivery.distanceMeters(), weatherSurcharge(delivery), delivery.routeSource()));

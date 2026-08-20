@@ -83,6 +83,6 @@ public class CartController {
         if (idempotencyKey == null) {
             throw new MissingIdempotencyKeyException("Checkout requires the Idempotency-Key header");
         }
-        return cartService.checkout(userId, request.addressId());
+        return cartService.checkout(userId, request.addressId(), request.expectedDeliveryFee());
     }
 }

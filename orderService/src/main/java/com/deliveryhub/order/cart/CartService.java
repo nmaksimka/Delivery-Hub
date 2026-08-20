@@ -103,7 +103,7 @@ public class CartService {
         return deliveryQuotes.quote(restaurant.id(), restaurant.location(), address);
     }
 
-    public OrderDto checkout(Long userId, Long addressId) {
+    public OrderDto checkout(Long userId, Long addressId, BigDecimal expectedDeliveryFee) {
         UserAddressDto address = userAddresses.deliverableAddress(userId, addressId);
         Cart cart = store.take(userId);
         if (!cart.hasLines()) {
@@ -114,7 +114,7 @@ public class CartService {
                 .toList();
         try {
             OrderDto order = orderService.createOrder(new CreateOrderRequest(cart.restaurantId(), items), userId,
-                    cart.promoCode(), address);
+                    cart.promoCode(), address, expectedDeliveryFee);
             log.info("Cart of user {} became order {}", userId, order.id());
             return order;
         } catch (RuntimeException ex) {

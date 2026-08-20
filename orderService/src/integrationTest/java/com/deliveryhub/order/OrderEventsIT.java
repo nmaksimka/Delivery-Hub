@@ -153,7 +153,7 @@ class OrderEventsIT {
         when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
                 new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         return orderService.createOrder(
-                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L, null, address).id();
+                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L, null, address, null).id();
     }
 
     private Long placeConfirmedOrder() {
