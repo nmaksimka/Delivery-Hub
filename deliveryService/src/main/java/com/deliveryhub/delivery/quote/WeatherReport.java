@@ -9,8 +9,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WeatherReport {
 
@@ -18,12 +20,14 @@ public class WeatherReport {
     private static final Set<Integer> SNOW_CODES = Set.of(71, 73, 75, 77, 85, 86);
     private static final Set<Integer> RAIN_CODES = Set.of(51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99);
 
+    private static final Duration FAILURE_TTL = Duration.ofSeconds(45);
+
     private final RestClient restClient;
     private final CircuitBreaker circuitBreaker;
     private final WeatherProperties properties;
     private final Clock clock;
-    private Weather cached;
-    private Instant cachedUntil = Instant.MIN;
+    private final AtomicBoolean refreshing = new AtomicBoolean();
+    private volatile Snapshot snapshot;
 
     public WeatherReport(RestClient restClient, CircuitBreaker circuitBreaker, WeatherProperties properties,
                          Clock clock) {
@@ -33,23 +37,35 @@ public class WeatherReport {
         this.clock = clock;
     }
 
-    public synchronized Weather current() {
+    public Weather current() {
+        Snapshot current = snapshot;
         Instant now = clock.instant();
-        if (cached != null && now.isBefore(cachedUntil)) {
-            return cached;
+        if (current != null && now.isBefore(current.until())) {
+            return current.weather();
+        }
+        if (!refreshing.compareAndSet(false, true)) {
+            return current == null ? Weather.unknown() : current.weather();
         }
         try {
-            OpenMeteoResponse response = circuitBreaker.executeSupplier(this::fetch);
-            if (response == null || response.current() == null) {
-                return Weather.unknown();
-            }
-            cached = interpret(response.current());
-            cachedUntil = now.plus(properties.cacheTtl());
-            return cached;
-        } catch (RestClientException | CallNotPermittedException e) {
-            log.warn("Open-Meteo is unavailable, quoting without weather: {}", e.getMessage());
-            return Weather.unknown();
+            Snapshot next = refresh(current, now);
+            snapshot = next;
+            return next.weather();
+        } finally {
+            refreshing.set(false);
         }
+    }
+
+    private Snapshot refresh(Snapshot stale, Instant now) {
+        try {
+            OpenMeteoResponse response = circuitBreaker.executeSupplier(this::fetch);
+            if (response != null && response.current() != null) {
+                return new Snapshot(interpret(response.current()), now.plus(properties.cacheTtl()));
+            }
+        } catch (RestClientException | CallNotPermittedException e) {
+            log.warn("Open-Meteo is unavailable, quoting with the last known weather: {}", e.getClass().getSimpleName());
+        }
+        Weather fallback = stale == null ? Weather.unknown() : stale.weather();
+        return new Snapshot(fallback, now.plus(FAILURE_TTL));
     }
 
     private OpenMeteoResponse fetch() {
@@ -75,6 +91,9 @@ public class WeatherReport {
             return new Weather(WeatherCondition.RAIN, temperature);
         }
         return new Weather(WeatherCondition.CLEAR, temperature);
+    }
+
+    private record Snapshot(Weather weather, Instant until) {
     }
 
     record OpenMeteoResponse(Current current) {

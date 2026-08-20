@@ -174,6 +174,27 @@ class GeoClientsTest {
         assertThat(weatherReport.current()).isEqualTo(Weather.unknown());
     }
 
+    @Test
+    void failedLookupIsNotRepeatedForHalfAMinute() {
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
+
+        weatherReport.current();
+        now.set(now.get().plus(Duration.ofSeconds(30)));
+        weatherReport.current();
+
+        SERVER.verify(1, getRequestedFor(urlPathEqualTo("/v1/forecast")));
+    }
+
+    @Test
+    void keepsLastKnownWeatherWhenOpenMeteoFails() {
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(okJson(current(-8.0, 0, 0.7, 73))));
+        weatherReport.current();
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
+        now.set(now.get().plus(Duration.ofMinutes(11)));
+
+        assertThat(weatherReport.current()).isEqualTo(new Weather(WeatherCondition.SNOW, -8.0));
+    }
+
     private static String current(double temperature, double rain, double snowfall, int code) {
         return "{\"current\": {\"temperature_2m\": " + temperature + ", \"rain\": " + rain + ", \"showers\": 0.0,"
                 + " \"snowfall\": " + snowfall + ", \"weather_code\": " + code + "}}";
