@@ -1,6 +1,7 @@
 package com.deliveryhub.delivery.simulator;
 
 import com.deliveryhub.contracts.enums.DeliveryStatus;
+import com.deliveryhub.delivery.config.SchedulingConfig;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
 import com.deliveryhub.delivery.entity.Courier;
 import com.deliveryhub.delivery.entity.Delivery;
@@ -56,7 +57,7 @@ public class CourierSimulator {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.simulator.tick}")
+    @Scheduled(fixedDelayString = "${app.simulator.tick}", scheduler = SchedulingConfig.SIMULATOR_SCHEDULER)
     public void tick() {
         pickUpConfirmedOrders();
         List<Delivery> onTheWay = deliveryRepository.findSimulatedOnTheWay();
