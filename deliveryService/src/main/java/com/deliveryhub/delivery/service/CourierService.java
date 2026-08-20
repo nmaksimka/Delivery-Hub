@@ -7,6 +7,7 @@ import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.exception.CourierAlreadyRegisteredException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
+import com.deliveryhub.delivery.exception.InvalidRequestException;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
 import com.deliveryhub.delivery.tracking.CourierTracking;
@@ -45,7 +46,7 @@ public class CourierService {
         switch (status) {
             case AVAILABLE -> courier.goOnline(now);
             case OFFLINE -> courier.goOffline(now);
-            case BUSY -> throw new IllegalArgumentException("Courier becomes BUSY only when a delivery is assigned");
+            case BUSY -> throw new InvalidRequestException("Courier becomes BUSY only when a delivery is assigned");
         }
         log.info("Courier {} is now {}", courier.getId(), courier.getStatus());
         return CourierDto.of(courier);

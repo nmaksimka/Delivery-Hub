@@ -7,6 +7,7 @@ import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.exception.CourierAlreadyRegisteredException;
 import com.deliveryhub.delivery.exception.CourierBusyException;
+import com.deliveryhub.delivery.exception.InvalidRequestException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
@@ -67,7 +68,7 @@ class CourierServiceTest {
                 .thenReturn(Optional.of(Courier.register(501L, "Алексей", "+79990000001", NOW)));
 
         assertThatThrownBy(() -> courierService.changeOwnStatus(COURIER, CourierStatus.BUSY))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidRequestException.class);
     }
 
     @Test
