@@ -21,10 +21,18 @@ public class DeliveryZones {
                     :radius,
                     :at)
             ON CONFLICT (restaurant_id) DO UPDATE
-            SET center     = EXCLUDED.center,
-                area       = ST_Buffer(EXCLUDED.center, delivery_zones.max_distance_m),
-                updated_at = EXCLUDED.updated_at
+            SET center         = EXCLUDED.center,
+                area           = EXCLUDED.area,
+                max_distance_m = EXCLUDED.max_distance_m,
+                updated_at     = EXCLUDED.updated_at
             WHERE NOT ST_Equals(delivery_zones.center::geometry, EXCLUDED.center::geometry)
+               OR delivery_zones.max_distance_m <> EXCLUDED.max_distance_m
+            """;
+
+    private static final String COVERS = """
+            SELECT ST_Covers(area, ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography)
+            FROM delivery_zones
+            WHERE restaurant_id = :restaurantId
             """;
 
     private static final String FIND = """
@@ -49,6 +57,16 @@ public class DeliveryZones {
                 .param("at", Timestamp.from(at))
                 .update();
         return find(restaurantId).orElseThrow();
+    }
+
+    public boolean covers(long restaurantId, GeoPosition point) {
+        return jdbcClient.sql(COVERS)
+                .param("restaurantId", restaurantId)
+                .param("latitude", point.latitude())
+                .param("longitude", point.longitude())
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
     }
 
     public Optional<DeliveryZone> find(long restaurantId) {

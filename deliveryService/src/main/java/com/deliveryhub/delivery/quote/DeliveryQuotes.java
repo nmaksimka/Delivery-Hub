@@ -7,6 +7,7 @@ import com.deliveryhub.delivery.entity.GeoPosition;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Optional;
 
 public class DeliveryQuotes {
 
@@ -55,10 +56,13 @@ public class DeliveryQuotes {
     }
 
     private DeliveryZone requireInsideZone(long restaurantId, GeoPosition restaurant, GeoPosition customer) {
-        DeliveryZone zone = zones.find(restaurantId)
-                .orElseGet(() -> new DeliveryZone(restaurant, dispatch.zoneRadiusMeters()));
+        Optional<DeliveryZone> stored = zones.find(restaurantId);
+        DeliveryZone zone = stored.orElseGet(() -> new DeliveryZone(restaurant, dispatch.zoneRadiusMeters()));
         int distance = (int) Math.round(straightLine.meters(zone.center(), customer));
-        if (distance > zone.maxDistanceMeters()) {
+        boolean inside = stored.isPresent()
+                ? zones.covers(restaurantId, customer)
+                : distance <= zone.maxDistanceMeters();
+        if (!inside) {
             throw new OutOfDeliveryZoneException(restaurantId, distance, zone.maxDistanceMeters());
         }
         return zone;

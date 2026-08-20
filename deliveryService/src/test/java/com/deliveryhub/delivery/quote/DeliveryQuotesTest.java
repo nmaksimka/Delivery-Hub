@@ -79,6 +79,7 @@ class DeliveryQuotesTest {
     @Test
     void rejectsCustomerOutsideStoredZone() {
         when(zones.find(7L)).thenReturn(Optional.of(new DeliveryZone(RESTAURANT, 2000)));
+        when(zones.covers(7L, CUSTOMER)).thenReturn(false);
 
         assertThatThrownBy(() -> quotes.quote(new QuoteRequest(7L, RESTAURANT, CUSTOMER)))
                 .isInstanceOf(OutOfDeliveryZoneException.class);
