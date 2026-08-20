@@ -11,6 +11,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -24,7 +25,7 @@ public class TrackingWebSocketConfig implements WebSocketMessageBrokerConfigurer
     private final GatewayIdentityHandshake gatewayIdentityHandshake;
     private final SubscriptionGuard subscriptionGuard;
     private final String[] allowedOriginPatterns;
-    private TaskScheduler heartbeatScheduler;
+    private TaskScheduler scheduler;
 
     public TrackingWebSocketConfig(GatewayIdentityHandshake gatewayIdentityHandshake,
                                    SubscriptionGuard subscriptionGuard,
@@ -35,8 +36,8 @@ public class TrackingWebSocketConfig implements WebSocketMessageBrokerConfigurer
     }
 
     @Autowired
-    public void setHeartbeatScheduler(@Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler heartbeatScheduler) {
-        this.heartbeatScheduler = heartbeatScheduler;
+    public void setScheduler(@Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler scheduler) {
+        this.scheduler = scheduler;
     }
 
     @Override
@@ -47,10 +48,15 @@ public class TrackingWebSocketConfig implements WebSocketMessageBrokerConfigurer
     }
 
     @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(handler -> new ExpiringSessionHandler(handler, scheduler));
+    }
+
+    @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker(TOPIC_PREFIX)
                 .setHeartbeatValue(new long[]{HEARTBEAT_MILLIS, HEARTBEAT_MILLIS})
-                .setTaskScheduler(heartbeatScheduler);
+                .setTaskScheduler(scheduler);
         registry.setApplicationDestinationPrefixes("/app");
     }
 

@@ -19,6 +19,7 @@ public class IdentityHeadersFilter implements WebFilter {
     public static final String HEADER_USER_ID = "X-User-Id";
     public static final String HEADER_USER_EMAIL = "X-User-Email";
     public static final String HEADER_USER_ROLE = "X-User-Role";
+    public static final String HEADER_USER_TOKEN_EXP = "X-User-Token-Exp";
     public static final String HEADER_INTERNAL_TOKEN = "X-Internal-Token";
 
     private final String internalToken;
@@ -50,6 +51,7 @@ public class IdentityHeadersFilter implements WebFilter {
         headers.remove(HEADER_USER_ID);
         headers.remove(HEADER_USER_EMAIL);
         headers.remove(HEADER_USER_ROLE);
+        headers.remove(HEADER_USER_TOKEN_EXP);
         headers.set(HEADER_INTERNAL_TOKEN, internalToken);
     }
 
@@ -60,6 +62,9 @@ public class IdentityHeadersFilter implements WebFilter {
             headers.add(HEADER_USER_ID, String.valueOf(userId));
         }
         headers.add(HEADER_USER_EMAIL, jwt.getSubject());
+        if (jwt.getExpiresAt() != null) {
+            headers.add(HEADER_USER_TOKEN_EXP, String.valueOf(jwt.getExpiresAt().getEpochSecond()));
+        }
         authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> authority.startsWith(RoleFromTokenConverter.ROLE_PREFIX))
