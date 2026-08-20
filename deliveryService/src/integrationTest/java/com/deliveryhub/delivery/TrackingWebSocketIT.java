@@ -40,6 +40,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +49,8 @@ import static org.awaitility.Awaitility.await;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class TrackingWebSocketIT {
+
+    private static final Duration REPORT_INTERVAL = Duration.ofMillis(1100);
 
     private static final AtomicLong IDS = new AtomicLong(770_000);
     private static final GeoPosition RESTAURANT = new GeoPosition(56.4884, 84.9480);
@@ -89,7 +92,7 @@ class TrackingWebSocketIT {
         subscribe(connect(42L, "USER"), delivery.getOrderId(), updates);
 
         JsonNode position = awaitUpdate(updates, () -> reportLocation(courier.getUserId(), 56.4800, 84.9481),
-                "POSITION");
+                "POSITION", update -> update.hasNonNull("etaSeconds"));
 
         assertThat(position.get("orderId").asLong()).isEqualTo(delivery.getOrderId());
         assertThat(position.get("deliveryId").asLong()).isEqualTo(delivery.getId());
@@ -138,7 +141,7 @@ class TrackingWebSocketIT {
                 .subscribe("/topic/orders/" + delivery.getOrderId() + "/tracking", ignoring());
 
         awaitUpdate(courierUpdates, () -> reportLocation(assigned.getUserId(), 56.4850, 84.9480), "POSITION");
-        awaitUpdate(adminUpdates, () -> reportLocation(assigned.getUserId(), 56.4840, 84.9480), "POSITION");
+        awaitUpdate(adminUpdates, () -> reportLocation(assigned.getUserId(), 56.4848, 84.9480), "POSITION");
         assertThat(strangerError).succeedsWithin(Duration.ofSeconds(10));
     }
 
@@ -166,7 +169,9 @@ class TrackingWebSocketIT {
 
     private Courier courierWithAccount() {
         long id = IDS.incrementAndGet();
-        return courierRepository.saveAndFlush(Courier.register(id, "Курьер " + id, "+7999" + id, Instant.now()));
+        Courier courier = Courier.register(id, "Курьер " + id, "+7999" + id, Instant.now());
+        courier.occupy(Instant.now());
+        return courierRepository.saveAndFlush(courier);
     }
 
     private Delivery deliveryOnTheWay(long userId, long courierId) {
@@ -189,12 +194,18 @@ class TrackingWebSocketIT {
     }
 
     private static JsonNode awaitUpdate(BlockingQueue<JsonNode> updates, Runnable trigger, String type) {
+        return awaitUpdate(updates, trigger, type, update -> true);
+    }
+
+    private static JsonNode awaitUpdate(BlockingQueue<JsonNode> updates, Runnable trigger, String type,
+                                        Predicate<JsonNode> wanted) {
         List<JsonNode> found = new ArrayList<>();
-        await().atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(300)).until(() -> {
+        await().atMost(Duration.ofSeconds(15))
+                .pollDelay(REPORT_INTERVAL).pollInterval(REPORT_INTERVAL).until(() -> {
             trigger.run();
             JsonNode update = updates.poll(200, TimeUnit.MILLISECONDS);
             while (update != null) {
-                if (type.equals(update.get("type").asString())) {
+                if (type.equals(update.get("type").asString()) && wanted.test(update)) {
                     found.add(update);
                     return true;
                 }
