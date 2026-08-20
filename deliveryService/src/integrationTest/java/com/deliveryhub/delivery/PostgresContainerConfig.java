@@ -9,7 +9,7 @@ import org.testcontainers.utility.DockerImageName;
 @TestConfiguration(proxyBeanMethods = false)
 public class PostgresContainerConfig {
 
-    static final DockerImageName POSTGIS = DockerImageName.parse("postgis/postgis:17-3.5-alpine")
+    static final DockerImageName POSTGIS = DockerImageName.parse("postgis/postgis@sha256:894f570c0cf0664ed5576a8fd5d5bfb8fb1b19d592885b686c3a88c8bd90c41f")
             .asCompatibleSubstituteFor("postgres");
 
     @Bean
