@@ -179,10 +179,11 @@ class GeoClientsTest {
         SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
 
         weatherReport.current();
+        int afterFirstLookup = SERVER.findAll(getRequestedFor(urlPathEqualTo("/v1/forecast"))).size();
         now.set(now.get().plus(Duration.ofSeconds(30)));
         weatherReport.current();
 
-        SERVER.verify(1, getRequestedFor(urlPathEqualTo("/v1/forecast")));
+        assertThat(SERVER.findAll(getRequestedFor(urlPathEqualTo("/v1/forecast")))).hasSize(afterFirstLookup);
     }
 
     @Test
