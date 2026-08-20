@@ -8,6 +8,7 @@ import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.exception.CourierAlreadyRegisteredException;
 import com.deliveryhub.delivery.exception.CourierBusyException;
 import com.deliveryhub.delivery.exception.InvalidRequestException;
+import com.deliveryhub.delivery.exception.PositionRejectedException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
@@ -16,10 +17,13 @@ import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -79,6 +83,40 @@ class CourierServiceTest {
 
         assertThatThrownBy(() -> courierService.changeOwnStatus(COURIER, CourierStatus.OFFLINE))
                 .isInstanceOf(CourierBusyException.class);
+    }
+
+    @Test
+    void offlineCourierCannotReportPosition() {
+        when(courierRepository.findByUserId(501L))
+                .thenReturn(Optional.of(Courier.register(501L, "Алексей", "+79990000001", NOW)));
+
+        assertThatThrownBy(() -> courierService.moveOwnPosition(COURIER, new GeoPosition(56.48, 84.95)))
+                .isInstanceOf(PositionRejectedException.class);
+        verifyNoInteractions(courierTracking);
+    }
+
+    @Test
+    void rejectsPositionJumpFasterThanCar() {
+        Courier courier = Courier.register(501L, "Алексей", "+79990000001", NOW.minusSeconds(10));
+        courier.goOnline(NOW.minusSeconds(10));
+        ReflectionTestUtils.setField(courier, "position", new GeometryFactory().createPoint(new Coordinate(84.95, 56.48)));
+        when(courierRepository.findByUserId(501L)).thenReturn(Optional.of(courier));
+
+        assertThatThrownBy(() -> courierService.moveOwnPosition(COURIER, new GeoPosition(56.60, 84.95)))
+                .isInstanceOf(PositionRejectedException.class);
+        verifyNoInteractions(courierTracking);
+    }
+
+    @Test
+    void acceptsRealisticMove() {
+        Courier courier = Courier.register(501L, "Алексей", "+79990000001", NOW.minusSeconds(10));
+        courier.goOnline(NOW.minusSeconds(10));
+        ReflectionTestUtils.setField(courier, "position", new GeometryFactory().createPoint(new Coordinate(84.95, 56.48)));
+        when(courierRepository.findByUserId(501L)).thenReturn(Optional.of(courier));
+
+        courierService.moveOwnPosition(COURIER, new GeoPosition(56.4808, 84.95));
+
+        verify(courierTracking).report(courier, new GeoPosition(56.4808, 84.95), null);
     }
 
     @Test

@@ -43,6 +43,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(PositionRejectedException.class)
+    public ProblemDetail handlePositionRejected(PositionRejectedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setProperty("code", "POSITION_REJECTED");
+        return problem;
+    }
+
     @ExceptionHandler(OutOfDeliveryZoneException.class)
     public ProblemDetail handleOutOfZone(OutOfDeliveryZoneException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
