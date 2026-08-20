@@ -123,11 +123,11 @@ export const cartApi = {
       signal,
     });
   },
-  checkout(idempotencyKey: string, addressId: number) {
+  checkout(idempotencyKey: string, addressId: number, expectedDeliveryFee?: number) {
     return request('/api/cart/checkout', {
       method: 'POST',
       headers: { [idempotencyKeyHeader]: idempotencyKey },
-      body: { addressId },
+      body: { addressId, expectedDeliveryFee },
       schema: orderSchema,
     });
   },

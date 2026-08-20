@@ -294,7 +294,7 @@ describe('checkout', () => {
     expect(screen.getByRole('button', { name: 'Корзина пуста' })).toBeInTheDocument();
     const [, init] = callsTo(fetchMock, 'POST', '/api/cart/checkout')[0] ?? [];
     expect(new Headers(init?.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
-    expect(JSON.parse(String(init?.body))).toEqual({ addressId: 3 });
+    expect(JSON.parse(String(init?.body))).toEqual({ addressId: 3, expectedDeliveryFee: 190 });
   });
 
   it('showsDeliveryFeeTimeAndWeatherSurcharge', async () => {
