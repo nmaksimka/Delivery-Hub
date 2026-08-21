@@ -3,6 +3,7 @@ package com.deliveryhub.restaurant.importer;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mealdb.MealDbMeal;
+import com.deliveryhub.restaurant.outbox.CatalogChanges;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import com.deliveryhub.restaurant.storage.ImageSources;
@@ -22,15 +23,18 @@ public class MealCatalogWriter {
     private final MenuItemRepository menuItemRepository;
     private final ImportProgress progress;
     private final ImageSources imageSources;
+    private final CatalogChanges catalogChanges;
 
     public MealCatalogWriter(RestaurantRepository restaurantRepository,
                              MenuItemRepository menuItemRepository,
                              ImportProgress progress,
-                             ImageSources imageSources) {
+                             ImageSources imageSources,
+                             CatalogChanges catalogChanges) {
         this.restaurantRepository = restaurantRepository;
         this.menuItemRepository = menuItemRepository;
         this.progress = progress;
         this.imageSources = imageSources;
+        this.catalogChanges = catalogChanges;
     }
 
     @Transactional
@@ -68,6 +72,7 @@ public class MealCatalogWriter {
             menuItemRepository.save(item);
         }
 
+        catalogChanges.restaurantChanged(restaurant.getId());
         progress.change(jobId, job -> {
             if (known.isEmpty()) {
                 job.recordRestaurantCreated();

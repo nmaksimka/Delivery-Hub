@@ -6,6 +6,7 @@ import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
+import com.deliveryhub.restaurant.outbox.CatalogChanges;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import com.deliveryhub.restaurant.storage.ImageIntake;
@@ -26,17 +27,20 @@ public class MenuItemService {
     private final MenuItemMapper menuItemMapper;
     private final ImageIntake imageIntake;
     private final CatalogCache catalogCache;
+    private final CatalogChanges catalogChanges;
 
     public MenuItemService(MenuItemRepository menuItemRepository,
                            RestaurantRepository restaurantRepository,
                            MenuItemMapper menuItemMapper,
                            ImageIntake imageIntake,
-                           CatalogCache catalogCache) {
+                           CatalogCache catalogCache,
+                           CatalogChanges catalogChanges) {
         this.menuItemRepository = menuItemRepository;
         this.restaurantRepository = restaurantRepository;
         this.menuItemMapper = menuItemMapper;
         this.imageIntake = imageIntake;
         this.catalogCache = catalogCache;
+        this.catalogChanges = catalogChanges;
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
@@ -67,6 +71,7 @@ public class MenuItemService {
     public MenuItemDto withdrawFromSale(Long restaurantId, Long menuItemId) {
         MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
         menuItem.withdrawFromSale();
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
@@ -75,6 +80,7 @@ public class MenuItemService {
     public MenuItemDto putOnSale(Long restaurantId, Long menuItemId) {
         MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
         menuItem.putOnSale();
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
@@ -93,6 +99,7 @@ public class MenuItemService {
                 request.name(), request.description(), request.price(), request.category());
         applyAvailability(menuItem, request);
         MenuItemDto created = menuItemMapper.toDto(menuItemRepository.save(menuItem));
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
         return created;
     }
@@ -104,6 +111,7 @@ public class MenuItemService {
         imageIntake.save(key, content);
         imageIntake.discardAfterCommit(menuItem.getImageKey());
         menuItem.storeImage(key);
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
@@ -113,6 +121,7 @@ public class MenuItemService {
         MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
         imageIntake.discardAfterCommit(menuItem.getImageKey());
         menuItemRepository.delete(menuItem);
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
     }
 
@@ -121,6 +130,7 @@ public class MenuItemService {
         MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
         menuItem.changeDetails(request.name(), request.description(), request.price(), request.category());
         applyAvailability(menuItem, request);
+        catalogChanges.restaurantChanged(restaurantId);
         catalogCache.evictMenus();
         return menuItemMapper.toDto(menuItem);
     }
