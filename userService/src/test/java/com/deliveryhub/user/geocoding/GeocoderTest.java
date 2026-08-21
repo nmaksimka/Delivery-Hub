@@ -50,7 +50,7 @@ class GeocoderTest {
         NOMINATIM.resetAll();
         NominatimProperties properties = new NominatimProperties(NOMINATIM.baseUrl(), USER_AGENT, "Томск", "ru",
                 "84.80,56.62,85.20,56.36", Duration.ofSeconds(1), Duration.ofSeconds(1), 1, Duration.ofSeconds(1),
-                100, Duration.ofDays(1), Duration.ofMinutes(10), 20);
+                100, Duration.ofDays(7), Duration.ofDays(1), Duration.ofMinutes(10), 20);
         RestClient restClient = RestClient.builder().baseUrl(NOMINATIM.baseUrl())
                 .defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT).build();
         RateLimiter unlimited = RateLimiter.of("test", RateLimiterConfig.custom()
@@ -93,6 +93,7 @@ class GeocoderTest {
 
         geocoder.locate("Фрунзе", "20");
         geocoder.locate(" фрунзе ", "20");
+        geocoder.locate("Фрунзе ", " 20");
 
         NOMINATIM.verify(1, getRequestedFor(urlPathEqualTo("/search")));
     }
@@ -102,5 +103,13 @@ class GeocoderTest {
         NOMINATIM.stubFor(get(urlPathEqualTo("/search")).willReturn(aResponse().withStatus(503)));
 
         assertThatThrownBy(() -> geocoder.locate("Ленина", "1")).isInstanceOf(GeocoderUnavailableException.class);
+    }
+
+    @Test
+    void unreadableCoordinatesMeanAddressIsNotOnMap() {
+        NOMINATIM.stubFor(get(urlPathEqualTo("/search"))
+                .willReturn(okJson("[{\"lat\": \"999\", \"lon\": \"84.95\"}]")));
+
+        assertThat(geocoder.locate("Кривая", "1")).isEmpty();
     }
 }

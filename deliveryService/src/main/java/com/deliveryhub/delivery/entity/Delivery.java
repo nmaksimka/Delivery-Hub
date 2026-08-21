@@ -58,6 +58,12 @@ public class Delivery {
     @Column(name = "dropoff_longitude")
     private Double dropoffLongitude;
 
+    @Column(name = "delivery_address", length = 400)
+    private String address;
+
+    @Column(name = "delivery_comment", length = 300)
+    private String comment;
+
     @Column(name = "order_confirmed_at")
     private Instant orderConfirmedAt;
 
@@ -113,6 +119,23 @@ public class Delivery {
         }
         this.courierId = Objects.requireNonNull(courierId, "courierId");
         this.updatedAt = Objects.requireNonNull(at, "at");
+    }
+
+    public void deliverTo(String address, String comment) {
+        this.address = address;
+        this.comment = comment;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public boolean isAssignedTo(Long courierId) {
+        return courierId != null && courierId.equals(this.courierId);
     }
 
     public void routeBetween(GeoPosition pickup, GeoPosition dropoff) {

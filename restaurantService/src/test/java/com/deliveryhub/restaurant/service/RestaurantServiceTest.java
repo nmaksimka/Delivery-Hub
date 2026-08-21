@@ -161,6 +161,20 @@ class RestaurantServiceTest {
     }
 
     @Test
+    @DisplayName("обновление без координат оставляет точку на карте")
+    void updateWithoutCoordinatesKeepsLocation() {
+        Restaurant existing = restaurant();
+        existing.locate(56.4884, 84.948);
+        when(restaurantRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        restaurantService.updateRestaurant(1L, new RestaurantRequest(
+                "Trattoria", "Mira 5", "+79991112233", null, null, true, null, null));
+
+        assertThat(existing.getLatitude()).isEqualTo(56.4884);
+        assertThat(existing.getLongitude()).isEqualTo(84.948);
+    }
+
+    @Test
     @DisplayName("замена картинки сохраняет объект под новым ключом и планирует удаление старого")
     void replacesImageAndDiscardsPreviousOne() {
         Restaurant restaurant = restaurant();

@@ -107,6 +107,8 @@ function messageByCode(code: string, detail: string, itemName: ItemName): string
       return 'Этого адреса уже нет, выберите другой';
     case 'ADDRESS_NOT_GEOCODED':
       return 'Адрес ещё не нашёлся на карте — попробуйте через пару минут или выберите другой';
+    case 'DELIVERY_FEE_CHANGED':
+      return 'Доставка подорожала — мы пересчитали цену. Проверьте итог и подтвердите заказ ещё раз';
     case 'OUT_OF_DELIVERY_ZONE':
       return 'Ресторан не доставляет по этому адресу — он вне зоны доставки';
     case 'RESTAURANT_LOCATION_UNKNOWN':

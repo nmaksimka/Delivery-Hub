@@ -10,9 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,10 +22,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 public class Geocoder {
 
     private static final Logger log = LoggerFactory.getLogger(Geocoder.class);
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final ParameterizedTypeReference<List<NominatimPlace>> PLACES = new ParameterizedTypeReference<>() {
     };
 
@@ -50,7 +54,7 @@ public class Geocoder {
     }
 
     public Optional<GeoPoint> locate(String street, String house) {
-        String streetLine = house.strip() + " " + street.strip();
+        String streetLine = WHITESPACE.matcher(house.strip() + " " + street.strip()).replaceAll(" ");
         String key = streetLine.toLowerCase(Locale.ROOT);
         Instant now = clock.instant();
         CachedLookup cached = cached(key, now);
@@ -58,7 +62,8 @@ public class Geocoder {
             return cached.point();
         }
         Optional<GeoPoint> point = firstPlace(search(streetLine));
-        remember(key, new CachedLookup(point, now.plus(properties.cacheTtl())));
+        Duration ttl = point.isPresent() ? properties.cacheTtl() : properties.notFoundCacheTtl();
+        remember(key, new CachedLookup(point, now.plus(ttl)));
         return point;
     }
 
@@ -78,9 +83,13 @@ public class Geocoder {
         try {
             return CircuitBreaker.decorateSupplier(circuitBreaker, RateLimiter.decorateSupplier(rateLimiter, call)).get();
         } catch (RestClientException | CallNotPermittedException | RequestNotPermitted e) {
-            log.warn("Nominatim is unavailable: {}", e.getMessage());
-            throw new GeocoderUnavailableException("Geocoding service is unavailable", e);
+            log.warn("Nominatim is unavailable: {} status={}", e.getClass().getSimpleName(), statusOf(e));
+            throw new GeocoderUnavailableException("Geocoding service is unavailable", null);
         }
+    }
+
+    private static String statusOf(RuntimeException e) {
+        return e instanceof RestClientResponseException response ? String.valueOf(response.getStatusCode().value()) : "-";
     }
 
     private static Optional<GeoPoint> firstPlace(List<NominatimPlace> places) {
@@ -90,8 +99,9 @@ public class Geocoder {
         NominatimPlace place = places.getFirst();
         try {
             return Optional.of(new GeoPoint(new BigDecimal(place.lat()), new BigDecimal(place.lon())));
-        } catch (NumberFormatException | NullPointerException e) {
-            throw new GeocoderUnavailableException("Nominatim answered with unreadable coordinates", e);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            log.warn("Nominatim answered with unreadable coordinates: {}", e.getClass().getSimpleName());
+            return Optional.empty();
         }
     }
 

@@ -18,8 +18,10 @@ import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.CancellationReason;
 import com.deliveryhub.order.entity.DeliveryDestination;
+import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.DeliveryFeeChangedException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
 import com.deliveryhub.order.exception.ItemNotFoundException;
@@ -44,9 +46,11 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -115,18 +119,9 @@ public class OrderService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
-        return createOrder(createRequest, userId, null);
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
-        return createOrder(createRequest, userId, promoCode, null);
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode,
-                                UserAddressDto address) {
+                                UserAddressDto address, BigDecimal expectedDeliveryFee) {
+        Objects.requireNonNull(address, "Delivery address is required");
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
@@ -154,16 +149,24 @@ public class OrderService {
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
-        if (address != null) {
-            DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
-            order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
-                    address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes());
+        DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
+        if (expectedDeliveryFee != null && delivery.deliveryFee().compareTo(expectedDeliveryFee) > 0) {
+            throw new DeliveryFeeChangedException(expectedDeliveryFee, delivery.deliveryFee());
         }
+        order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
+                address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes(),
+                new DeliveryFeeBreakdown(delivery.distanceMeters(), weatherSurcharge(delivery), delivery.routeSource()));
 
         Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
+    }
+
+    private static BigDecimal weatherSurcharge(DeliveryQuoteDto delivery) {
+        return delivery.weather() == null || delivery.weather().surcharge() == null
+                ? BigDecimal.ZERO
+                : delivery.weather().surcharge();
     }
 
     private static String closedMessage(RestaurantDto restaurant) {
@@ -280,6 +283,8 @@ public class OrderService {
                         ? null
                         : new GeoPoint(order.getDestination().latitude().doubleValue(),
                         order.getDestination().longitude().doubleValue()))
+                .setDeliveryAddress(order.getDestination() == null ? null : order.getDestination().line())
+                .setDeliveryComment(order.getDestination() == null ? null : order.getDestination().comment())
                 .build();
     }
 }

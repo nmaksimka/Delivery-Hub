@@ -1,5 +1,8 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.order.client.dto.UserAddressDto;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
@@ -62,6 +65,8 @@ class OrderEventsIT {
     private MeterRegistry meterRegistry;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @BeforeEach
     void stubRestaurantService() {
@@ -143,8 +148,12 @@ class OrderEventsIT {
     }
 
     private Long placeOrder() {
+        UserAddressDto address = new UserAddressDto(77L, "Томск", "Ленина", "12", null, null, null, null,
+                new BigDecimal("56.47"), new BigDecimal("84.97"), true);
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         return orderService.createOrder(
-                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L).id();
+                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), 42L, null, address, null).id();
     }
 
     private Long placeConfirmedOrder() {

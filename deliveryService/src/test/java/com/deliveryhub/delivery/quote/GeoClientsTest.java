@@ -3,6 +3,8 @@ package com.deliveryhub.delivery.quote;
 import com.deliveryhub.delivery.entity.GeoPosition;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,8 +54,6 @@ class GeoClientsTest {
     void setUp() {
         SERVER.resetAll();
         RestClient restClient = RestClient.builder().baseUrl(SERVER.baseUrl()).build();
-        routePlanner = new RoutePlanner(restClient, CircuitBreaker.ofDefaults("osrm"), straightLine,
-                new RoutingProperties(SERVER.baseUrl(), "car", "test", Duration.ofSeconds(1), Duration.ofSeconds(1), 1.4, 25));
         Clock clock = new Clock() {
             @Override
             public ZoneId getZone() {
@@ -70,6 +70,9 @@ class GeoClientsTest {
                 return now.get();
             }
         };
+        routePlanner = new RoutePlanner(restClient, CircuitBreaker.ofDefaults("osrm"), RateLimiter.ofDefaults("osrm"),
+                straightLine, new RoutingProperties(SERVER.baseUrl(), "car", "test", Duration.ofSeconds(1),
+                Duration.ofSeconds(1), 1.4, 25), clock);
         weatherReport = new WeatherReport(restClient, CircuitBreaker.ofDefaults("weather"),
                 new WeatherProperties(SERVER.baseUrl(), 56.4977, 84.9744, Duration.ofSeconds(1), Duration.ofSeconds(1),
                         Duration.ofMinutes(10), -25), clock);
@@ -83,6 +86,46 @@ class GeoClientsTest {
         Route route = routePlanner.route(FROM, TO);
 
         assertThat(route).isEqualTo(new Route(2793, 261, Route.RouteSource.OSRM));
+    }
+
+    @Test
+    void cachesOsrmRouteForTenMinutes() {
+        SERVER.stubFor(get(urlPathMatching("/route/.*"))
+                .willReturn(okJson("{\"code\": \"Ok\", \"routes\": [{\"distance\": 2793.4, \"duration\": 260.9}]}")));
+
+        routePlanner.route(FROM, TO);
+        routePlanner.route(FROM, TO);
+        SERVER.verify(1, getRequestedFor(urlPathMatching("/route/.*")));
+
+        now.set(now.get().plus(Duration.ofMinutes(11)));
+        routePlanner.route(FROM, TO);
+        SERVER.verify(2, getRequestedFor(urlPathMatching("/route/.*")));
+    }
+
+    @Test
+    void rateLimitedOsrmFallsBackToStraightLine() {
+        RoutePlanner limited = new RoutePlanner(RestClient.builder().baseUrl(SERVER.baseUrl()).build(),
+                CircuitBreaker.ofDefaults("osrm"), RateLimiter.of("osrm", RateLimiterConfig.custom()
+                .limitForPeriod(1).limitRefreshPeriod(Duration.ofMinutes(1)).timeoutDuration(Duration.ZERO).build()),
+                straightLine, new RoutingProperties(SERVER.baseUrl(), "car", "test", Duration.ofSeconds(1),
+                Duration.ofSeconds(1), 1.4, 25), Clock.systemUTC());
+        SERVER.stubFor(get(urlPathMatching("/route/.*"))
+                .willReturn(okJson("{\"code\": \"Ok\", \"routes\": [{\"distance\": 2793.4, \"duration\": 260.9}]}")));
+        when(straightLine.meters(TO, FROM)).thenReturn(1000.0);
+
+        limited.route(FROM, TO);
+
+        assertThat(limited.route(TO, FROM).source()).isEqualTo(Route.RouteSource.STRAIGHT_LINE);
+    }
+
+    @Test
+    void unreadableGeometryFallsBackToStraightPath() {
+        SERVER.stubFor(get(urlPathMatching("/route/.*")).willReturn(okJson(
+                "{\"code\": \"Ok\", \"routes\": [{\"distance\": 10, \"duration\": 5,"
+                        + " \"geometry\": {\"coordinates\": [[84.9], [84.97]]}}]}")));
+        when(straightLine.meters(FROM, TO)).thenReturn(1000.0);
+
+        assertThat(routePlanner.path(FROM, TO).source()).isEqualTo(Route.RouteSource.STRAIGHT_LINE);
     }
 
     @Test
@@ -139,6 +182,28 @@ class GeoClientsTest {
         SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
 
         assertThat(weatherReport.current()).isEqualTo(Weather.unknown());
+    }
+
+    @Test
+    void failedLookupIsNotRepeatedForHalfAMinute() {
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
+
+        weatherReport.current();
+        int afterFirstLookup = SERVER.findAll(getRequestedFor(urlPathEqualTo("/v1/forecast"))).size();
+        now.set(now.get().plus(Duration.ofSeconds(30)));
+        weatherReport.current();
+
+        assertThat(SERVER.findAll(getRequestedFor(urlPathEqualTo("/v1/forecast")))).hasSize(afterFirstLookup);
+    }
+
+    @Test
+    void keepsLastKnownWeatherWhenOpenMeteoFails() {
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(okJson(current(-8.0, 0, 0.7, 73))));
+        weatherReport.current();
+        SERVER.stubFor(get(urlPathEqualTo("/v1/forecast")).willReturn(aResponse().withStatus(503)));
+        now.set(now.get().plus(Duration.ofMinutes(11)));
+
+        assertThat(weatherReport.current()).isEqualTo(new Weather(WeatherCondition.SNOW, -8.0));
     }
 
     private static String current(double temperature, double rain, double snowfall, int code) {

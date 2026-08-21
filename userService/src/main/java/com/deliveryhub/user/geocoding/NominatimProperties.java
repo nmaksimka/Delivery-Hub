@@ -17,6 +17,7 @@ public record NominatimProperties(
         Duration rateLimitWait,
         int cacheSize,
         Duration cacheTtl,
+        Duration notFoundCacheTtl,
         Duration retryInterval,
         int retryBatchSize) {
 }

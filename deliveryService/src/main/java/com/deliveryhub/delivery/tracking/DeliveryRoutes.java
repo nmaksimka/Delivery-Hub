@@ -24,6 +24,10 @@ public class DeliveryRoutes {
         this.routing = routing;
     }
 
+    public Optional<TrackedRoute> known(long deliveryId) {
+        return Optional.ofNullable(routes.get(deliveryId));
+    }
+
     public Optional<TrackedRoute> of(Delivery delivery) {
         TrackedRoute known = routes.get(delivery.getId());
         if (known != null) {

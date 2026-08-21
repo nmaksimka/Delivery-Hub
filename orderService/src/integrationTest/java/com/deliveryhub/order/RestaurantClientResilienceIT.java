@@ -5,9 +5,13 @@ import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
 import com.deliveryhub.contracts.pricing.QuoteRequest;
 import com.deliveryhub.contracts.pricing.QuoteResponse;
 import com.deliveryhub.contracts.pricing.QuotedItem;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
 import com.deliveryhub.order.client.RestaurantCircuitOpenException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.grpc.Server;
@@ -26,16 +30,21 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -53,6 +62,10 @@ class RestaurantClientResilienceIT {
     private CircuitBreakerRegistry circuitBreakerRegistry;
     @Autowired
     private MockMvcTester mvc;
+    @MockitoBean
+    private UserAddresses userAddresses;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @DynamicPropertySource
     static void restaurantServiceAddress(DynamicPropertyRegistry registry) {
@@ -72,6 +85,10 @@ class RestaurantClientResilienceIT {
         CALLS.set(0);
         behaviour = answer -> reply(answer, pizzeria("12.50"));
         circuitBreakerRegistry.getAllCircuitBreakers().forEach(CircuitBreaker::reset);
+        when(userAddresses.deliverableAddress(any(), eq(77L))).thenReturn(new UserAddressDto(77L, "Томск", "Ленина",
+                "12", null, null, null, null, new BigDecimal("56.47"), new BigDecimal("84.97"), true));
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
     }
 
     @Test
@@ -176,7 +193,7 @@ class RestaurantClientResilienceIT {
                 .header("X-User-Id", "42")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}]}
+                        {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}], "addressId": 77}
                         """)
                 .exchange();
     }

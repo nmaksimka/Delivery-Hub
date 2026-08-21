@@ -77,7 +77,7 @@ class DeliveryQuoteIT {
     void estimatesByStraightLineWhenOsrmIsDown() {
         GEO_APIS.stubFor(get(urlPathMatching("/route/v1/car/.*")).willReturn(aResponse().withStatus(503)));
 
-        assertThat(quote(9102, 56.4700, 84.9700))
+        assertThat(quote(9102, 56.4720, 84.9720))
                 .hasStatusOk()
                 .bodyJson().extractingPath("$.routeSource").isEqualTo("STRAIGHT_LINE");
     }

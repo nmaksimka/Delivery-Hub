@@ -16,6 +16,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -23,6 +24,8 @@ import java.util.Optional;
 public class GatewayIdentityHandshake implements HandshakeInterceptor {
 
     public static final String CURRENT_USER = "currentUser";
+    public static final String TOKEN_EXPIRES_AT = "tokenExpiresAt";
+    private static final String HEADER_TOKEN_EXP = "X-User-Token-Exp";
 
     private static final Logger log = LoggerFactory.getLogger(GatewayIdentityHandshake.class);
 
@@ -47,6 +50,7 @@ public class GatewayIdentityHandshake implements HandshakeInterceptor {
             return false;
         }
         attributes.put(CURRENT_USER, user.get());
+        tokenExpiry(headers).ifPresent(expiresAt -> attributes.put(TOKEN_EXPIRES_AT, expiresAt));
         log.debug("Tracking socket opened by user {} with role {}", user.get().id(), user.get().role());
         return true;
     }
@@ -58,6 +62,18 @@ public class GatewayIdentityHandshake implements HandshakeInterceptor {
 
     private boolean hasValidToken(String token) {
         return token != null && MessageDigest.isEqual(expectedToken, token.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static Optional<Instant> tokenExpiry(HttpHeaders headers) {
+        String exp = headers.getFirst(HEADER_TOKEN_EXP);
+        if (exp == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Instant.ofEpochSecond(Long.parseLong(exp)));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<CurrentUser> userOf(HttpHeaders headers) {

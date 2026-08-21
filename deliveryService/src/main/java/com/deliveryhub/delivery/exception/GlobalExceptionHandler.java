@@ -36,6 +36,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(CourierUnavailableException.class)
+    public ProblemDetail handleCourierUnavailable(CourierUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("code", "COURIER_BUSY");
+        return problem;
+    }
+
+    @ExceptionHandler(PositionRejectedException.class)
+    public ProblemDetail handlePositionRejected(PositionRejectedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setProperty("code", "POSITION_REJECTED");
+        return problem;
+    }
+
     @ExceptionHandler(OutOfDeliveryZoneException.class)
     public ProblemDetail handleOutOfZone(OutOfDeliveryZoneException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
@@ -43,8 +57,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleBadRequest(IllegalArgumentException ex) {
+    @ExceptionHandler(InvalidRequestException.class)
+    public ProblemDetail handleBadRequest(InvalidRequestException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 

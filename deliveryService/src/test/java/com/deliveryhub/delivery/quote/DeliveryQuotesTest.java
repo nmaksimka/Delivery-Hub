@@ -79,10 +79,19 @@ class DeliveryQuotesTest {
     @Test
     void rejectsCustomerOutsideStoredZone() {
         when(zones.find(7L)).thenReturn(Optional.of(new DeliveryZone(RESTAURANT, 2000)));
+        when(zones.covers(7L, CUSTOMER)).thenReturn(false);
 
         assertThatThrownBy(() -> quotes.quote(new QuoteRequest(7L, RESTAURANT, CUSTOMER)))
                 .isInstanceOf(OutOfDeliveryZoneException.class);
         verify(routePlanner, never()).route(any(), any());
+    }
+
+    @Test
+    void rejectsRouteMuchLongerThanZoneRadius() {
+        when(routePlanner.route(RESTAURANT, CUSTOMER)).thenReturn(new Route(15_001, 1800, Route.RouteSource.OSRM));
+
+        assertThatThrownBy(() -> quotes.quote(new QuoteRequest(7L, RESTAURANT, CUSTOMER)))
+                .isInstanceOf(OutOfDeliveryZoneException.class);
     }
 
     @Test

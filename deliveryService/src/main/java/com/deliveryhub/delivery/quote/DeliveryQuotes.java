@@ -7,10 +7,12 @@ import com.deliveryhub.delivery.entity.GeoPosition;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Optional;
 
 public class DeliveryQuotes {
 
     private static final BigDecimal METERS_IN_KM = BigDecimal.valueOf(1000);
+    private static final int MAX_ROUTE_TO_ZONE_RATIO = 3;
 
     private final DeliveryZones zones;
     private final StraightLine straightLine;
@@ -30,8 +32,12 @@ public class DeliveryQuotes {
     }
 
     public QuoteDto quote(QuoteRequest request) {
-        requireInsideZone(request.restaurantId(), request.from(), request.to());
+        DeliveryZone zone = requireInsideZone(request.restaurantId(), request.from(), request.to());
         Route route = routePlanner.route(request.from(), request.to());
+        int maxRouteMeters = zone.maxDistanceMeters() * MAX_ROUTE_TO_ZONE_RATIO;
+        if (route.distanceMeters() > maxRouteMeters) {
+            throw new OutOfDeliveryZoneException(request.restaurantId(), route.distanceMeters(), maxRouteMeters);
+        }
         Weather weather = weatherReport.current();
         PricingProperties.WeatherRule rule = pricing.ruleFor(weather.condition());
 
@@ -49,12 +55,16 @@ public class DeliveryQuotes {
         return pricing.baseFee().add(pricing.perKm().multiply(kilometers)).setScale(0, RoundingMode.HALF_UP);
     }
 
-    private void requireInsideZone(long restaurantId, GeoPosition restaurant, GeoPosition customer) {
-        DeliveryZone zone = zones.find(restaurantId)
-                .orElseGet(() -> new DeliveryZone(restaurant, dispatch.zoneRadiusMeters()));
+    private DeliveryZone requireInsideZone(long restaurantId, GeoPosition restaurant, GeoPosition customer) {
+        Optional<DeliveryZone> stored = zones.find(restaurantId);
+        DeliveryZone zone = stored.orElseGet(() -> new DeliveryZone(restaurant, dispatch.zoneRadiusMeters()));
         int distance = (int) Math.round(straightLine.meters(zone.center(), customer));
-        if (distance > zone.maxDistanceMeters()) {
+        boolean inside = stored.isPresent()
+                ? zones.covers(restaurantId, customer)
+                : distance <= zone.maxDistanceMeters();
+        if (!inside) {
             throw new OutOfDeliveryZoneException(restaurantId, distance, zone.maxDistanceMeters());
         }
+        return zone;
     }
 }

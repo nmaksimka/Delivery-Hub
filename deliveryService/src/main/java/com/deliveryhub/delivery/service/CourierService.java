@@ -7,6 +7,9 @@ import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.GeoPosition;
 import com.deliveryhub.delivery.exception.CourierAlreadyRegisteredException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
+import com.deliveryhub.delivery.exception.InvalidRequestException;
+import com.deliveryhub.delivery.exception.PositionRejectedException;
+import com.deliveryhub.delivery.quote.Polyline;
 import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
 import com.deliveryhub.delivery.tracking.CourierTracking;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 
 @Service
@@ -27,6 +31,8 @@ import java.time.Instant;
 public class CourierService {
 
     private static final Logger log = LoggerFactory.getLogger(CourierService.class);
+    private static final Duration MIN_REPORT_INTERVAL = Duration.ofSeconds(1);
+    private static final double MAX_SPEED_METERS_PER_SECOND = 150 / 3.6;
 
     private final CourierRepository courierRepository;
     private final CourierTracking courierTracking;
@@ -45,7 +51,7 @@ public class CourierService {
         switch (status) {
             case AVAILABLE -> courier.goOnline(now);
             case OFFLINE -> courier.goOffline(now);
-            case BUSY -> throw new IllegalArgumentException("Courier becomes BUSY only when a delivery is assigned");
+            case BUSY -> throw new InvalidRequestException("Courier becomes BUSY only when a delivery is assigned");
         }
         log.info("Courier {} is now {}", courier.getId(), courier.getStatus());
         return CourierDto.of(courier);
@@ -53,7 +59,27 @@ public class CourierService {
 
     @Transactional
     public void moveOwnPosition(CurrentUser currentUser, GeoPosition position) {
-        courierTracking.report(courierOf(currentUser), position, null);
+        Courier courier = courierOf(currentUser);
+        requirePlausible(courier, position, clock.instant());
+        courierTracking.report(courier, position, null);
+    }
+
+    private static void requirePlausible(Courier courier, GeoPosition position, Instant now) {
+        if (courier.getStatus() == CourierStatus.OFFLINE) {
+            throw new PositionRejectedException("Courier is offline, go online before reporting the position");
+        }
+        GeoPosition previous = courier.getPosition();
+        if (previous == null) {
+            return;
+        }
+        Duration sinceLast = Duration.between(courier.getUpdatedAt(), now);
+        if (sinceLast.compareTo(MIN_REPORT_INTERVAL) < 0) {
+            throw new PositionRejectedException("Position can be reported at most once per second");
+        }
+        double metersPerSecond = Polyline.meters(previous, position) / (sinceLast.toMillis() / 1000.0);
+        if (metersPerSecond > MAX_SPEED_METERS_PER_SECOND) {
+            throw new PositionRejectedException("Position jump is faster than 150 km/h");
+        }
     }
 
     public Page<CourierDto> list(CurrentUser currentUser, CourierStatus status, Pageable pageable) {

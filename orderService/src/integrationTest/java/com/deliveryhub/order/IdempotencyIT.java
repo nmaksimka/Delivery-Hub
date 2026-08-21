@@ -54,10 +54,10 @@ class IdempotencyIT {
 
     private static final long RESTAURANT_ID = 1L;
     private static final String ORDER_REQUEST = """
-            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}]}
+            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}], "addressId": 77}
             """;
     private static final String OTHER_ORDER_REQUEST = """
-            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 5}]}
+            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 5}], "addressId": 77}
             """;
     private static final int PARALLEL_REQUESTS = 8;
 

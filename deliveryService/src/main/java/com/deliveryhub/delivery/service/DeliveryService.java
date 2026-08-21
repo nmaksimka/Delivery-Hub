@@ -8,7 +8,10 @@ import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
+import com.deliveryhub.delivery.entity.Courier;
+import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.CourierUnavailableException;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.exception.OrderAlreadyCancelledException;
@@ -78,21 +81,65 @@ public class DeliveryService {
     }
 
     public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
-        return deliveryMapper.toDto(visibleTo(currentUser, findByIdOrThrow(id)));
+        return toDtoFor(currentUser, visibleTo(currentUser, findByIdOrThrow(id)));
     }
 
     public DeliveryDto getDeliveryByOrderId(Long orderId, CurrentUser currentUser) {
         Delivery delivery = deliveryRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Delivery for order ID: " + orderId + " was not found"));
-        return deliveryMapper.toDto(visibleTo(currentUser, delivery));
+        return toDtoFor(currentUser, visibleTo(currentUser, delivery));
     }
 
     public Page<DeliveryDto> getAllDeliveries(Pageable pageable, CurrentUser currentUser) {
         if (!currentUser.seesEveryDelivery()) {
             throw new ForbiddenException("Only couriers and administrators can list deliveries");
         }
-        return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
+        return deliveryRepository.findAll(pageable).map(delivery -> toDtoFor(currentUser, delivery));
+    }
+
+    private DeliveryDto toDtoFor(CurrentUser currentUser, Delivery delivery) {
+        DeliveryDto dto = deliveryMapper.toDto(delivery);
+        if (dto == null || currentUser.isAdmin() || delivery.belongsTo(currentUser.id())) {
+            return dto;
+        }
+        boolean ownActiveDelivery = currentUser.isCourier() && !delivery.isFinished()
+                && courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .filter(delivery::isAssignedTo)
+                .isPresent();
+        return ownActiveDelivery ? dto : dto.withoutAddress();
+    }
+
+    @Transactional
+    public DeliveryDto createDeliveryAs(CreateDeliveryRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            throw new ForbiddenException("Only administrators can create deliveries manually");
+        }
+        return createDelivery(request);
+    }
+
+    @Transactional
+    public DeliveryDto updateDeliveryStatusAs(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            requireOwnDeliveryOfCourier(id, request, currentUser);
+        }
+        return updateDeliveryStatus(id, request);
+    }
+
+    private void requireOwnDeliveryOfCourier(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isCourier()) {
+            throw new ForbiddenException("Only couriers and administrators can change delivery status");
+        }
+        if (request.courierId() != null) {
+            throw new ForbiddenException("Only administrators can reassign deliveries");
+        }
+        Long courierId = courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .orElseThrow(() -> new ForbiddenException("Current user is not registered as a courier"));
+        if (!courierId.equals(findByIdOrThrow(id).getCourierId())) {
+            throw new ForbiddenException("Delivery " + id + " is assigned to another courier");
+        }
     }
 
     @Transactional
@@ -104,6 +151,7 @@ public class DeliveryService {
             throw new OrderAlreadyCancelledException(request.orderId());
         }
 
+        occupyCourier(request.courierId(), clock.instant());
         Delivery delivery;
         try {
             delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(
@@ -113,7 +161,6 @@ public class DeliveryService {
             throw new DeliveryAlreadyExistsException(request.orderId());
         }
 
-        occupyCourier(delivery.getCourierId(), delivery.getCreatedAt());
         log.info("Created delivery id={} for orderId={}", delivery.getId(), delivery.getOrderId());
         publishStatusChange(delivery);
         return deliveryMapper.toDto(delivery);
@@ -126,9 +173,9 @@ public class DeliveryService {
         Instant now = clock.instant();
         if (request.courierId() != null && !request.courierId().equals(delivery.getCourierId())) {
             Long previousCourierId = delivery.getCourierId();
+            occupyCourier(request.courierId(), now);
             delivery.assignCourier(request.courierId(), now);
             releaseCourier(previousCourierId, now);
-            occupyCourier(request.courierId(), now);
         }
         if (request.status() != null && delivery.changeStatus(request.status(), now)) {
             log.info("Delivery {} status updated to {}", id, request.status());
@@ -184,9 +231,15 @@ public class DeliveryService {
     }
 
     private void occupyCourier(Long courierId, Instant now) {
-        if (courierId != null) {
-            courierRepository.findById(courierId).ifPresent(courier -> courier.occupy(now));
+        if (courierId == null) {
+            return;
         }
+        Courier courier = courierRepository.lockById(courierId)
+                .orElseThrow(() -> new EntityNotFoundException("Courier with ID: " + courierId + " was not found"));
+        if (courier.getStatus() != CourierStatus.AVAILABLE) {
+            throw new CourierUnavailableException(courierId, courier.getStatus());
+        }
+        courier.occupy(now);
     }
 
     private void releaseCourier(Long courierId, Instant now) {

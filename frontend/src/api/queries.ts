@@ -173,15 +173,25 @@ export function useCheckout() {
   const userId = useUserId();
   const [attempts] = useState(createAttemptKeys);
   return useMutation({
-    mutationFn: ({ cart, addressId }: { cart: Cart; addressId: number }) =>
+    mutationFn: ({
+      cart,
+      addressId,
+      expectedDeliveryFee,
+    }: {
+      cart: Cart;
+      addressId: number;
+      expectedDeliveryFee?: number;
+    }) =>
       cartApi.checkout(
         attempts.keyFor({
           restaurantId: cart.restaurant?.id,
           items: cart.items.map((line) => [line.menuItemId, line.quantity]),
           promoCode: cart.promoCode,
           addressId,
+          expectedDeliveryFee,
         }),
         addressId,
+        expectedDeliveryFee,
       ),
     onSettled: (_order, error) => attempts.settle(error),
     onSuccess: (order) => {

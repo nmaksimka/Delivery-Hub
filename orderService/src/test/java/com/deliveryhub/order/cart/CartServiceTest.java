@@ -204,14 +204,14 @@ class CartServiceTest {
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 2), false);
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 11L, 1), false);
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("28.00"), BigDecimal.ZERO, null,
-                BigDecimal.ZERO, null, null, null, null, List.of());
-        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(created);
+                BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS), any())).thenReturn(created);
 
-        OrderDto order = service.checkout(USER, ADDRESS_ID);
+        OrderDto order = service.checkout(USER, ADDRESS_ID, null);
 
         assertThat(order.id()).isEqualTo(5L);
         ArgumentCaptor<CreateOrderRequest> request = ArgumentCaptor.forClass(CreateOrderRequest.class);
-        verify(orderService).createOrder(request.capture(), eq(USER), any(), eq(ADDRESS));
+        verify(orderService).createOrder(request.capture(), eq(USER), any(), eq(ADDRESS), any());
         assertThat(request.getValue().restaurantId()).isEqualTo(RESTAURANT);
         assertThat(request.getValue().orderItemsRequest())
                 .containsExactly(new OrderItemRequest(10L, 2), new OrderItemRequest(11L, 1));
@@ -224,11 +224,11 @@ class CartServiceTest {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
-        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS)))
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS), any()))
                 .thenThrow(new OrderRejectedException(
                         ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
 
-        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID)).isInstanceOf(Coded.class);
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID, null)).isInstanceOf(Coded.class);
 
         assertThat(stored.lines()).extracting(CartLine::menuItemId).containsExactly(10L);
     }
@@ -238,34 +238,34 @@ class CartServiceTest {
         storeBacksCart();
         menuIs(open(), pizza(true));
         service.addItem(USER, new AddCartItemRequest(RESTAURANT, 10L, 1), false);
-        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS)))
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS), any()))
                 .thenThrow(new OrderRejectedException(ErrorCode.RESTAURANT_CLOSED, "Restaurant 1 is closed now"));
         when(store.restore(eq(USER), any())).thenThrow(new RedisConnectionFailureException("redis is down"));
 
-        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID, null))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.RESTAURANT_CLOSED));
     }
 
     @Test
     void secondCheckoutOfSameCartFindsItEmpty() {
         cartWithTwoPizzas();
-        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS))).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
-                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, BigDecimal.ZERO, null, null, null, null, List.of()));
+        when(orderService.createOrder(any(), eq(USER), any(), eq(ADDRESS), any())).thenReturn(new OrderDto(5L, USER, RESTAURANT, null,
+                null, null, new BigDecimal("25.00"), BigDecimal.ZERO, null, BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of()));
 
-        service.checkout(USER, ADDRESS_ID);
+        service.checkout(USER, ADDRESS_ID, null);
 
-        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID, null))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
-        verify(orderService).createOrder(any(), eq(USER), any(), eq(ADDRESS));
+        verify(orderService).createOrder(any(), eq(USER), any(), eq(ADDRESS), any());
     }
 
     @Test
     void checkoutOfEmptyCartIsRejected() {
         storeBacksCart();
 
-        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID, null))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.CART_EMPTY));
-        verify(orderService, never()).createOrder(any(), any(), any(), eq(ADDRESS));
+        verify(orderService, never()).createOrder(any(), any(), any(), eq(ADDRESS), any());
     }
 
     @Test
@@ -274,10 +274,10 @@ class CartServiceTest {
         when(userAddresses.deliverableAddress(USER, ADDRESS_ID)).thenThrow(
                 new UnprocessableOrderException(ErrorCode.ADDRESS_NOT_GEOCODED, "no coordinates"));
 
-        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID))
+        assertThatThrownBy(() -> service.checkout(USER, ADDRESS_ID, null))
                 .isInstanceOfSatisfying(Coded.class, e -> assertThat(e.code()).isEqualTo(ErrorCode.ADDRESS_NOT_GEOCODED));
         assertThat(stored.hasLines()).isTrue();
-        verify(orderService, never()).createOrder(any(), any(), any(), any());
+        verify(orderService, never()).createOrder(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -376,9 +376,9 @@ class CartServiceTest {
         cartWithTwoPizzas();
         stored = stored.withPromo("SPRING10");
         OrderDto created = new OrderDto(5L, USER, RESTAURANT, null, null, null, new BigDecimal("22.50"), new BigDecimal("2.50"),
-                "SPRING10", BigDecimal.ZERO, null, null, null, null, List.of());
-        when(orderService.createOrder(any(), eq(USER), eq("SPRING10"), eq(ADDRESS))).thenReturn(created);
+                "SPRING10", BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, List.of());
+        when(orderService.createOrder(any(), eq(USER), eq("SPRING10"), eq(ADDRESS), any())).thenReturn(created);
 
-        assertThat(service.checkout(USER, ADDRESS_ID).promoCode()).isEqualTo("SPRING10");
+        assertThat(service.checkout(USER, ADDRESS_ID, null).promoCode()).isEqualTo("SPRING10");
     }
 }

@@ -132,6 +132,6 @@ class SagaListenerIT {
     }
 
     private static PaymentHeldEvent paymentHeld(UUID eventId, long orderId) {
-        return new PaymentHeldEvent(eventId, orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now(), null, null, null);
+        return new PaymentHeldEvent(eventId, orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now(), null, null, null, null, null);
     }
 }

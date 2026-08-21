@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { ApiError } from '../api/http';
 import type { CartLine } from '../api/cart';
 import {
   useAddresses,
@@ -98,6 +99,8 @@ export function CartDrawer() {
   const total = cart.total + deliveryFee;
   const shortage = wallet.data ? shortageOf(total, wallet.data.available) : 0;
   const weather = delivery.data ? weatherNote(delivery.data) : null;
+  const feeChanged =
+    checkout.error instanceof ApiError && checkout.error.code === 'DELIVERY_FEE_CHANGED';
   const writeError = changeQuantity.error ?? removeLine.error ?? clearCart.error;
   const itemName = (menuItemId: number) =>
     cart.items.find((line) => line.menuItemId === menuItemId)?.name ?? undefined;
@@ -112,11 +115,16 @@ export function CartDrawer() {
       return;
     }
     checkout.mutate(
-      { cart, addressId: chosenAddressId },
+      { cart, addressId: chosenAddressId, expectedDeliveryFee: delivery.data?.deliveryFee },
       {
         onSuccess: (order) => {
           close();
           void navigate(`/orders/${order.id}`);
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.code === 'DELIVERY_FEE_CHANGED') {
+            void delivery.refetch();
+          }
         },
       },
     );
@@ -341,7 +349,11 @@ export function CartDrawer() {
                 delivery.isError
               }
             >
-              {checkout.isPending ? 'Оформляем…' : 'Оформить заказ'}
+              {checkout.isPending
+                ? 'Оформляем…'
+                : feeChanged
+                  ? `Подтвердить за ${formatPrice(total)}`
+                  : 'Оформить заказ'}
             </Button>
           </div>
         )}

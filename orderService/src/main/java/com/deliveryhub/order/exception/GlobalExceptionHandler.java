@@ -33,6 +33,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, ex.getMessage(), codeOf(ex, ErrorCode.NOT_FOUND));
     }
 
+    @ExceptionHandler(DeliveryFeeChangedException.class)
+    public ProblemDetail handleDeliveryFeeChanged(DeliveryFeeChangedException ex) {
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, ex.getMessage(), ex.code());
+        problem.setProperty("deliveryFee", ex.deliveryFee());
+        return problem;
+    }
+
     @ExceptionHandler({InvalidStatusTransitionException.class, OrderRejectedException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage(), codeOf(ex, ErrorCode.INVALID_STATUS_TRANSITION));

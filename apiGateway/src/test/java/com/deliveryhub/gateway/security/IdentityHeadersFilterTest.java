@@ -48,6 +48,7 @@ class IdentityHeadersFilterTest {
         assertThat(headers.get(IdentityHeadersFilter.HEADER_USER_ID)).containsExactly("7");
         assertThat(headers.get(IdentityHeadersFilter.HEADER_USER_EMAIL)).containsExactly("admin@example.com");
         assertThat(headers.get(IdentityHeadersFilter.HEADER_USER_ROLE)).containsExactly("ADMIN");
+        assertThat(headers.getFirst(IdentityHeadersFilter.HEADER_USER_TOKEN_EXP)).matches("\\d+");
     }
 
     @Test

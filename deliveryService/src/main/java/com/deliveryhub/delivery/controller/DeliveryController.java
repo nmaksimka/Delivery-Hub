@@ -52,13 +52,17 @@ public class DeliveryController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public DeliveryDto createDelivery(@Valid @RequestBody CreateDeliveryRequest request) {
-        return deliveryService.createDelivery(request);
+    public DeliveryDto createDelivery(@Valid @RequestBody CreateDeliveryRequest request,
+                                      @RequestHeader("X-User-Id") Long userId,
+                                      @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return deliveryService.createDeliveryAs(request, new CurrentUser(userId, role));
     }
 
     @PatchMapping("/{id}/status")
     public DeliveryDto updateDeliveryStatus(@PathVariable Long id,
-                                            @Valid @RequestBody UpdateDeliveryStatusRequest request) {
-        return deliveryService.updateDeliveryStatus(id, request);
+                                            @Valid @RequestBody UpdateDeliveryStatusRequest request,
+                                            @RequestHeader("X-User-Id") Long userId,
+                                            @RequestHeader(name = "X-User-Role", defaultValue = "USER") String role) {
+        return deliveryService.updateDeliveryStatusAs(id, request, new CurrentUser(userId, role));
     }
 }

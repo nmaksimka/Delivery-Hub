@@ -67,6 +67,6 @@ class NoFreeCourierIT {
 
     private static PaymentHeldEvent paymentHeld(long orderId) {
         return new PaymentHeldEvent(UUID.randomUUID(), orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now(),
-                8800L, new GeoPoint(66.0, 110.0), null);
+                8800L, new GeoPoint(66.0, 110.0), null, null, null);
     }
 }
