@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{mail/layout :: mail(~{::section})}">
+<section>
+    <p style="margin:0 0 12px;">
+        Не получилось оплатить заказ <b th:text="|№${notification.orderId}|">№1</b> на сумму
+        <b th:text="|${#numbers.formatDecimal(notification.amount, 1, 'WHITESPACE', 2, 'COMMA')} ₽|">0,00 ₽</b>,
+        поэтому заказ отменён.
+    </p>
+    <p style="margin:0;">Пополните кошелёк и оформите заказ ещё раз — корзина сохранилась.</p>
+</section>
+</html>

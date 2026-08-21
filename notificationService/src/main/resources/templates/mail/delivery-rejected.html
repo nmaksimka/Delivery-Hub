@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{mail/layout :: mail(~{::section})}">
+<section>
+    <p style="margin:0 0 12px;">
+        Для заказа <b th:text="|№${notification.orderId}|">№1</b> сейчас нет свободного курьера или адрес вне зоны доставки.
+    </p>
+    <p style="margin:0;">Деньги не списаны — блокировка на кошельке снята.</p>
+</section>
+</html>

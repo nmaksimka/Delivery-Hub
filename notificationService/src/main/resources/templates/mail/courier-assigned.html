@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{mail/layout :: mail(~{::section})}">
+<section>
+    <p style="margin:0 0 12px;">
+        Курьер уже едет в ресторан за заказом <b th:text="|№${notification.orderId}|">№1</b>.
+    </p>
+    <p style="margin:0;">Где он сейчас, видно на карте на странице заказа.</p>
+</section>
+</html>

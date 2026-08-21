@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{mail/layout :: mail(~{::section})}">
+<section>
+    <p style="margin:0 0 12px;">
+        Заказ <b th:text="|№${notification.orderId}|">№1</b> отменён.
+    </p>
+    <p style="margin:0;">Если деньги уже были заблокированы, они вернутся на кошелёк автоматически.</p>
+</section>
+</html>

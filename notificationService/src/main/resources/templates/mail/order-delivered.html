@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{mail/layout :: mail(~{::section})}">
+<section>
+    <p style="margin:0 0 12px;">
+        Заказ <b th:text="|№${notification.orderId}|">№1</b> доставлен. Приятного аппетита!
+    </p>
+    <p style="margin:0;">Оцените ресторан — отзывы помогают другим выбрать, где заказать.</p>
+</section>
+</html>
