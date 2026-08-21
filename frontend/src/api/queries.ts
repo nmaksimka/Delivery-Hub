@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { repeatOrder } from '../cart/repeatOrder';
 import { isFinalStatus } from '../lib/orderStatus';
+import { addressesApi, type AddressInput } from './addresses';
 import { cartApi, emptyCart, type Cart, type CartItemToAdd } from './cart';
+import { favoritesApi } from './favorites';
 import { ApiError } from './http';
 import { createAttemptKeys } from './idempotency';
 import { ordersApi, type Order } from './orders';
@@ -22,8 +24,14 @@ export const queryKeys = {
   order: (id: number) => ['orders', id] as const,
   cart: ['cart'] as const,
   userCart: (userId: number) => ['cart', userId] as const,
+  deliveryQuote: (userId: number, restaurantId: number, addressId: number) =>
+    ['cart', userId, 'delivery-quote', restaurantId, addressId] as const,
   wallet: ['wallet'] as const,
   userWallet: (userId: number) => ['wallet', userId] as const,
+  addresses: ['addresses'] as const,
+  userAddresses: (userId: number) => ['addresses', userId] as const,
+  favorites: ['favorites'] as const,
+  userFavorites: (userId: number) => ['favorites', userId] as const,
 };
 
 export function useRestaurants(activeOnly = true) {
@@ -149,18 +157,41 @@ export function useRepeatOrder() {
   });
 }
 
+export function useDeliveryQuote(restaurantId: number | null, addressId: number | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.deliveryQuote(userId ?? 0, restaurantId ?? 0, addressId ?? 0),
+    queryFn: ({ signal }) => cartApi.deliveryQuote(addressId ?? 0, signal),
+    enabled: userId !== null && restaurantId !== null && addressId !== null,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function useCheckout() {
   const queryClient = useQueryClient();
   const userId = useUserId();
   const [attempts] = useState(createAttemptKeys);
   return useMutation({
-    mutationFn: (cart: Cart) =>
+    mutationFn: ({
+      cart,
+      addressId,
+      expectedDeliveryFee,
+    }: {
+      cart: Cart;
+      addressId: number;
+      expectedDeliveryFee?: number;
+    }) =>
       cartApi.checkout(
         attempts.keyFor({
           restaurantId: cart.restaurant?.id,
           items: cart.items.map((line) => [line.menuItemId, line.quantity]),
           promoCode: cart.promoCode,
+          addressId,
+          expectedDeliveryFee,
         }),
+        addressId,
+        expectedDeliveryFee,
       ),
     onSettled: (_order, error) => attempts.settle(error),
     onSuccess: (order) => {
@@ -208,5 +239,66 @@ export function useTopUp() {
         queryClient.setQueryData(queryKeys.userWallet(userId), wallet);
       }
     },
+  });
+}
+
+export function useAddresses() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.userAddresses(userId ?? 0),
+    queryFn: ({ signal }) => addressesApi.list(signal),
+    enabled: userId !== null,
+  });
+}
+
+function useAddressWrite<TVariables, TResult>(write: (variables: TVariables) => Promise<TResult>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: write,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.addresses }),
+  });
+}
+
+export function useSaveAddress() {
+  return useAddressWrite(({ id, input }: { id: number | null; input: AddressInput }) =>
+    id === null ? addressesApi.create(input) : addressesApi.update(id, input),
+  );
+}
+
+export function useDeleteAddress() {
+  return useAddressWrite((id: number) => addressesApi.remove(id));
+}
+
+export function useMakePrimaryAddress() {
+  return useAddressWrite((id: number) => addressesApi.makePrimary(id));
+}
+
+export function useFavorites() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.userFavorites(userId ?? 0),
+    queryFn: ({ signal }) => favoritesApi.list(signal),
+    enabled: userId !== null,
+  });
+}
+
+export function useToggleFavorite() {
+  const queryClient = useQueryClient();
+  const userId = useUserId();
+  const key = queryKeys.userFavorites(userId ?? 0);
+  return useMutation({
+    mutationFn: ({ restaurantId, favorite }: { restaurantId: number; favorite: boolean }) =>
+      favorite ? favoritesApi.add(restaurantId) : favoritesApi.remove(restaurantId),
+    onMutate: async ({ restaurantId, favorite }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<number[]>(key);
+      const rest = (previous ?? []).filter((id) => id !== restaurantId);
+      queryClient.setQueryData(key, favorite ? [restaurantId, ...rest] : rest);
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      queryClient.setQueryData(key, context?.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.favorites }),
   });
 }

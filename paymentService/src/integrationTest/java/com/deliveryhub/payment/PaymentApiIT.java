@@ -283,7 +283,7 @@ class PaymentApiIT extends PaymentApiSupport {
 
     private static OrderCreatedEvent orderCreated(long orderId, long userId, String amount) {
         return new OrderCreatedEvent(UUID.randomUUID(), orderId, userId, 1L, new BigDecimal(amount), Instant.now(),
-                List.of(), 1L);
+                List.of(), 1L, null, null, null, null);
     }
 
     private static CourierAssignedEvent courierAssigned(long orderId) {

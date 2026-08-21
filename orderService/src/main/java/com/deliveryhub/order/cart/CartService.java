@@ -1,9 +1,13 @@
 package com.deliveryhub.order.cart;
 
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
@@ -30,13 +34,17 @@ public class CartService {
     private final RestaurantCatalog restaurantCatalog;
     private final OrderService orderService;
     private final PromoService promoService;
+    private final UserAddresses userAddresses;
+    private final DeliveryQuotes deliveryQuotes;
 
     public CartService(CartStore store, RestaurantCatalog restaurantCatalog, OrderService orderService,
-                       PromoService promoService) {
+                       PromoService promoService, UserAddresses userAddresses, DeliveryQuotes deliveryQuotes) {
         this.store = store;
         this.restaurantCatalog = restaurantCatalog;
         this.orderService = orderService;
         this.promoService = promoService;
+        this.userAddresses = userAddresses;
+        this.deliveryQuotes = deliveryQuotes;
     }
 
     public CartDto get(Long userId) {
@@ -84,7 +92,19 @@ public class CartService {
         store.clear(userId);
     }
 
-    public OrderDto checkout(Long userId) {
+    public DeliveryQuoteDto deliveryQuote(Long userId, Long addressId) {
+        Cart cart = store.load(userId);
+        if (!cart.hasLines()) {
+            throw new OrderRejectedException(ErrorCode.CART_EMPTY, "Cart is empty");
+        }
+        UserAddressDto address = userAddresses.deliverableAddress(userId, addressId);
+        RestaurantDto restaurant = restaurantCatalog.quote(cart.restaurantId(),
+                cart.lines().stream().map(CartLine::menuItemId).toList()).restaurant();
+        return deliveryQuotes.quote(restaurant.id(), restaurant.location(), address);
+    }
+
+    public OrderDto checkout(Long userId, Long addressId, BigDecimal expectedDeliveryFee) {
+        UserAddressDto address = userAddresses.deliverableAddress(userId, addressId);
         Cart cart = store.take(userId);
         if (!cart.hasLines()) {
             throw new OrderRejectedException(ErrorCode.CART_EMPTY, "Cart is empty");
@@ -94,7 +114,7 @@ public class CartService {
                 .toList();
         try {
             OrderDto order = orderService.createOrder(new CreateOrderRequest(cart.restaurantId(), items), userId,
-                    cart.promoCode());
+                    cart.promoCode(), address, expectedDeliveryFee);
             log.info("Cart of user {} became order {}", userId, order.id());
             return order;
         } catch (RuntimeException ex) {

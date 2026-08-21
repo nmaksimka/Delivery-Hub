@@ -1,6 +1,8 @@
 package com.deliveryhub.user.security;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -58,7 +60,38 @@ class InternalTokenFilterTest {
         assertThat(chain.getRequest()).isSameAs(request);
     }
 
+    @Test
+    void rejectsInternalPathWithoutToken() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/internal/users/1/addresses/2"), response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void passesInternalPathWithToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/users/1/addresses/2");
+        request.addHeader(InternalTokenFilter.HEADER_INTERNAL_TOKEN, "gateway-secret");
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
     private static MockHttpServletRequest request() {
         return new MockHttpServletRequest("GET", "/api/restaurants");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/%69nternal/x/1", "//internal/x/1", "/internal;a=b/x/1", "/internal"})
+    void rejectsEncodedInternalPathWithoutToken(String uri) throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(new MockHttpServletRequest("GET", uri), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 }

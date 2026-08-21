@@ -71,13 +71,14 @@ describe('cartApi.checkout', () => {
       201,
     );
 
-    await cartApi.checkout('attempt-1');
+    await cartApi.checkout('attempt-1', 5);
 
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe('/api/cart/checkout');
     expect(init?.method).toBe('POST');
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('attempt-1');
     expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+    expect(JSON.parse(String(init?.body))).toEqual({ addressId: 5 });
   });
 });
 

@@ -3,6 +3,14 @@ package com.deliveryhub.delivery.security;
 public record CurrentUser(Long id, String role) {
 
     public boolean seesEveryDelivery() {
-        return "ADMIN".equals(role) || "COURIER".equals(role);
+        return isAdmin() || isCourier();
+    }
+
+    public boolean isAdmin() {
+        return "ADMIN".equals(role);
+    }
+
+    public boolean isCourier() {
+        return "COURIER".equals(role);
     }
 }

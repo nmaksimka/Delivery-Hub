@@ -46,8 +46,44 @@ spring:
 
 app:
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  tracking:
+    allowed-origin-patterns: ${TRACKING_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   dispatch:
-    courier-ids: ${COURIER_IDS:9001,9002,9003,9004,9005,9006,9007,9008,9009,9010}
+    zone-radius-meters: ${DISPATCH_ZONE_RADIUS_METERS:5000}
+  routing:
+    base-url: ${OSRM_BASE_URL:https://router.project-osrm.org}
+    profile: car
+    user-agent: DeliveryHub/1.0 (+https://github.com/nmaksimka/Delivery-Hub)
+    connect-timeout: 1s
+    read-timeout: 2s
+    fallback-detour-factor: 1.4
+    fallback-speed-kmh: 25
+  weather:
+    base-url: ${OPEN_METEO_BASE_URL:https://api.open-meteo.com}
+    latitude: 56.4977
+    longitude: 84.9744
+    connect-timeout: 1s
+    read-timeout: 2s
+    cache-ttl: 10m
+    frost-below-celsius: -25
+  pricing:
+    base-fee: 99
+    per-km: 15
+    weather:
+      RAIN:
+        surcharge: 39
+        eta-percent: 15
+      SNOW:
+        surcharge: 49
+        eta-percent: 25
+      FROST:
+        surcharge: 59
+        eta-percent: 20
+  simulator:
+    enabled: ${TRACKING_SIMULATOR_ENABLED:false}
+    tick: 2s
+    speed-kmh: 30
+    pickup-delay: 15s
   outbox:
     poll-interval: 1s
     batch-size: 50

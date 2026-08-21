@@ -150,3 +150,11 @@ export function ArrowLeftIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function HeartIcon({ filled, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Icon {...props} filled={filled}>
+      <path d="M12 20.500s-7.500-4.600-7.500-10.200A4.300 4.300 0 0 1 12 7.600a4.300 4.300 0 0 1 7.500 2.700C19.500 15.900 12 20.500 12 20.500z" />
+    </Icon>
+  );
+}

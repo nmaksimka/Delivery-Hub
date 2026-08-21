@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "GeoPoint",
+  "fields": [
+    {"name": "latitude", "type": "double"},
+    {"name": "longitude", "type": "double"}
+  ]
+}

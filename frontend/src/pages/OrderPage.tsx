@@ -9,10 +9,13 @@ import { ArrowLeftIcon } from '../components/icons';
 import { OrderProgress } from '../components/OrderProgress';
 import { RepeatOrderButton } from '../components/RepeatOrderButton';
 import { StateMessage } from '../components/StateMessage';
+import { TrackingPanel } from '../components/TrackingPanel';
 import { cx } from '../lib/cx';
 import { formatDateTime, formatPrice } from '../lib/format';
 import { orderErrorMessage } from '../lib/orderErrors';
 import { canCancel, cancellationText, isFinalStatus, statusView } from '../lib/orderStatus';
+import { isTrackedStatus } from '../tracking/trackedStatus';
+import { useOrderTracking } from '../tracking/useOrderTracking';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './OrderPage.module.css';
 
@@ -25,6 +28,8 @@ export function OrderPage() {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const finished = order.data ? isFinalStatus(order.data.status) : false;
+  const tracked = order.data ? isTrackedStatus(order.data.status) : false;
+  const tracking = useOrderTracking(orderId, tracked);
 
   useEffect(() => {
     if (finished) {
@@ -95,6 +100,10 @@ export function OrderPage() {
           </p>
         )}
       </section>
+
+      {tracked && (
+        <TrackingPanel order={current} restaurant={restaurant.data} tracking={tracking} />
+      )}
 
       {cancelled && (
         <div className={styles.cancelBox}>

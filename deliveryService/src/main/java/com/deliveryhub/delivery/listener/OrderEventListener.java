@@ -2,6 +2,7 @@ package com.deliveryhub.delivery.listener;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
+import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.delivery.dispatch.CourierDispatch;
 import com.deliveryhub.delivery.service.DeliveryService;
@@ -27,6 +28,12 @@ public class OrderEventListener {
     public void handlePaymentHeld(PaymentHeldEvent event) {
         log.info("Received payment-held event: eventId={}, orderId={}", event.getEventId(), event.getOrderId());
         courierDispatch.onPaymentHeld(event);
+    }
+
+    @KafkaListener(topics = Topics.PAYMENT_CAPTURED, groupId = "delivery-service-group")
+    public void handlePaymentCaptured(PaymentCapturedEvent event) {
+        log.info("Received payment-captured event: eventId={}, orderId={}", event.getEventId(), event.getOrderId());
+        deliveryService.markOrderConfirmed(event);
     }
 
     @KafkaListener(topics = Topics.ORDER_CANCELLED, groupId = "delivery-service-group")

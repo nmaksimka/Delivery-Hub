@@ -1,5 +1,6 @@
 package com.deliveryhub.delivery.exception;
 
+import com.deliveryhub.delivery.quote.OutOfDeliveryZoneException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -29,9 +30,36 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler({InvalidStatusTransitionException.class, DeliveryAlreadyExistsException.class,
-            DeliveryFinishedException.class, OrderAlreadyCancelledException.class})
+            DeliveryFinishedException.class, OrderAlreadyCancelledException.class, CourierBusyException.class,
+            CourierAlreadyRegisteredException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(CourierUnavailableException.class)
+    public ProblemDetail handleCourierUnavailable(CourierUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("code", "COURIER_BUSY");
+        return problem;
+    }
+
+    @ExceptionHandler(PositionRejectedException.class)
+    public ProblemDetail handlePositionRejected(PositionRejectedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setProperty("code", "POSITION_REJECTED");
+        return problem;
+    }
+
+    @ExceptionHandler(OutOfDeliveryZoneException.class)
+    public ProblemDetail handleOutOfZone(OutOfDeliveryZoneException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setProperty("code", "OUT_OF_DELIVERY_ZONE");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    public ProblemDetail handleBadRequest(InvalidRequestException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(ForbiddenException.class)

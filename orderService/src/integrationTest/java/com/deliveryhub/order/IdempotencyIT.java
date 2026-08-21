@@ -1,7 +1,11 @@
 package com.deliveryhub.order;
 
 import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
@@ -50,10 +54,10 @@ class IdempotencyIT {
 
     private static final long RESTAURANT_ID = 1L;
     private static final String ORDER_REQUEST = """
-            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}]}
+            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 2}], "addressId": 77}
             """;
     private static final String OTHER_ORDER_REQUEST = """
-            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 5}]}
+            {"restaurantId": 1, "orderItemsRequest": [{"menuItemId": 10, "quantity": 5}], "addressId": 77}
             """;
     private static final int PARALLEL_REQUESTS = 8;
 
@@ -67,9 +71,17 @@ class IdempotencyIT {
     private IdempotencyKeys keys;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
+    @MockitoBean
+    private UserAddresses userAddresses;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @BeforeEach
     void stubRestaurantService() {
+        when(userAddresses.deliverableAddress(any(), any())).thenReturn(new UserAddressDto(77L, "Томск", "Ленина",
+                "12", null, null, null, null, new BigDecimal("56.47"), new BigDecimal("84.97"), true));
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenReturn(pizzeriaQuote());
     }
 
@@ -281,6 +293,8 @@ class IdempotencyIT {
 
     private MvcTestResult checkout(long userId, String key) {
         return mvc.post().uri("/api/cart/checkout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"addressId\": 77}")
                 .header("X-User-Id", Long.toString(userId))
                 .header(IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, key)
                 .exchange();

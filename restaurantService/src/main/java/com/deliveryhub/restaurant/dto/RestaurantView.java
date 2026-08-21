@@ -13,5 +13,7 @@ public record RestaurantView(
         String imageKey,
         LocalTime openTime,
         LocalTime closeTime,
-        boolean active) {
+        boolean active,
+        Double latitude,
+        Double longitude) {
 }

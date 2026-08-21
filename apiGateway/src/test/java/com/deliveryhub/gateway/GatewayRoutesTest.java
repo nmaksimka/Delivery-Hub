@@ -22,8 +22,9 @@ class GatewayRoutesTest {
 
         assertThat(routeIds).containsExactlyInAnyOrder(
                 "auth-login", "restaurant-service", "catalog-import", "restaurant-owners", "restaurant-cabinet",
-                "user-admin", "order-service", "cart", "promo-admin", "delivery-service", "payment-service",
-                "user-service", "restaurant-docs", "order-docs", "delivery-docs", "payment-docs", "user-docs");
+                "user-admin", "order-service", "cart", "promo-admin", "delivery-service", "courier-service",
+                "courier-admin", "payment-service", "user-service", "user-profile", "restaurant-docs", "order-docs",
+                "delivery-docs", "payment-docs", "user-docs", "delivery-tracking");
     }
 
     @Test
@@ -47,6 +48,24 @@ class GatewayRoutesTest {
         assertThat(routes).filteredOn(route -> route.getId().equals("user-admin"))
                 .singleElement()
                 .satisfies(route -> assertThat(route.getUri().getHost()).isEqualTo("userService"));
+    }
+
+    @Test
+    void trackingSocketGoesToDeliveryServiceOverWebSocket() {
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+
+        assertThat(routes).filteredOn(route -> route.getId().equals("delivery-tracking"))
+                .singleElement()
+                .satisfies(route -> assertThat(route.getUri()).hasToString("lb:ws://deliveryService"));
+    }
+
+    @Test
+    void courierRoutesGoToDeliveryService() {
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+
+        assertThat(routes).filteredOn(route -> List.of("courier-service", "courier-admin").contains(route.getId()))
+                .hasSize(2)
+                .allSatisfy(route -> assertThat(route.getUri().getHost()).isEqualTo("deliveryService"));
     }
 
     @Test

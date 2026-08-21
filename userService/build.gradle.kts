@@ -8,6 +8,10 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.restclient)
+    implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.ratelimiter)
+    implementation(libs.resilience4j.micrometer)
 
     implementation(libs.spring.security.oauth2.jose)
 
@@ -21,4 +25,5 @@ dependencies {
     annotationProcessor(libs.mapstruct.processor)
 
     testImplementation(libs.spring.boot.starter.security.test)
+    testImplementation(libs.wiremock)
 }

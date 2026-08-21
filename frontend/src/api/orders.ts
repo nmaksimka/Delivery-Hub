@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { request } from './http';
 import { pageOf } from './page';
 
+const optionalNumber = z.coerce
+  .number()
+  .nullish()
+  .transform((value) => value ?? null);
+
 const optionalText = z
   .string()
   .nullish()
@@ -27,6 +32,21 @@ export const orderSchema = z.object({
     .nullish()
     .transform((value) => value ?? 0),
   promoCode: optionalText,
+  deliveryFee: z.coerce
+    .number()
+    .nullish()
+    .transform((value) => value ?? 0),
+  etaMinutes: z
+    .number()
+    .nullish()
+    .transform((value) => value ?? null),
+  deliveryAddress: optionalText,
+  deliveryLatitude: optionalNumber,
+  deliveryLongitude: optionalNumber,
+  weatherSurcharge: z.coerce
+    .number()
+    .nullish()
+    .transform((value) => value ?? 0),
   createdAt: z.string(),
   updatedAt: optionalText,
   orderItems: z

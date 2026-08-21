@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.data.redis)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.restclient)
     implementation(libs.spring.grpc.client.starter)
     implementation(libs.spring.cloud.starter.circuitbreaker.resilience4j)
     implementation(libs.spring.boot.starter.kafka)
@@ -26,5 +27,6 @@ dependencies {
 
     integrationTestImplementation(libs.testcontainers.kafka)
     testImplementation(libs.grpc.inprocess)
+    testImplementation(libs.wiremock)
     integrationTestImplementation(libs.grpc.inprocess)
 }

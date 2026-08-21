@@ -3,21 +3,28 @@ package com.deliveryhub.order.service;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.order.client.MenuQuote;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.GeoLocation;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
+import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
 import com.deliveryhub.order.exception.InvalidStatusTransitionException;
+import com.deliveryhub.order.exception.DeliveryFeeChangedException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
 import com.deliveryhub.order.mapper.OrderMapper;
@@ -60,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -86,6 +94,8 @@ class OrderServiceTest {
     private ProcessedEvents processedEvents;
     @Mock
     private PromoService promoService;
+    @Mock
+    private DeliveryQuotes deliveryQuotes;
 
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -100,16 +110,21 @@ class OrderServiceTest {
 
     private CreateOrderRequest request;
 
+    private static final UserAddressDto ADDRESS = new UserAddressDto(9L, "Томск", "Ленина", "12", null, null, null, null,
+            new BigDecimal("56.470000"), new BigDecimal("84.970000"), true);
+
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, orderMapper,
                 restaurantCatalog, outbox,
                 processedEvents, promoService,
                 new OrderCancellation(outbox, promoService, Clock.fixed(NOW, ZoneOffset.UTC)),
-                Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
+                deliveryQuotes, Clock.fixed(NOW, ZoneOffset.UTC), transactionManager, meterRegistry);
         request = new CreateOrderRequest(RESTAURANT_ID, List.of(
                 new OrderItemRequest(10L, 2),
                 new OrderItemRequest(11L, 3)));
+        lenient().when(deliveryQuotes.quote(any(), any(), eq(ADDRESS))).thenReturn(new DeliveryQuoteDto(
+                1500, 20, new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
     }
 
     @Nested
@@ -125,7 +140,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
 
             verify(orderRepository).save(orderCaptor.capture());
             Order saved = orderCaptor.getValue();
@@ -145,7 +160,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, 777L);
+            orderService.createOrder(request, 777L, null, ADDRESS, null);
 
             verify(orderRepository).save(orderCaptor.capture());
             assertThat(orderCaptor.getValue().getUserId()).isEqualTo(777L);
@@ -160,7 +175,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
 
             ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
             verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
@@ -173,6 +188,54 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("передаёт точку ресторана в order-created")
+        void putsRestaurantLocationIntoOrderCreated() {
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, false, "",
+                    new GeoLocation(56.4884, 84.948)));
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
+
+            ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
+            assertThat(captor.getValue().getRestaurantLocation()).isEqualTo(new GeoPoint(56.4884, 84.948));
+        }
+
+        @Test
+        @DisplayName("добавляет доставку к сумме и кладёт точку клиента в order-created")
+        void addsDeliveryFeeAndDeliveryLocation() {
+            GeoLocation restaurantPoint = new GeoLocation(56.4884, 84.948);
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, false, "", restaurantPoint));
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            UserAddressDto address = new UserAddressDto(9L, "Томск", "Ленина", "12", "4", null, null, "домофон",
+                    new BigDecimal("56.470000"), new BigDecimal("84.970000"), true);
+            when(deliveryQuotes.quote(RESTAURANT_ID, restaurantPoint, address)).thenReturn(new DeliveryQuoteDto(
+                    2793, 12, new BigDecimal("190.00"), "OSRM", new DeliveryQuoteDto.Weather("SNOW", -6.0, new BigDecimal("49.00"), 3)));
+            when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
+            when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
+
+            orderService.createOrder(request, USER_ID, null, address, null);
+
+            verify(orderRepository).save(orderCaptor.capture());
+            Order saved = orderCaptor.getValue();
+            assertThat(saved.getTotalAmount()).isEqualByComparingTo("225.00");
+            assertThat(saved.getDeliveryFee()).isEqualByComparingTo("190.00");
+            assertThat(saved.getEtaMinutes()).isEqualTo(12);
+            assertThat(saved.getFeeBreakdown()).isEqualTo(new DeliveryFeeBreakdown(2793, new BigDecimal("49.00"), "OSRM"));
+            assertThat(saved.getDeliveryBaseFee()).isEqualByComparingTo("141.00");
+            assertThat(saved.getDestination().line()).isEqualTo("Томск, Ленина, 12, кв. 4");
+            assertThat(saved.getDestination().comment()).isEqualTo("домофон");
+            ArgumentCaptor<OrderCreatedEvent> captor = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+            verify(outbox).append(eq("Order"), any(), eq(Topics.ORDER_CREATED), any(), captor.capture());
+            assertThat(captor.getValue().getDeliveryLocation()).isEqualTo(new GeoPoint(56.47, 84.97));
+            assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("225.00");
+        }
+
+        @Test
         @DisplayName("считает созданные заказы в метрике orders.placed")
         void countsCreatedOrders() {
             givenActiveRestaurant();
@@ -181,8 +244,8 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, USER_ID);
-            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
 
             assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isEqualTo(2.0);
         }
@@ -192,7 +255,7 @@ class OrderServiceTest {
         void doesNotCountRejectedOrder() {
             givenRestaurant(false);
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class);
 
             assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
@@ -206,7 +269,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
 
             orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
-                    new OrderItemRequest(10L, 2), new OrderItemRequest(10L, 3))), USER_ID);
+                    new OrderItemRequest(10L, 2), new OrderItemRequest(10L, 3))), USER_ID, null, ADDRESS, null);
 
             verify(orderRepository).save(orderCaptor.capture());
             assertThat(orderCaptor.getValue().getOrderItems()).singleElement()
@@ -216,13 +279,28 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("подорожавшая доставка требует подтверждения новой цены")
+        void rejectsWhenDeliveryFeeGrew() {
+            givenActiveRestaurant();
+            givenMenuItem(10L, "Pizza", "10.00", true);
+            givenMenuItem(11L, "Cola", "5.00", true);
+            when(deliveryQuotes.quote(any(), any(), eq(ADDRESS))).thenReturn(new DeliveryQuoteDto(
+                    2793, 12, new BigDecimal("190.00"), "OSRM", new DeliveryQuoteDto.Weather("SNOW", -6.0, new BigDecimal("49.00"), 3)));
+
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, new BigDecimal("141.00")))
+                    .isInstanceOfSatisfying(DeliveryFeeChangedException.class,
+                            ex -> assertThat(ex.deliveryFee()).isEqualByComparingTo("190.00"));
+            verifyNoInteractions(transactionManager);
+        }
+
+        @Test
         @DisplayName("сумма количеств одной позиции не может обойти лимит")
         void rejectsMergedQuantityAboveLimit() {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "12.50", true);
 
             assertThatThrownBy(() -> orderService.createOrder(new CreateOrderRequest(RESTAURANT_ID, List.of(
-                    new OrderItemRequest(10L, 60), new OrderItemRequest(10L, 60))), USER_ID))
+                    new OrderItemRequest(10L, 60), new OrderItemRequest(10L, 60))), USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("exceeds");
             verifyNoInteractions(transactionManager);
@@ -236,7 +314,7 @@ class OrderServiceTest {
             givenMenuItem(11L, "Cola", "3.00", true);
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
 
-            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
 
             InOrder order = inOrder(restaurantCatalog, transactionManager, orderRepository);
             order.verify(restaurantCatalog).quote(eq(RESTAURANT_ID), any());
@@ -254,7 +332,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             doThrow(new TransactionSystemException("commit failed")).when(transactionManager).commit(any());
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(TransactionSystemException.class);
 
             assertThat(meterRegistry.get(OrderService.ORDERS_PLACED).counter().count()).isZero();
@@ -266,7 +344,7 @@ class OrderServiceTest {
             when(restaurantCatalog.quote(eq(RESTAURANT_ID), any()))
                     .thenThrow(new EntityNotFoundException("Restaurant with ID: 1 was not found"));
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Restaurant with ID: 1");
 
@@ -279,7 +357,7 @@ class OrderServiceTest {
         void failsWhenRestaurantInactive() {
             givenRestaurant(false);
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not active");
 
@@ -289,9 +367,9 @@ class OrderServiceTest {
         @Test
         @DisplayName("отклоняет заказ в закрытый ресторан и называет часы работы")
         void failsWhenRestaurantClosed() {
-            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk"));
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "10:00-22:00 Asia/Tomsk", null));
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class)
                     .hasMessage("Restaurant 1 is closed now, working hours: 10:00-22:00 Asia/Tomsk");
 
@@ -302,9 +380,9 @@ class OrderServiceTest {
         @Test
         @DisplayName("закрытый ресторан без расписания отклоняется без часов в сообщении")
         void failsWhenRestaurantClosedWithoutHours() {
-            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, ""));
+            givenRestaurant(new RestaurantDto(RESTAURANT_ID, "Pizzeria", true, true, "", null));
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class)
                     .hasMessage("Restaurant 1 is closed now");
         }
@@ -315,7 +393,7 @@ class OrderServiceTest {
             givenActiveRestaurant();
             givenMenuItem(10L, "Pizza", "12.50", false);
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class)
                     .hasMessageContaining("is not available");
 
@@ -327,7 +405,7 @@ class OrderServiceTest {
         void failsWhenMenuItemMissing() {
             givenActiveRestaurant();
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, null, ADDRESS, null))
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Menu item with ID: 10");
         }
@@ -343,7 +421,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, USER_ID, "spring10");
+            orderService.createOrder(request, USER_ID, "spring10", ADDRESS, null);
 
             verify(orderRepository).save(orderCaptor.capture());
             Order saved = orderCaptor.getValue();
@@ -362,7 +440,7 @@ class OrderServiceTest {
             when(orderRepository.save(any(Order.class))).thenAnswer(OrderServiceTest::savedWithId);
             when(orderMapper.toDto(any(Order.class))).thenReturn(dto());
 
-            orderService.createOrder(request, USER_ID);
+            orderService.createOrder(request, USER_ID, null, ADDRESS, null);
 
             verifyNoInteractions(promoService);
         }
@@ -376,7 +454,7 @@ class OrderServiceTest {
             when(promoService.reserve(any(), any(), any(), any()))
                     .thenThrow(new OrderRejectedException(ErrorCode.PROMO_LIMIT_REACHED, "used up"));
 
-            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, "SPRING10"))
+            assertThatThrownBy(() -> orderService.createOrder(request, USER_ID, "SPRING10", ADDRESS, null))
                     .isInstanceOf(OrderRejectedException.class);
 
             verify(orderRepository, never()).save(any());
@@ -616,7 +694,7 @@ class OrderServiceTest {
 
     private static OrderDto dto() {
         return new OrderDto(1L, USER_ID, RESTAURANT_ID, OrderStatus.CREATED, null, null, BigDecimal.TEN, BigDecimal.ZERO, null,
-                Instant.EPOCH, Instant.EPOCH, List.of());
+                BigDecimal.ZERO, null, null, null, null, null, null, null, null, Instant.EPOCH, Instant.EPOCH, List.of());
     }
 
     private static Order savedWithId(InvocationOnMock invocation) {

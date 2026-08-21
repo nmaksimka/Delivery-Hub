@@ -1,6 +1,8 @@
 package com.deliveryhub.payment.infrastructure.security;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -54,5 +56,14 @@ class InternalTokenFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, new MockFilterChain());
         return response;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/%69nternal/x/1", "//internal/x/1", "/internal;a=b/x/1", "/internal"})
+    void rejectsEncodedInternalPathWithoutToken(String uri) throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(new MockHttpServletRequest("GET", uri), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 }

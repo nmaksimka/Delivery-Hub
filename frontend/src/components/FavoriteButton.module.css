@@ -1,0 +1,22 @@
+.button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  transition:
+    background-color 160ms var(--ease),
+    color 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+
+.button:hover {
+  transform: scale(1.06);
+}
+
+.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}

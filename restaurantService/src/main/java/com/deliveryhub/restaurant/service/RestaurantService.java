@@ -48,6 +48,9 @@ public class RestaurantService {
     public RestaurantDto createRestaurant(RestaurantRequest request) {
         Restaurant restaurant = new Restaurant(request.name(), request.address(), request.phone());
         restaurant.changeWorkingHours(request.openTime(), request.closeTime());
+        if (request.latitude() != null || request.longitude() != null) {
+            restaurant.locate(request.latitude(), request.longitude());
+        }
         applyActivity(restaurant, request);
         RestaurantDto created = restaurantMapper.toDto(restaurantRepository.save(restaurant));
         catalogCache.evictRestaurants();
@@ -59,6 +62,9 @@ public class RestaurantService {
         Restaurant restaurant = findByIdOrThrow(id);
         restaurant.changeContacts(request.name(), request.address(), request.phone());
         restaurant.changeWorkingHours(request.openTime(), request.closeTime());
+        if (request.latitude() != null || request.longitude() != null) {
+            restaurant.locate(request.latitude(), request.longitude());
+        }
         applyActivity(restaurant, request);
         catalogCache.evictRestaurants();
         return restaurantMapper.toDto(restaurant);

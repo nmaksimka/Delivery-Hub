@@ -2,18 +2,26 @@ package com.deliveryhub.order.service;
 
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
+import com.deliveryhub.contracts.events.GeoPoint;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.dto.GeoLocation;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.deliveryhub.order.dto.CreateOrderRequest;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.dto.OrderItemRequest;
 import com.deliveryhub.order.entity.CancellationReason;
+import com.deliveryhub.order.entity.DeliveryDestination;
+import com.deliveryhub.order.entity.DeliveryFeeBreakdown;
 import com.deliveryhub.order.entity.Order;
 import com.deliveryhub.order.entity.OrderStatus;
+import com.deliveryhub.order.exception.DeliveryFeeChangedException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
 import com.deliveryhub.order.exception.ItemNotFoundException;
@@ -38,9 +46,11 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -60,6 +70,7 @@ public class OrderService {
     private final ProcessedEvents processedEvents;
     private final PromoService promoService;
     private final OrderCancellation cancellation;
+    private final DeliveryQuotes deliveryQuotes;
     private final Clock clock;
     private final TransactionTemplate transaction;
     private final Counter ordersPlaced;
@@ -71,6 +82,7 @@ public class OrderService {
                         ProcessedEvents processedEvents,
                         PromoService promoService,
                         OrderCancellation cancellation,
+                        DeliveryQuotes deliveryQuotes,
                         Clock clock,
                         PlatformTransactionManager transactionManager,
                         MeterRegistry meterRegistry) {
@@ -81,6 +93,7 @@ public class OrderService {
         this.processedEvents = processedEvents;
         this.promoService = promoService;
         this.cancellation = cancellation;
+        this.deliveryQuotes = deliveryQuotes;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
         this.ordersPlaced = Counter.builder(ORDERS_PLACED)
@@ -106,12 +119,9 @@ public class OrderService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId) {
-        return createOrder(createRequest, userId, null);
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode) {
+    public OrderDto createOrder(CreateOrderRequest createRequest, Long userId, String promoCode,
+                                UserAddressDto address, BigDecimal expectedDeliveryFee) {
+        Objects.requireNonNull(address, "Delivery address is required");
         Long restaurantId = createRequest.restaurantId();
         log.info("Creating order for user {} from restaurant {}", userId, restaurantId);
 
@@ -139,11 +149,24 @@ public class OrderService {
             }
             order.addItem(menuItem.id(), menuItem.name(), quantity, menuItem.price());
         });
+        DeliveryQuoteDto delivery = deliveryQuotes.quote(restaurantId, quote.restaurant().location(), address);
+        if (expectedDeliveryFee != null && delivery.deliveryFee().compareTo(expectedDeliveryFee) > 0) {
+            throw new DeliveryFeeChangedException(expectedDeliveryFee, delivery.deliveryFee());
+        }
+        order.deliverTo(new DeliveryDestination(address.id(), address.line(), address.courierComment(),
+                address.latitude(), address.longitude()), delivery.deliveryFee(), delivery.etaMinutes(),
+                new DeliveryFeeBreakdown(delivery.distanceMeters(), weatherSurcharge(delivery), delivery.routeSource()));
 
-        Order savedOrder = transaction.execute(status -> store(order, promoCode));
+        Order savedOrder = transaction.execute(status -> store(order, promoCode, quote.restaurant().location()));
         ordersPlaced.increment();
         log.info("Order created with id={}, total={}", savedOrder.getId(), savedOrder.getTotalAmount());
         return orderMapper.toDto(savedOrder);
+    }
+
+    private static BigDecimal weatherSurcharge(DeliveryQuoteDto delivery) {
+        return delivery.weather() == null || delivery.weather().surcharge() == null
+                ? BigDecimal.ZERO
+                : delivery.weather().surcharge();
     }
 
     private static String closedMessage(RestaurantDto restaurant) {
@@ -153,7 +176,7 @@ public class OrderService {
                 : closed + ", working hours: " + restaurant.workingHours();
     }
 
-    private Order store(Order order, String promoCode) {
+    private Order store(Order order, String promoCode, GeoLocation restaurantLocation) {
         PromoUse promo = null;
         if (promoCode != null && !promoCode.isBlank()) {
             promo = promoService.reserve(promoCode, order.getUserId(), order.getRestaurantId(), order.subtotal());
@@ -164,7 +187,7 @@ public class OrderService {
         if (promo != null) {
             promoService.record(promo, savedOrder.getUserId(), savedOrder.getId());
         }
-        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence);
+        OrderCreatedEvent event = orderCreatedEvent(savedOrder, sequence, restaurantLocation);
         outbox.append(AGGREGATE_TYPE, savedOrder.getId(), Topics.ORDER_CREATED, event.getEventId(), event);
         return savedOrder;
     }
@@ -235,7 +258,7 @@ public class OrderService {
         return ids.map(id -> orderMapper.toDto(ordersById.get(id)));
     }
 
-    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence) {
+    private OrderCreatedEvent orderCreatedEvent(Order order, long sequence, GeoLocation restaurantLocation) {
         List<OrderItemPayload> items = order.getOrderItems().stream()
                 .map(item -> OrderItemPayload.newBuilder()
                         .setMenuItemId(item.getMenuItemId())
@@ -253,6 +276,15 @@ public class OrderService {
                 .setCreatedAt(order.getCreatedAt())
                 .setItems(items)
                 .setSequence(sequence)
+                .setRestaurantLocation(restaurantLocation == null
+                        ? null
+                        : new GeoPoint(restaurantLocation.latitude(), restaurantLocation.longitude()))
+                .setDeliveryLocation(order.getDestination() == null
+                        ? null
+                        : new GeoPoint(order.getDestination().latitude().doubleValue(),
+                        order.getDestination().longitude().doubleValue()))
+                .setDeliveryAddress(order.getDestination() == null ? null : order.getDestination().line())
+                .setDeliveryComment(order.getDestination() == null ? null : order.getDestination().comment())
                 .build();
     }
 }

@@ -94,6 +94,33 @@ class DeliveryTest {
         assertThat(delivery.nextEventSequence()).isEqualTo(2);
     }
 
+    @Test
+    void orderConfirmationIsRememberedOnceAndNotForFinishedDelivery() {
+        Delivery delivery = Delivery.forOrder(5L, 42L, 9001L, null, Instant.parse("2026-08-01T10:00:00Z"));
+        Instant paidAt = Instant.parse("2026-08-01T10:01:00Z");
+
+        assertThat(delivery.markOrderConfirmed(paidAt)).isTrue();
+        assertThat(delivery.markOrderConfirmed(paidAt.plusSeconds(60))).isFalse();
+        assertThat(delivery.getOrderConfirmedAt()).isEqualTo(paidAt);
+
+        Delivery cancelled = Delivery.forOrder(6L, 42L, 9002L, null, paidAt);
+        cancelled.changeStatus(DeliveryStatus.CANCELLED, paidAt);
+        assertThat(cancelled.markOrderConfirmed(paidAt)).isFalse();
+    }
+
+    @Test
+    void keepsRoutePointsAndKnowsWhenCourierIsOnTheWay() {
+        Instant at = Instant.parse("2026-08-01T10:00:00Z");
+        Delivery delivery = Delivery.forOrder(5L, 42L, 9001L, null, at);
+        delivery.routeBetween(new GeoPosition(56.48, 84.95), new GeoPosition(56.47, 84.97));
+
+        assertThat(delivery.getPickup()).isEqualTo(new GeoPosition(56.48, 84.95));
+        assertThat(delivery.getDropoff()).isEqualTo(new GeoPosition(56.47, 84.97));
+        assertThat(delivery.isOnTheWay()).isFalse();
+        delivery.changeStatus(DeliveryStatus.PICKED_UP, at);
+        assertThat(delivery.isOnTheWay()).isTrue();
+    }
+
     private static Delivery deliveryIn(DeliveryStatus status) {
         Delivery delivery = Delivery.forOrder(100L, 42L, NOW);
         ReflectionTestUtils.setField(delivery, "status", status);

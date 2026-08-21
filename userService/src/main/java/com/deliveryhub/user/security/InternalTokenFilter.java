@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,9 +23,10 @@ public class InternalTokenFilter extends OncePerRequestFilter {
 
     public static final String HEADER_INTERNAL_TOKEN = "X-Internal-Token";
     private static final String IDENTITY_HEADER_PREFIX = "x-user-";
+    private static final String INTERNAL_PATH = "/internal/";
     private static final String PROBLEM = """
             {"type":"about:blank","title":"Unauthorized","status":401,\
-            "detail":"Identity headers are accepted only from the gateway"}""";
+            "detail":"Only the gateway and internal services may call this endpoint","code":"UNAUTHORIZED"}""";
 
     private final byte[] expectedToken;
 
@@ -36,7 +38,7 @@ public class InternalTokenFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (carriesIdentity(request) && !hasValidToken(request)) {
+        if (requiresToken(request) && !hasValidToken(request)) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -46,9 +48,15 @@ public class InternalTokenFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private static boolean carriesIdentity(HttpServletRequest request) {
-        return Collections.list(request.getHeaderNames()).stream()
+    private static boolean requiresToken(HttpServletRequest request) {
+        return isInternalPath(request)
+                || Collections.list(request.getHeaderNames()).stream()
                 .anyMatch(name -> name.toLowerCase(Locale.ROOT).startsWith(IDENTITY_HEADER_PREFIX));
+    }
+
+    private static boolean isInternalPath(HttpServletRequest request) {
+        String path = UrlPathHelper.defaultInstance.getPathWithinApplication(request).replaceAll("/{2,}", "/");
+        return path.startsWith(INTERNAL_PATH) || path.equals(INTERNAL_PATH.substring(0, INTERNAL_PATH.length() - 1));
     }
 
     private boolean hasValidToken(HttpServletRequest request) {

@@ -59,6 +59,10 @@ public class Restaurant {
     @Column(name = "owner_id")
     private Long ownerId;
 
+    private Double latitude;
+
+    private Double longitude;
+
     @OneToMany(mappedBy = "restaurant", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItem> menuItems = new ArrayList<>();
 
@@ -116,6 +120,21 @@ public class Restaurant {
             return !time.isBefore(openTime) && time.isBefore(closeTime);
         }
         return !time.isBefore(openTime) || time.isBefore(closeTime);
+    }
+
+    public void locate(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)) {
+            throw new IllegalArgumentException("Latitude and longitude must be set together");
+        }
+        if (latitude != null && (Math.abs(latitude) > 90 || Math.abs(longitude) > 180)) {
+            throw new IllegalArgumentException("Coordinates are out of range");
+        }
+        this.latitude = latitude;
+        this.longitude = longitude;
+    }
+
+    public boolean hasLocation() {
+        return latitude != null;
     }
 
     public void assignOwner(Long ownerId) {
@@ -201,6 +220,14 @@ public class Restaurant {
 
     public Long getOwnerId() {
         return ownerId;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
     }
 
     public boolean isActive() {

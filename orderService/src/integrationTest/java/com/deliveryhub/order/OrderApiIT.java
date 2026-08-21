@@ -4,10 +4,14 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
 import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.order.client.MenuQuote;
 import com.deliveryhub.order.client.RestaurantCatalog;
+import com.deliveryhub.order.client.UserAddresses;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
+import com.deliveryhub.order.client.dto.UserAddressDto;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +48,7 @@ class OrderApiIT {
     private static final String ORDER_REQUEST = """
             {"restaurantId": 1, "orderItemsRequest": [
                 {"menuItemId": 10, "quantity": 2},
-                {"menuItemId": 11, "quantity": 3}]}
+                {"menuItemId": 11, "quantity": 3}], "addressId": 77}
             """;
 
     @Autowired
@@ -55,9 +59,17 @@ class OrderApiIT {
     private JdbcClient jdbcClient;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
+    @MockitoBean
+    private UserAddresses userAddresses;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @BeforeEach
     void stubRestaurantService() {
+        when(userAddresses.deliverableAddress(any(), eq(77L))).thenReturn(new UserAddressDto(77L, "Томск", "Ленина",
+                "12", null, null, null, null, new BigDecimal("56.47"), new BigDecimal("84.97"), true));
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         when(restaurantCatalog.quote(eq(RESTAURANT_ID), any())).thenReturn(new MenuQuote(
                 new RestaurantDto(RESTAURANT_ID, "Pizzeria", true),
                 Map.of(10L, new MenuItemDto(10L, "Pizza", new BigDecimal("12.50"), true),
@@ -189,7 +201,8 @@ class OrderApiIT {
                 .header("X-User-Id", "42")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"restaurantId\": 1, \"orderItemsRequest\": ["
-                        + "{\"menuItemId\": 10, \"quantity\": 1}, {\"menuItemId\": 10, \"quantity\": 2}]}")
+                        + "{\"menuItemId\": 10, \"quantity\": 1}, {\"menuItemId\": 10, \"quantity\": 2}],"
+                        + " \"addressId\": 77}")
                 .exchange();
 
         assertThat(created).hasStatus(201).bodyJson().extractingPath("$.orderItems").asArray().hasSize(1);

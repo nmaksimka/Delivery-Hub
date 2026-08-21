@@ -1,5 +1,8 @@
 package com.deliveryhub.order;
 
+import com.deliveryhub.order.client.dto.UserAddressDto;
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
+import com.deliveryhub.order.client.DeliveryQuotes;
 import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.events.CourierAssignedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
@@ -64,6 +67,8 @@ class OrderSagaIT {
     private JdbcClient jdbcClient;
     @MockitoBean
     private RestaurantCatalog restaurantCatalog;
+    @MockitoBean
+    private DeliveryQuotes deliveryQuotes;
 
     @BeforeEach
     void stubRestaurantService() {
@@ -171,8 +176,12 @@ class OrderSagaIT {
     }
 
     private long placeOrder() {
+        UserAddressDto address = new UserAddressDto(77L, "Томск", "Ленина", "12", null, null, null, null,
+                new BigDecimal("56.47"), new BigDecimal("84.97"), true);
+        when(deliveryQuotes.quote(any(), any(), any(UserAddressDto.class))).thenReturn(new DeliveryQuoteDto(1500, 20,
+                new BigDecimal("0.00"), "OSRM", new DeliveryQuoteDto.Weather("CLEAR", 5.0, new BigDecimal("0.00"), 0)));
         return orderService.createOrder(
-                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), USER_ID).id();
+                new CreateOrderRequest(1L, List.of(new OrderItemRequest(10L, 2))), USER_ID, null, address, null).id();
     }
 
     private OrderDto view(long orderId) {
@@ -204,6 +213,6 @@ class OrderSagaIT {
     }
 
     private static PaymentHeldEvent held(UUID eventId, long orderId) {
-        return new PaymentHeldEvent(eventId, orderId, USER_ID, AMOUNT, "demo", Instant.now());
+        return new PaymentHeldEvent(eventId, orderId, USER_ID, AMOUNT, "demo", Instant.now(), null, null, null, null, null);
     }
 }

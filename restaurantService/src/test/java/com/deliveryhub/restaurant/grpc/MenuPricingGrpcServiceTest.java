@@ -157,6 +157,20 @@ class MenuPricingGrpcServiceTest {
     }
 
     @Test
+    void quotesRestaurantLocationWhenItIsKnown() {
+        Restaurant restaurant = restaurant(RESTAURANT_ID, true);
+        restaurant.locate(56.4884, 84.948);
+        when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant));
+        when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
+
+        QuoteResponse response = stub.quote(request(10L));
+
+        assertThat(response.hasLocation()).isTrue();
+        assertThat(response.getLocation().getLatitude()).isEqualTo(56.4884);
+        assertThat(response.getLocation().getLongitude()).isEqualTo(84.948);
+    }
+
+    @Test
     void restaurantWithoutHoursIsNeverClosed() {
         when(restaurantRepository.findById(RESTAURANT_ID)).thenReturn(Optional.of(restaurant(RESTAURANT_ID, true)));
         when(menuItemRepository.findAllById(java.util.Set.of(10L))).thenReturn(List.of());
@@ -166,6 +180,7 @@ class MenuPricingGrpcServiceTest {
         assertThat(response.getRestaurantClosed()).isFalse();
         assertThat(response.getOpensAt()).isEmpty();
         assertThat(response.getTimeZone()).isEmpty();
+        assertThat(response.hasLocation()).isFalse();
     }
 
     @Test

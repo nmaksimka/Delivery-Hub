@@ -33,6 +33,21 @@ app:
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
     refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
     private-key: ${JWT_PRIVATE_KEY:}
+  geocoding:
+    base-url: ${NOMINATIM_BASE_URL:https://nominatim.openstreetmap.org}
+    user-agent: DeliveryHub/1.0 (+https://github.com/nmaksimka/Delivery-Hub)
+    city: Томск
+    country-codes: ru
+    viewbox: 84.80,56.62,85.20,56.36
+    connect-timeout: 2s
+    read-timeout: 4s
+    requests-per-second: 1
+    rate-limit-wait: 300ms
+    cache-size: 2000
+    cache-ttl: 7d
+    not-found-cache-ttl: 1d
+    retry-interval: 10m
+    retry-batch-size: 20
   cleanup:
     interval: 1h
     refresh-token-retention: 7d

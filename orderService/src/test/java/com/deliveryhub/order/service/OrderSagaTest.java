@@ -145,6 +145,6 @@ class OrderSagaTest {
     }
 
     private static PaymentHeldEvent held() {
-        return new PaymentHeldEvent(UUID.randomUUID(), ORDER_ID, 42L, BigDecimal.TEN, "demo", NOW);
+        return new PaymentHeldEvent(UUID.randomUUID(), ORDER_ID, 42L, BigDecimal.TEN, "demo", NOW, null, null, null, null, null);
     }
 }

@@ -24,7 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-@SpringBootTest(properties = "app.dispatch.courier-ids=870001,870002,870003,870004,870005,870006,870007,870008")
+@SpringBootTest
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class SagaListenerIT {
 
@@ -132,6 +132,6 @@ class SagaListenerIT {
     }
 
     private static PaymentHeldEvent paymentHeld(UUID eventId, long orderId) {
-        return new PaymentHeldEvent(eventId, orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now());
+        return new PaymentHeldEvent(eventId, orderId, 42L, new BigDecimal("34.00"), "demo", Instant.now(), null, null, null, null, null);
     }
 }

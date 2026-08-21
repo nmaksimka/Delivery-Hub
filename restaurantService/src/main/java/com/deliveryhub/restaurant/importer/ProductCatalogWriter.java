@@ -78,6 +78,8 @@ public class ProductCatalogWriter {
                 shelf.address(), shelf.phone());
         restaurant.describe(shelf.cuisine(), TomskRestaurants.CITY, null);
         restaurant.changeWorkingHours(TomskRestaurants.OPENS_AT, TomskRestaurants.CLOSES_AT);
+        TomskRestaurants.Location location = TomskRestaurants.locationFor(shelf.externalId());
+        restaurant.locate(location.latitude(), location.longitude());
         return restaurant;
     }
 

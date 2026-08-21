@@ -5,6 +5,7 @@ import com.deliveryhub.contracts.pricing.MenuPricingGrpc;
 import com.deliveryhub.contracts.pricing.QuoteRequest;
 import com.deliveryhub.contracts.pricing.QuoteResponse;
 import com.deliveryhub.contracts.pricing.QuotedItem;
+import com.deliveryhub.order.client.dto.GeoLocation;
 import com.deliveryhub.order.client.dto.MenuItemDto;
 import com.deliveryhub.order.client.dto.RestaurantDto;
 import com.deliveryhub.order.exception.ErrorCode;
@@ -92,7 +93,10 @@ public class RestaurantCatalog {
 
     private static MenuQuote toQuote(QuoteResponse response) {
         RestaurantDto restaurant = new RestaurantDto(response.getRestaurantId(), response.getRestaurantName(),
-                response.getRestaurantActive(), response.getRestaurantClosed(), workingHours(response));
+                response.getRestaurantActive(), response.getRestaurantClosed(), workingHours(response),
+                response.hasLocation()
+                        ? new GeoLocation(response.getLocation().getLatitude(), response.getLocation().getLongitude())
+                        : null);
         Map<Long, MenuItemDto> items = new HashMap<>();
         for (QuotedItem item : response.getItemsList()) {
             if (item.getStatus() == ItemStatus.ITEM_STATUS_AVAILABLE

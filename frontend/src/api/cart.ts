@@ -50,6 +50,18 @@ export const cartSchema = z.object({
   orderable: z.boolean(),
 });
 
+export const deliveryQuoteSchema = z.object({
+  distanceMeters: z.number(),
+  etaMinutes: z.number(),
+  deliveryFee: money,
+  weather: z.object({
+    condition: z.string(),
+    surcharge: money,
+    extraMinutes: z.number(),
+  }),
+});
+
+export type DeliveryQuote = z.infer<typeof deliveryQuoteSchema>;
 export type Cart = z.infer<typeof cartSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type CartRestaurant = z.infer<typeof cartRestaurantSchema>;
@@ -104,10 +116,18 @@ export const cartApi = {
   removePromo() {
     return request('/api/cart/promo', { method: 'DELETE', schema: cartSchema });
   },
-  checkout(idempotencyKey: string) {
+  deliveryQuote(addressId: number, signal?: AbortSignal) {
+    return request('/api/cart/delivery-quote', {
+      query: { addressId },
+      schema: deliveryQuoteSchema,
+      signal,
+    });
+  },
+  checkout(idempotencyKey: string, addressId: number, expectedDeliveryFee?: number) {
     return request('/api/cart/checkout', {
       method: 'POST',
       headers: { [idempotencyKeyHeader]: idempotencyKey },
+      body: { addressId, expectedDeliveryFee },
       schema: orderSchema,
     });
   },

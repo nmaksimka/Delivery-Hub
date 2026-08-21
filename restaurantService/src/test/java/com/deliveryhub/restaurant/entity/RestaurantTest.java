@@ -114,4 +114,16 @@ class RestaurantTest {
 
         assertThat(item.isAvailable()).isFalse();
     }
+
+    @Test
+    void locationNeedsBothCoordinates() {
+        Restaurant restaurant = new Restaurant("Pizzeria", null, null);
+
+        assertThatThrownBy(() -> restaurant.locate(56.48, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> restaurant.locate(91.0, 84.9)).isInstanceOf(IllegalArgumentException.class);
+
+        restaurant.locate(56.48, 84.95);
+        assertThat(restaurant.hasLocation()).isTrue();
+        assertThat(restaurant.getLongitude()).isEqualTo(84.95);
+    }
 }

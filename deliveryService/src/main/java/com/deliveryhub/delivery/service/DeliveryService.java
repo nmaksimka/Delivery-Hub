@@ -4,10 +4,14 @@ import com.deliveryhub.contracts.Topics;
 import com.deliveryhub.contracts.enums.DeliveryStatus;
 import com.deliveryhub.contracts.events.DeliveryStatusUpdatedEvent;
 import com.deliveryhub.contracts.events.OrderCancelledEvent;
+import com.deliveryhub.contracts.events.PaymentCapturedEvent;
 import com.deliveryhub.delivery.dto.CreateDeliveryRequest;
 import com.deliveryhub.delivery.dto.DeliveryDto;
 import com.deliveryhub.delivery.dto.UpdateDeliveryStatusRequest;
+import com.deliveryhub.delivery.entity.Courier;
+import com.deliveryhub.delivery.entity.CourierStatus;
 import com.deliveryhub.delivery.entity.Delivery;
+import com.deliveryhub.delivery.exception.CourierUnavailableException;
 import com.deliveryhub.delivery.exception.DeliveryAlreadyExistsException;
 import com.deliveryhub.delivery.exception.ForbiddenException;
 import com.deliveryhub.delivery.exception.OrderAlreadyCancelledException;
@@ -15,12 +19,15 @@ import com.deliveryhub.delivery.inbox.ProcessedEvents;
 import com.deliveryhub.delivery.mapper.DeliveryMapper;
 import com.deliveryhub.delivery.outbox.Outbox;
 import com.deliveryhub.delivery.repository.CancelledOrders;
+import com.deliveryhub.delivery.repository.CourierRepository;
 import com.deliveryhub.delivery.repository.DeliveryRepository;
 import com.deliveryhub.delivery.security.CurrentUser;
+import com.deliveryhub.delivery.tracking.TrackingUpdate;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -48,41 +55,91 @@ public class DeliveryService {
     private final Outbox outbox;
     private final ProcessedEvents processedEvents;
     private final CancelledOrders cancelledOrders;
+    private final CourierRepository courierRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final ApplicationEventPublisher events;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
                            DeliveryMapper deliveryMapper,
                            Outbox outbox,
                            ProcessedEvents processedEvents,
                            CancelledOrders cancelledOrders,
+                           CourierRepository courierRepository,
                            Clock clock,
-                           MeterRegistry meterRegistry) {
+                           MeterRegistry meterRegistry,
+                           ApplicationEventPublisher events) {
         this.deliveryRepository = deliveryRepository;
         this.deliveryMapper = deliveryMapper;
         this.outbox = outbox;
         this.processedEvents = processedEvents;
         this.cancelledOrders = cancelledOrders;
+        this.courierRepository = courierRepository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.events = events;
     }
 
     public DeliveryDto getDeliveryById(Long id, CurrentUser currentUser) {
-        return deliveryMapper.toDto(visibleTo(currentUser, findByIdOrThrow(id)));
+        return toDtoFor(currentUser, visibleTo(currentUser, findByIdOrThrow(id)));
     }
 
     public DeliveryDto getDeliveryByOrderId(Long orderId, CurrentUser currentUser) {
         Delivery delivery = deliveryRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Delivery for order ID: " + orderId + " was not found"));
-        return deliveryMapper.toDto(visibleTo(currentUser, delivery));
+        return toDtoFor(currentUser, visibleTo(currentUser, delivery));
     }
 
     public Page<DeliveryDto> getAllDeliveries(Pageable pageable, CurrentUser currentUser) {
         if (!currentUser.seesEveryDelivery()) {
             throw new ForbiddenException("Only couriers and administrators can list deliveries");
         }
-        return deliveryRepository.findAll(pageable).map(deliveryMapper::toDto);
+        return deliveryRepository.findAll(pageable).map(delivery -> toDtoFor(currentUser, delivery));
+    }
+
+    private DeliveryDto toDtoFor(CurrentUser currentUser, Delivery delivery) {
+        DeliveryDto dto = deliveryMapper.toDto(delivery);
+        if (dto == null || currentUser.isAdmin() || delivery.belongsTo(currentUser.id())) {
+            return dto;
+        }
+        boolean ownActiveDelivery = currentUser.isCourier() && !delivery.isFinished()
+                && courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .filter(delivery::isAssignedTo)
+                .isPresent();
+        return ownActiveDelivery ? dto : dto.withoutAddress();
+    }
+
+    @Transactional
+    public DeliveryDto createDeliveryAs(CreateDeliveryRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            throw new ForbiddenException("Only administrators can create deliveries manually");
+        }
+        return createDelivery(request);
+    }
+
+    @Transactional
+    public DeliveryDto updateDeliveryStatusAs(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isAdmin()) {
+            requireOwnDeliveryOfCourier(id, request, currentUser);
+        }
+        return updateDeliveryStatus(id, request);
+    }
+
+    private void requireOwnDeliveryOfCourier(Long id, UpdateDeliveryStatusRequest request, CurrentUser currentUser) {
+        if (!currentUser.isCourier()) {
+            throw new ForbiddenException("Only couriers and administrators can change delivery status");
+        }
+        if (request.courierId() != null) {
+            throw new ForbiddenException("Only administrators can reassign deliveries");
+        }
+        Long courierId = courierRepository.findByUserId(currentUser.id())
+                .map(Courier::getId)
+                .orElseThrow(() -> new ForbiddenException("Current user is not registered as a courier"));
+        if (!courierId.equals(findByIdOrThrow(id).getCourierId())) {
+            throw new ForbiddenException("Delivery " + id + " is assigned to another courier");
+        }
     }
 
     @Transactional
@@ -94,6 +151,7 @@ public class DeliveryService {
             throw new OrderAlreadyCancelledException(request.orderId());
         }
 
+        occupyCourier(request.courierId(), clock.instant());
         Delivery delivery;
         try {
             delivery = deliveryRepository.saveAndFlush(Delivery.forOrder(
@@ -113,11 +171,15 @@ public class DeliveryService {
         Delivery delivery = findByIdOrThrow(id);
 
         Instant now = clock.instant();
-        if (request.courierId() != null) {
+        if (request.courierId() != null && !request.courierId().equals(delivery.getCourierId())) {
+            Long previousCourierId = delivery.getCourierId();
+            occupyCourier(request.courierId(), now);
             delivery.assignCourier(request.courierId(), now);
+            releaseCourier(previousCourierId, now);
         }
         if (request.status() != null && delivery.changeStatus(request.status(), now)) {
             log.info("Delivery {} status updated to {}", id, request.status());
+            releaseCourierOfFinished(delivery, now);
             publishStatusChange(delivery);
         }
         return deliveryMapper.toDto(delivery);
@@ -147,9 +209,49 @@ public class DeliveryService {
                     delivery.getId(), delivery.getStatus());
             return;
         }
-        delivery.changeStatus(DeliveryStatus.CANCELLED, clock.instant());
+        Instant now = clock.instant();
+        delivery.changeStatus(DeliveryStatus.CANCELLED, now);
+        releaseCourierOfFinished(delivery, now);
         log.info("Delivery {} is cancelled together with order {}", delivery.getId(), event.getOrderId());
         publishStatusChange(delivery);
+    }
+
+    @Transactional
+    public void markOrderConfirmed(PaymentCapturedEvent event) {
+        if (!processedEvents.registerFirstDelivery(event.getEventId(), Topics.PAYMENT_CAPTURED)) {
+            log.info("Event {} is already processed, skipping", event.getEventId());
+            return;
+        }
+        deliveryRepository.findByOrderId(event.getOrderId())
+                .filter(delivery -> delivery.markOrderConfirmed(clock.instant()))
+                .ifPresentOrElse(
+                        delivery -> log.info("Order {} is paid, delivery {} may be picked up",
+                                event.getOrderId(), delivery.getId()),
+                        () -> log.info("Order {} is paid, but there is no open delivery for it", event.getOrderId()));
+    }
+
+    private void occupyCourier(Long courierId, Instant now) {
+        if (courierId == null) {
+            return;
+        }
+        Courier courier = courierRepository.lockById(courierId)
+                .orElseThrow(() -> new EntityNotFoundException("Courier with ID: " + courierId + " was not found"));
+        if (courier.getStatus() != CourierStatus.AVAILABLE) {
+            throw new CourierUnavailableException(courierId, courier.getStatus());
+        }
+        courier.occupy(now);
+    }
+
+    private void releaseCourier(Long courierId, Instant now) {
+        if (courierId != null) {
+            courierRepository.findById(courierId).ifPresent(courier -> courier.release(now));
+        }
+    }
+
+    private void releaseCourierOfFinished(Delivery delivery, Instant now) {
+        if (delivery.isFinished()) {
+            releaseCourier(delivery.getCourierId(), now);
+        }
     }
 
     private void publishStatusChange(Delivery delivery) {
@@ -163,6 +265,7 @@ public class DeliveryService {
                 .build();
         outbox.append(AGGREGATE_TYPE, delivery.getId(), Topics.DELIVERY_STATUS_UPDATED, event.getEventId(), event);
         countAfterCommit(delivery.getStatus());
+        events.publishEvent(TrackingUpdate.status(delivery));
     }
 
     private void countAfterCommit(DeliveryStatus status) {

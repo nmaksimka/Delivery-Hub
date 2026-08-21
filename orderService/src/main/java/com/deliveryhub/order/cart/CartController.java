@@ -1,5 +1,6 @@
 package com.deliveryhub.order.cart;
 
+import com.deliveryhub.order.client.dto.DeliveryQuoteDto;
 import com.deliveryhub.order.dto.OrderDto;
 import com.deliveryhub.order.idempotency.IdempotencyFilter;
 import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
@@ -68,14 +69,20 @@ public class CartController {
         cartService.clear(userId);
     }
 
+    @GetMapping("/delivery-quote")
+    public DeliveryQuoteDto deliveryQuote(@RequestParam Long addressId, @RequestHeader("X-User-Id") Long userId) {
+        return cartService.deliveryQuote(userId, addressId);
+    }
+
     @PostMapping("/checkout")
     @ResponseStatus(HttpStatus.CREATED)
     public OrderDto checkout(@RequestHeader("X-User-Id") Long userId,
                              @RequestHeader(name = IdempotencyFilter.HEADER_IDEMPOTENCY_KEY, required = false)
-                             String idempotencyKey) {
+                             String idempotencyKey,
+                             @Valid @RequestBody CheckoutRequest request) {
         if (idempotencyKey == null) {
             throw new MissingIdempotencyKeyException("Checkout requires the Idempotency-Key header");
         }
-        return cartService.checkout(userId);
+        return cartService.checkout(userId, request.addressId(), request.expectedDeliveryFee());
     }
 }
