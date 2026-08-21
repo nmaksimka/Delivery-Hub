@@ -97,6 +97,7 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
       MP_MAX_MESSAGES: 5000
+      MP_SMTP_DISABLE_RDNS: "true"
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 5s
