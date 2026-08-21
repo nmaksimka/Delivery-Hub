@@ -88,6 +88,22 @@ services:
       schema-registry:
         condition: service_healthy
 
+  mailpit:
+    image: axllent/mailpit:v1.29.7
+    container_name: mailpit
+    ports:
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_DISABLE_RDNS: "true"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:8.6.3-alpine
     container_name: redis
@@ -165,6 +181,17 @@ services:
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_pass}
     volumes:
       - pg-payment-data:/var/lib/postgresql/data
+    healthcheck: *pg-healthcheck
+
+  postgres-notification:
+    image: postgres:17.9-alpine
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notification_pass}
+    volumes:
+      - pg-notification-data:/var/lib/postgresql/data
     healthcheck: *pg-healthcheck
 
   postgres-delivery:
@@ -370,6 +397,35 @@ services:
       timeout: 5s
       retries: 20
 
+  notificationService:
+    image: deliveryhub-notification-service
+    build:
+      context: .
+      dockerfile: ./notificationService/Dockerfile
+    container_name: notificationService
+    environment:
+      <<: [*platform-credentials, *json-logs]
+      SPRING_PROFILES_ACTIVE: docker
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notification_pass}
+    depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
+      postgres-notification:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3337/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   apiGateway:
     image: deliveryhub-api-gateway
     build:
@@ -397,6 +453,8 @@ services:
       userService:
         condition: service_healthy
       paymentService:
+        condition: service_healthy
+      notificationService:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9335/actuator/health/readiness || exit 1"]
@@ -468,3 +526,4 @@ volumes:
   pg-delivery-data:
   pg-user-data:
   pg-payment-data:
+  pg-notification-data:
