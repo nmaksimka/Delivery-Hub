@@ -13,5 +13,6 @@ listOf(
     "restaurantService",
     "deliveryService",
     "userService",
-    "paymentService"
+    "paymentService",
+    "notificationService"
 ).filter { file(it).exists() }.forEach { include(it) }
