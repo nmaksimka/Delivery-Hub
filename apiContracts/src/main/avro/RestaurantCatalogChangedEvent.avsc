@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "RestaurantCatalogChangedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "restaurantId", "type": "long"},
+    {"name": "removed", "type": "boolean"},
+    {"name": "name", "type": "string"},
+    {"name": "cuisine", "type": ["null", "string"], "default": null},
+    {"name": "address", "type": ["null", "string"], "default": null},
+    {"name": "active", "type": "boolean"},
+    {"name": "dishes", "type": {"type": "array", "items": "CatalogDishPayload"}},
+    {"name": "changedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
