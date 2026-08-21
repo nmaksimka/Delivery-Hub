@@ -54,6 +54,21 @@ class UserRoleApiIT {
     }
 
     @Test
+    void internalContactGivesEmailOnlyWithInternalToken() {
+        String email = UUID.randomUUID() + "@example.com";
+        int userId = register(email);
+
+        MvcTestResult contact = mvc.get().uri("/internal/users/{id}/contact", userId).exchange();
+        MvcTestResult foreign = mvc.get().uri("/internal/users/{id}/contact", userId)
+                .header("X-Internal-Token", "wrong").exchange();
+        MvcTestResult missing = mvc.get().uri("/internal/users/{id}/contact", 987654321).exchange();
+
+        assertThat(contact).hasStatusOk().bodyJson().extractingPath("$.email").isEqualTo(email);
+        assertThat(foreign).hasStatus(401);
+        assertThat(missing).hasStatus(404);
+    }
+
+    @Test
     void roleChangeIsForbiddenWithoutAdminRole() {
         int userId = register(UUID.randomUUID() + "@example.com");
 
