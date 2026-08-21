@@ -32,9 +32,8 @@ public class NotificationHistory {
 
     @Transactional
     public Notification markRead(long userId, UUID notificationId) {
-        Notification notification = notifications.findByIdAndUserId(notificationId, userId)
+        notifications.markRead(notificationId, userId, clock.instant());
+        return notifications.findByIdAndUserId(notificationId, userId)
                 .orElseThrow(() -> new NotificationNotFoundException(notificationId));
-        notification.markRead(clock.instant());
-        return notification;
     }
 }

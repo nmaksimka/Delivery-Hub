@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -15,6 +16,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
+@DynamicUpdate
 @Table(name = "notifications")
 public class Notification {
 
@@ -127,12 +129,6 @@ public class Notification {
                 "Заказ №" + orderId + " отменён",
                 "Если оплата уже прошла, деньги вернутся на кошелёк.",
                 null, null, now);
-    }
-
-    public void markRead(Instant now) {
-        if (readAt == null) {
-            readAt = now;
-        }
     }
 
     public void mailSent(Instant now) {

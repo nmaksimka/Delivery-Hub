@@ -65,14 +65,4 @@ class NotificationTest {
         assertThat(notification.getSentAt()).isEqualTo(NOW.plusSeconds(15));
         assertThat(notification.getLastError()).isNull();
     }
-
-    @Test
-    void markReadKeepsFirstReadTime() {
-        Notification notification = Notification.deliveryRejected(UUID.randomUUID(), 7L, 42L, "NO_COURIER", NOW);
-
-        notification.markRead(NOW.plusSeconds(1));
-        notification.markRead(NOW.plusSeconds(60));
-
-        assertThat(notification.getReadAt()).isEqualTo(NOW.plusSeconds(1));
-    }
 }
