@@ -18,3 +18,7 @@ services:
   postgres-payment:
     ports:
       - "127.0.0.1:5336:5432"
+
+  postgres-notification:
+    ports:
+      - "127.0.0.1:5337:5432"

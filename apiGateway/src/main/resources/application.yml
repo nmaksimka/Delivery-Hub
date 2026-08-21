@@ -48,6 +48,8 @@ spring:
               - uri: http://localhost:3334
             paymentService:
               - uri: http://localhost:3336
+            notificationService:
+              - uri: http://localhost:3337
     gateway:
       server:
         webflux:
@@ -123,6 +125,10 @@ spring:
               uri: lb://paymentService
               predicates:
                 - Path=/api/payments/**
+            - id: notification-service
+              uri: lb://notificationService
+              predicates:
+                - Path=/api/notifications/**
             - id: user-service
               uri: lb://userService
               predicates:
@@ -153,6 +159,12 @@ spring:
               uri: lb://paymentService
               predicates:
                 - Path=/docs/payments/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+            - id: notification-docs
+              uri: lb://notificationService
+              predicates:
+                - Path=/docs/notifications/v3/api-docs
               filters:
                 - SetPath=/v3/api-docs
             - id: user-docs
@@ -193,3 +205,5 @@ springdoc:
         url: /docs/deliveries/v3/api-docs
       - name: payment-service
         url: /docs/payments/v3/api-docs
+      - name: notification-service
+        url: /docs/notifications/v3/api-docs

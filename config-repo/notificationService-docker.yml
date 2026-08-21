@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-notification:5432/notification_db
+  kafka:
+    bootstrap-servers: kafka:9092
+    properties:
+      schema.registry.url: http://schema-registry:8081
+  mail:
+    host: mailpit
+    port: 1025
+
+app:
+  users:
+    base-url: http://userService:3334
