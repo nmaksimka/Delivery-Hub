@@ -88,6 +88,23 @@ services:
       schema-registry:
         condition: service_healthy
 
+  elasticsearch:
+    image: elasticsearch:9.2.8
+    container_name: elasticsearch
+    ports:
+      - "127.0.0.1:9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
   mailpit:
     image: axllent/mailpit:v1.29.7
     container_name: mailpit
@@ -430,6 +447,32 @@ services:
       timeout: 5s
       retries: 20
 
+  searchService:
+    image: deliveryhub-search-service
+    build:
+      context: .
+      dockerfile: ./searchService/Dockerfile
+    container_name: searchService
+    environment:
+      <<: [*platform-credentials, *json-logs]
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      configServer:
+        condition: service_healthy
+      discoveryServer:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3338/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   apiGateway:
     image: deliveryhub-api-gateway
     build:
@@ -459,6 +502,8 @@ services:
       paymentService:
         condition: service_healthy
       notificationService:
+        condition: service_healthy
+      searchService:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9335/actuator/health/readiness || exit 1"]
@@ -531,3 +576,4 @@ volumes:
   pg-user-data:
   pg-payment-data:
   pg-notification-data:
+  es-data:
