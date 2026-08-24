@@ -10,6 +10,7 @@ import com.deliveryhub.contracts.events.OrderCreatedEvent;
 import com.deliveryhub.contracts.events.OrderItemPayload;
 import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.contracts.events.PaymentReleasedEvent;
+import com.deliveryhub.contracts.events.ReviewSubmittedEvent;
 import org.apache.avro.AvroRuntimeException;
 import org.junit.jupiter.api.Test;
 
@@ -109,6 +110,15 @@ class EventPayloadsTest {
         assertThat(EventPayloads.decode(Topics.PAYMENT_HELD, EventPayloads.encode(held))).isEqualTo(held);
         assertThat(EventPayloads.decode(Topics.COURIER_ASSIGNED, EventPayloads.encode(assigned))).isEqualTo(assigned);
         assertThat(EventPayloads.decode(Topics.DELIVERY_REJECTED, EventPayloads.encode(rejected))).isEqualTo(rejected);
+    }
+
+    @Test
+    void reviewEventSurvivesRoundTripWithAndWithoutCourier() {
+        ReviewSubmittedEvent withCourier = new ReviewSubmittedEvent(UUID.randomUUID(), 3L, 15L, 42L, 7L, 5, 9001L, 4, NOW);
+        ReviewSubmittedEvent withoutCourier = new ReviewSubmittedEvent(UUID.randomUUID(), 4L, 16L, 42L, 7L, 2, null, null, NOW);
+
+        assertThat(EventPayloads.decode(Topics.REVIEW_SUBMITTED, EventPayloads.encode(withCourier))).isEqualTo(withCourier);
+        assertThat(EventPayloads.decode(Topics.REVIEW_SUBMITTED, EventPayloads.encode(withoutCourier))).isEqualTo(withoutCourier);
     }
 
     @Test

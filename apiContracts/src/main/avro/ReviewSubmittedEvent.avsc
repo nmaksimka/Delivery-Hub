@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "ReviewSubmittedEvent",
+  "fields": [
+    {"name": "eventId", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "reviewId", "type": "long"},
+    {"name": "orderId", "type": "long"},
+    {"name": "userId", "type": "long"},
+    {"name": "restaurantId", "type": "long"},
+    {"name": "restaurantRating", "type": "int"},
+    {"name": "courierId", "type": ["null", "long"], "default": null},
+    {"name": "courierRating", "type": ["null", "int"], "default": null},
+    {"name": "submittedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
