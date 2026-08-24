@@ -1,4 +1,7 @@
 spring:
+  kafka:
+    admin:
+      auto-create: false
   cache:
     type: simple
   grpc:
@@ -14,3 +17,5 @@ app:
   storage:
     access-key: it-access-key
     secret-key: it-secret-key
+  outbox:
+    relay-enabled: false

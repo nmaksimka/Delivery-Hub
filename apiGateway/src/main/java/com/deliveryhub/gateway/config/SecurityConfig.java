@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/cabinet/**").hasRole("RESTAURANT_OWNER")
                         .pathMatchers(HttpMethod.GET, "/api/restaurants/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/search", "/api/search/**").permitAll()
                         .pathMatchers("/api/restaurants/**").hasRole("ADMIN")
 
                         .pathMatchers("/api/orders/all").hasRole("ADMIN")

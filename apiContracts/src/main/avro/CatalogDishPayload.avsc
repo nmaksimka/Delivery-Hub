@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "namespace": "com.deliveryhub.contracts.events",
+  "name": "CatalogDishPayload",
+  "fields": [
+    {"name": "menuItemId", "type": "long"},
+    {"name": "name", "type": "string"},
+    {"name": "description", "type": ["null", "string"], "default": null},
+    {"name": "category", "type": ["null", "string"], "default": null},
+    {"name": "section", "type": "string"},
+    {"name": "price", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
+    {"name": "available", "type": "boolean"}
+  ]
+}

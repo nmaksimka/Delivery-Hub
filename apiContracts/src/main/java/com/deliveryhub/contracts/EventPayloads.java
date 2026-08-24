@@ -10,6 +10,7 @@ import com.deliveryhub.contracts.events.PaymentHeldEvent;
 import com.deliveryhub.contracts.events.PaymentRefundedEvent;
 import com.deliveryhub.contracts.events.PaymentRejectedEvent;
 import com.deliveryhub.contracts.events.PaymentReleasedEvent;
+import com.deliveryhub.contracts.events.RestaurantCatalogChangedEvent;
 import org.apache.avro.message.BinaryMessageDecoder;
 import org.apache.avro.message.BinaryMessageEncoder;
 import org.apache.avro.specific.SpecificData;
@@ -32,7 +33,8 @@ public final class EventPayloads {
             Map.entry(Topics.PAYMENT_REJECTED, PaymentRejectedEvent.getDecoder()),
             Map.entry(Topics.PAYMENT_CAPTURED, PaymentCapturedEvent.getDecoder()),
             Map.entry(Topics.PAYMENT_RELEASED, PaymentReleasedEvent.getDecoder()),
-            Map.entry(Topics.PAYMENT_REFUNDED, PaymentRefundedEvent.getDecoder()));
+            Map.entry(Topics.PAYMENT_REFUNDED, PaymentRefundedEvent.getDecoder()),
+            Map.entry(Topics.RESTAURANT_CATALOG_CHANGED, RestaurantCatalogChangedEvent.getDecoder()));
 
     private EventPayloads() {
     }

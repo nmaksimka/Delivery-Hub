@@ -1,6 +1,10 @@
 spring:
   datasource:
     url: jdbc:postgresql://postgres-restaurant:5432/restaurant_db
+  kafka:
+    bootstrap-servers: kafka:9092
+    properties:
+      schema.registry.url: http://schema-registry:8081
   data:
     redis:
       host: redis

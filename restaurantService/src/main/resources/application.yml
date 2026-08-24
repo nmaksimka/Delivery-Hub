@@ -37,12 +37,25 @@ spring:
     type: redis
     redis:
       enable-statistics: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8085}
+      avro.use.logical.type.converters: true
   servlet:
     multipart:
       max-file-size: 6MB
       max-request-size: 7MB
 
 app:
+  outbox:
+    poll-interval: 1s
+    batch-size: 50
+    send-timeout: 5s
   internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
   storage:
     endpoint: ${STORAGE_ENDPOINT:http://localhost:3900}
