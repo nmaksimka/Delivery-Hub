@@ -51,6 +51,9 @@ public class Order {
     @Column(name = "delivery_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal deliveryFee;
 
+    @Column(name = "courier_id")
+    private Long courierId;
+
     @Column(name = "eta_minutes")
     private Integer etaMinutes;
 
@@ -205,6 +208,14 @@ public class Order {
         return advanceTo(OrderStatus.PAYMENT_HELD, at);
     }
 
+    public void assignCourier(Long courierId) {
+        this.courierId = Objects.requireNonNull(courierId, "courierId");
+    }
+
+    public boolean isDelivered() {
+        return status == OrderStatus.DELIVERED;
+    }
+
     public boolean markCourierAssigned(Instant at) {
         return advanceTo(OrderStatus.COURIER_ASSIGNED, at);
     }
@@ -305,6 +316,10 @@ public class Order {
 
     public BigDecimal getDeliveryFee() {
         return deliveryFee;
+    }
+
+    public Long getCourierId() {
+        return courierId;
     }
 
     public Integer getEtaMinutes() {
