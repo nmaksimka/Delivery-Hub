@@ -3,6 +3,7 @@ package com.deliveryhub.order.exception;
 import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
+import com.deliveryhub.order.review.ReviewRejectedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -43,6 +44,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({InvalidStatusTransitionException.class, OrderRejectedException.class})
     public ProblemDetail handleConflict(RuntimeException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage(), codeOf(ex, ErrorCode.INVALID_STATUS_TRANSITION));
+    }
+
+    @ExceptionHandler(ReviewRejectedException.class)
+    public ProblemDetail handleReviewRejected(ReviewRejectedException ex) {
+        HttpStatus status = switch (ex.code()) {
+            case REVIEW_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case COURIER_NOT_ASSIGNED -> HttpStatus.UNPROCESSABLE_CONTENT;
+            default -> HttpStatus.CONFLICT;
+        };
+        return problem(status, ex.getMessage(), ex.code());
     }
 
     @ExceptionHandler(InvalidRestaurantRequestException.class)
