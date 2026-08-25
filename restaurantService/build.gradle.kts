@@ -12,6 +12,8 @@ dependencies {
     implementation(libs.spring.boot.starter.restclient)
     implementation(libs.spring.boot.starter.cache)
     implementation(libs.spring.boot.starter.data.redis)
+    implementation(libs.spring.boot.starter.kafka)
+    implementation(libs.kafka.avro.serializer)
     implementation(libs.resilience4j.circuitbreaker)
     implementation(libs.resilience4j.retry)
     implementation(libs.resilience4j.ratelimiter)
@@ -27,6 +29,7 @@ dependencies {
     implementation(libs.mapstruct)
     annotationProcessor(libs.mapstruct.processor)
 
+    integrationTestImplementation(libs.testcontainers.kafka)
     testImplementation(libs.wiremock)
     testImplementation(libs.grpc.inprocess)
 }
