@@ -15,6 +15,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.locationtech.jts.geom.Point;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -46,6 +48,12 @@ public class Courier {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Column(name = "rating_sum", nullable = false)
+    private long ratingSum;
+
+    @Column(name = "rating_count", nullable = false)
+    private int ratingCount;
 
     @Version
     @Column(nullable = false)
@@ -124,6 +132,19 @@ public class Courier {
 
     public GeoPosition getPosition() {
         return GeoPosition.of(position);
+    }
+
+    public int getRatingCount() {
+        return ratingCount;
+    }
+
+    public Double getRating() {
+        if (ratingCount == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(ratingSum)
+                .divide(BigDecimal.valueOf(ratingCount), 1, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     public Instant getUpdatedAt() {
