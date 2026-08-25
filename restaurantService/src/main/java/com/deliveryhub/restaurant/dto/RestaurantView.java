@@ -15,5 +15,7 @@ public record RestaurantView(
         LocalTime closeTime,
         boolean active,
         Double latitude,
-        Double longitude) {
+        Double longitude,
+        Double rating,
+        int ratingCount) {
 }

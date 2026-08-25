@@ -256,10 +256,10 @@ class RestaurantServiceTest {
     }
 
     private static RestaurantView view() {
-        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true, null, null);
+        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true, null, null, null, 0);
     }
 
     private static RestaurantDto dto() {
-        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true, null, null);
+        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true, null, null, null, 0);
     }
 }
