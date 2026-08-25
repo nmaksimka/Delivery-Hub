@@ -10,6 +10,7 @@ import { ApiError } from './http';
 import { createAttemptKeys } from './idempotency';
 import { ordersApi, type Order } from './orders';
 import { restaurantsApi } from './restaurants';
+import { reviewsApi, type ReviewInput } from './reviews';
 import { walletApi } from './wallet';
 
 const ordersPageSize = 10;
@@ -30,6 +31,8 @@ export const queryKeys = {
   userWallet: (userId: number) => ['wallet', userId] as const,
   addresses: ['addresses'] as const,
   userAddresses: (userId: number) => ['addresses', userId] as const,
+  reviews: ['reviews'] as const,
+  userReviews: (userId: number) => ['reviews', userId] as const,
   favorites: ['favorites'] as const,
   userFavorites: (userId: number) => ['favorites', userId] as const,
 };
@@ -215,6 +218,24 @@ export function useCancelOrder() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders });
       void queryClient.invalidateQueries({ queryKey: queryKeys.wallet });
     },
+  });
+}
+
+export function useMyReviews() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.userReviews(userId ?? 0),
+    queryFn: ({ signal }) => reviewsApi.mine(signal),
+    enabled: userId !== null,
+  });
+}
+
+export function useSubmitReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, input }: { orderId: number; input: ReviewInput }) =>
+      reviewsApi.submit(orderId, input),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.reviews }),
   });
 }
 

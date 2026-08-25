@@ -1,0 +1,25 @@
+.group {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.star {
+  display: inline-flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-line);
+  transition: color 120ms var(--ease);
+}
+
+.star:hover:not(:disabled) {
+  color: var(--block-sun);
+}
+
+.star:disabled {
+  cursor: not-allowed;
+}
+
+.on,
+.on:hover:not(:disabled) {
+  color: var(--color-accent);
+}
