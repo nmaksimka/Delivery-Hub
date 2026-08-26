@@ -1,5 +1,6 @@
 package com.deliveryhub.order.exception;
 
+import com.deliveryhub.order.analytics.InvalidPeriodException;
 import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
@@ -69,6 +70,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MissingIdempotencyKeyException.class)
     public ProblemDetail handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.code());
+    }
+
+    @ExceptionHandler(InvalidPeriodException.class)
+    public ProblemDetail handleInvalidPeriod(InvalidPeriodException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
     }
 
     @ExceptionHandler(ForbiddenException.class)
