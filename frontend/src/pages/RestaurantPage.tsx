@@ -14,7 +14,8 @@ import { MenuItemCard } from '../components/MenuItemCard';
 import { StateMessage } from '../components/StateMessage';
 import { groupMenu } from '../lib/menuGroups';
 import { orderErrorMessage } from '../lib/orderErrors';
-import { placeholderEta, placeholderRating } from '../lib/placeholders';
+import { placeholderEta } from '../lib/placeholders';
+import { formatRating, ratingCountLabel } from '../lib/rating';
 import { closedBadge, workingHoursLabel } from '../lib/workingHours';
 import { useNow } from '../lib/useNow';
 import { NotFoundPage } from './NotFoundPage';
@@ -140,7 +141,10 @@ export function RestaurantPage() {
           <ul className={styles.meta}>
             <li className={styles.metaItem}>
               <StarIcon size={16} className={styles.star} />
-              {placeholderRating(current.id)}
+              {formatRating(current.rating, current.ratingCount)}
+              {current.ratingCount > 0 && (
+                <span className={styles.ratingCount}>{ratingCountLabel(current.ratingCount)}</span>
+              )}
             </li>
             <li className={styles.metaItem}>
               <ClockIcon size={16} />

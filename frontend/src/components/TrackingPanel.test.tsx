@@ -45,6 +45,8 @@ const restaurant: Restaurant = {
   active: true,
   latitude: 56.48,
   longitude: 84.95,
+  rating: null,
+  ratingCount: 0,
 };
 
 const message: TrackingMessage = {
