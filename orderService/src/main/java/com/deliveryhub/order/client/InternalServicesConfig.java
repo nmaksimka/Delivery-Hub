@@ -33,6 +33,11 @@ public class InternalServicesConfig {
         return new DeliveryQuotes(client(builder, properties.deliveryBaseUrl()));
     }
 
+    @Bean
+    public RestaurantOwnership restaurantOwnership(RestClient.Builder builder) {
+        return new RestaurantOwnership(client(builder, properties.restaurantBaseUrl()));
+    }
+
     private RestClient client(RestClient.Builder builder, String baseUrl) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)

@@ -98,6 +98,7 @@ app:
   internal-services:
     users-base-url: ${USER_SERVICE_URL:http://localhost:3334}
     delivery-base-url: ${DELIVERY_SERVICE_URL:http://localhost:3333}
+    restaurant-base-url: ${RESTAURANT_SERVICE_URL:http://localhost:3331}
     connect-timeout: 1s
     read-timeout: 8s
   saga:

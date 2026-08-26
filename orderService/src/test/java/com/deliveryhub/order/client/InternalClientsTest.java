@@ -50,7 +50,7 @@ class InternalClientsTest {
     void setUp() {
         SERVICES.resetAll();
         InternalServicesConfig config = new InternalServicesConfig(new InternalServicesProperties(SERVICES.baseUrl(),
-                SERVICES.baseUrl(), Duration.ofSeconds(1), Duration.ofSeconds(1)), "internal-secret");
+                SERVICES.baseUrl(), SERVICES.baseUrl(), Duration.ofSeconds(1), Duration.ofSeconds(1)), "internal-secret");
         userAddresses = config.userAddresses(RestClient.builder());
         deliveryQuotes = config.deliveryQuotes(RestClient.builder());
     }
