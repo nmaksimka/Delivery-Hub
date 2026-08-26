@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { repeatOrder } from '../cart/repeatOrder';
 import { isFinalStatus } from '../lib/orderStatus';
+import { analyticsApi, type AnalyticsPeriod } from './analytics';
 import { addressesApi, type AddressInput } from './addresses';
 import { cartApi, emptyCart, type Cart, type CartItemToAdd } from './cart';
 import { favoritesApi } from './favorites';
@@ -35,6 +36,10 @@ export const queryKeys = {
   userReviews: (userId: number) => ['reviews', userId] as const,
   favorites: ['favorites'] as const,
   userFavorites: (userId: number) => ['favorites', userId] as const,
+  adminAnalytics: (period: AnalyticsPeriod, restaurantId?: number) =>
+    ['analytics', 'admin', period, restaurantId ?? null] as const,
+  cabinetAnalytics: (restaurantId: number, period: AnalyticsPeriod) =>
+    ['analytics', 'cabinet', restaurantId, period] as const,
 };
 
 export function useRestaurants(activeOnly = true) {
@@ -321,5 +326,21 @@ export function useToggleFavorite() {
       queryClient.setQueryData(key, context?.previous);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.favorites }),
+  });
+}
+
+export function useAdminAnalytics(period: AnalyticsPeriod, restaurantId?: number) {
+  return useQuery({
+    queryKey: queryKeys.adminAnalytics(period, restaurantId),
+    queryFn: ({ signal }) => analyticsApi.admin(period, restaurantId, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCabinetAnalytics(restaurantId: number, period: AnalyticsPeriod) {
+  return useQuery({
+    queryKey: queryKeys.cabinetAnalytics(restaurantId, period),
+    queryFn: ({ signal }) => analyticsApi.cabinet(restaurantId, period, signal),
+    placeholderData: keepPreviousData,
   });
 }

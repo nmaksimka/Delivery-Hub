@@ -17,3 +17,4 @@ app:
   internal-services:
     users-base-url: http://userService:3334
     delivery-base-url: http://deliveryService:3333
+    restaurant-base-url: http://restaurantService:3331
