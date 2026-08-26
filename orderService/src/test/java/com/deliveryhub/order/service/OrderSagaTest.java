@@ -130,6 +130,15 @@ class OrderSagaTest {
     }
 
     @Test
+    void assignedCourierIsRememberedOnOrder() {
+        firstTime();
+
+        saga.onCourierAssigned(new CourierAssignedEvent(UUID.randomUUID(), 7L, ORDER_ID, 9001L, NOW, 1L));
+
+        assertThat(order.getCourierId()).isEqualTo(9001L);
+    }
+
+    @Test
     void duplicateEventIsSkipped() {
         when(processedEvents.registerFirstDelivery(any(), anyString())).thenReturn(false);
 

@@ -5,6 +5,7 @@ import type { Order } from '../api/orders';
 import { useMyOrders, useRestaurants } from '../api/queries';
 import { Button } from '../components/Button';
 import { buttonClass } from '../components/buttonClass';
+import { OrderReview } from '../components/OrderReview';
 import { RepeatOrderButton } from '../components/RepeatOrderButton';
 import { StateMessage } from '../components/StateMessage';
 import { cx } from '../lib/cx';
@@ -52,6 +53,7 @@ function OrderRow({ order, restaurantName }: { order: Order; restaurantName: str
           </Link>
         )}
       </div>
+      <OrderReview order={order} />
     </li>
   );
 }

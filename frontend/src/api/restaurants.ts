@@ -24,6 +24,11 @@ const restaurantSchema = z.object({
   active: z.boolean(),
   latitude: optionalCoordinate,
   longitude: optionalCoordinate,
+  rating: optionalCoordinate,
+  ratingCount: z
+    .number()
+    .nullish()
+    .transform((value) => value ?? 0),
 });
 
 const optionalAmount = z.coerce

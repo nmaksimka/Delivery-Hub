@@ -57,7 +57,7 @@ class ImageLinksTest {
     @Test
     void cachedRestaurantViewGetsFreshSignedUrlFromKey() {
         RestaurantView view = new RestaurantView(1L, "Pizzeria", null, null, null, null,
-                "https://external.example/r.jpg", "restaurants/1/abc", null, null, true, null, null);
+                "https://external.example/r.jpg", "restaurants/1/abc", null, null, true, null, null, null, 0);
 
         assertThat(links.of(view)).isEqualTo("http://storage.test/images/restaurants/1/abc?signed");
     }
@@ -65,7 +65,7 @@ class ImageLinksTest {
     @Test
     void cachedRestaurantViewWithoutKeyKeepsExternalUrl() {
         RestaurantView view = new RestaurantView(1L, "Pizzeria", null, null, null, null,
-                "https://external.example/r.jpg", null, null, null, true, null, null);
+                "https://external.example/r.jpg", null, null, null, true, null, null, null, 0);
 
         assertThat(links.of(view)).isEqualTo("https://external.example/r.jpg");
     }

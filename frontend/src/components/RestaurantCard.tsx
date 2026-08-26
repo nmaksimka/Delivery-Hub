@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
 import type { Restaurant } from '../api/restaurants';
 import { cx } from '../lib/cx';
-import { placeholderEta, placeholderRating } from '../lib/placeholders';
+import { placeholderEta } from '../lib/placeholders';
+import { formatRating, ratingCountLabel } from '../lib/rating';
 import { Cover } from './Cover';
 import { FavoriteButton } from './FavoriteButton';
 import { ClockIcon, StarIcon } from './icons';
@@ -33,7 +34,10 @@ export function RestaurantCard({ restaurant, closedBadge }: RestaurantCardProps)
           <div className={styles.meta}>
             <span className={styles.metaItem}>
               <StarIcon size={16} className={styles.star} />
-              {placeholderRating(restaurant.id)}
+              {formatRating(restaurant.rating, restaurant.ratingCount)}
+              {restaurant.ratingCount > 0 && (
+                <span className={styles.count}>{ratingCountLabel(restaurant.ratingCount)}</span>
+              )}
             </span>
             <span className={styles.metaItem}>
               <ClockIcon size={16} />

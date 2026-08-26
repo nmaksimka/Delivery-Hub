@@ -146,7 +146,7 @@ class RestaurantCabinetTest {
 
     private static RestaurantDto restaurantDto() {
         return new RestaurantDto(RESTAURANT_ID, "Pizzeria", null, null, null, null, null,
-                LocalTime.of(9, 0), LocalTime.of(21, 0), true, null, null);
+                LocalTime.of(9, 0), LocalTime.of(21, 0), true, null, null, null, 0);
     }
 
     private static MenuItemDto menuItemDto(boolean available) {

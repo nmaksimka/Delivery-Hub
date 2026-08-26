@@ -23,7 +23,8 @@ public class KafkaTopicsConfig {
                 topic(Topics.DELIVERY_REJECTED, properties, properties.retention()),
                 topic(Topics.deadLetterOf(Topics.PAYMENT_HELD), properties, properties.deadLetterRetention()),
                 topic(Topics.deadLetterOf(Topics.ORDER_CANCELLED), properties, properties.deadLetterRetention()),
-                topic(Topics.deadLetterOf(Topics.PAYMENT_CAPTURED), properties, properties.deadLetterRetention()));
+                topic(Topics.deadLetterOf(Topics.PAYMENT_CAPTURED), properties, properties.deadLetterRetention()),
+                topic(Topics.deadLetterOf(Topics.REVIEW_SUBMITTED), properties, properties.deadLetterRetention()));
     }
 
     private static NewTopic topic(String name, TopicProperties properties, Duration retention) {

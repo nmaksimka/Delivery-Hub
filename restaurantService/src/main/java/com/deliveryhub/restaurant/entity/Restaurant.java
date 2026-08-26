@@ -10,6 +10,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,6 +63,12 @@ public class Restaurant {
     private Double latitude;
 
     private Double longitude;
+
+    @Column(name = "rating_sum", nullable = false)
+    private long ratingSum;
+
+    @Column(name = "rating_count", nullable = false)
+    private int ratingCount;
 
     @OneToMany(mappedBy = "restaurant", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItem> menuItems = new ArrayList<>();
@@ -228,6 +235,19 @@ public class Restaurant {
 
     public Double getLongitude() {
         return longitude;
+    }
+
+    public int getRatingCount() {
+        return ratingCount;
+    }
+
+    public Double getRating() {
+        if (ratingCount == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(ratingSum)
+                .divide(BigDecimal.valueOf(ratingCount), 1, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     public boolean isActive() {

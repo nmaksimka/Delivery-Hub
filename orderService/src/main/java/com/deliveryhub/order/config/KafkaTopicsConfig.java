@@ -18,7 +18,7 @@ public class KafkaTopicsConfig {
 
     @Bean
     public KafkaAdmin.NewTopics orderTopics(TopicProperties properties) {
-        Stream<NewTopic> published = Stream.of(Topics.ORDER_CREATED, Topics.ORDER_CANCELLED)
+        Stream<NewTopic> published = Stream.of(Topics.ORDER_CREATED, Topics.ORDER_CANCELLED, Topics.REVIEW_SUBMITTED)
                 .map(name -> topic(name, properties, properties.retention()));
         Stream<NewTopic> deadLetters = Stream.of(Topics.DELIVERY_STATUS_UPDATED, Topics.COURIER_ASSIGNED,
                         Topics.PAYMENT_HELD, Topics.PAYMENT_REJECTED, Topics.PAYMENT_CAPTURED,

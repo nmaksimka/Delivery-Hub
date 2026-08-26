@@ -68,6 +68,7 @@ public class OrderSaga {
                         event.getEventId(), order.getId());
                 return;
             }
+            order.assignCourier(event.getCourierId());
             if (order.markCourierAssigned(clock.instant())) {
                 log.info("Courier {} assigned to order {}", event.getCourierId(), order.getId());
             }
