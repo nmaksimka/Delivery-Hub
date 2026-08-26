@@ -1,5 +1,7 @@
 package com.deliveryhub.order.analytics;
 
+import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.security.CurrentUser;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -19,9 +21,13 @@ public class AnalyticsController {
 
     @GetMapping("/api/admin/analytics")
     public AnalyticsReport forAdmin(
+            @RequestHeader(name = "X-User-Role", required = false) String role,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long restaurantId) {
+        if (!CurrentUser.isAdmin(role)) {
+            throw new ForbiddenException("Only administrators can view platform analytics");
+        }
         return analyticsService.forAdmin(from, to, restaurantId);
     }
 
