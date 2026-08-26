@@ -114,6 +114,10 @@ public class OrderService {
         return withItems(orderRepository.findIdsByUserId(userId, pageable));
     }
 
+    public Page<OrderDto> getOrdersOfRestaurant(Long restaurantId, Pageable pageable) {
+        return withItems(orderRepository.findIdsByRestaurantId(restaurantId, pageable));
+    }
+
     public Page<OrderDto> getAllOrders(Pageable pageable) {
         return withItems(orderRepository.findAllIds(pageable));
     }

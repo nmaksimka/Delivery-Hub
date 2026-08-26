@@ -85,6 +85,10 @@ spring:
               uri: lb://orderService
               predicates:
                 - Path=/api/cabinet/analytics
+            - id: cabinet-orders
+              uri: lb://orderService
+              predicates:
+                - Path=/api/cabinet/orders
             - id: admin-analytics
               uri: lb://orderService
               predicates:
