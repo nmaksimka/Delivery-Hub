@@ -1,6 +1,8 @@
 import type { RouteObject } from 'react-router';
 import { RequireAuth } from './auth/RequireAuth';
+import { RequireRole } from './auth/RequireRole';
 import { Layout } from './components/Layout';
+import { AdminAnalyticsPage } from './pages/AdminAnalyticsPage';
 import { AddressesPage } from './pages/AddressesPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -28,6 +30,11 @@ export const routes: RouteObject[] = [
           { path: 'wallet', element: <WalletPage /> },
           { path: 'addresses', element: <AddressesPage /> },
         ],
+      },
+      {
+        path: 'admin',
+        element: <RequireRole role="ADMIN" />,
+        children: [{ path: 'analytics', element: <AdminAnalyticsPage /> }],
       },
       { path: '*', element: <NotFoundPage /> },
     ],
