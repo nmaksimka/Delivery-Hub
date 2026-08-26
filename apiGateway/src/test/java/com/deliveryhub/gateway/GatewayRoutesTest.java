@@ -24,7 +24,7 @@ class GatewayRoutesTest {
                 "auth-login", "restaurant-service", "catalog-import", "restaurant-owners", "restaurant-cabinet",
                 "user-admin", "order-service", "cart", "promo-admin", "delivery-service", "courier-service",
                 "courier-admin", "payment-service", "user-service", "user-profile", "restaurant-docs", "order-docs",
-                "delivery-docs", "payment-docs", "user-docs", "delivery-tracking");
+                "delivery-docs", "payment-docs", "user-docs", "delivery-tracking", "cabinet-analytics", "admin-analytics");
     }
 
     @Test
