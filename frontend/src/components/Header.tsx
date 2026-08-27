@@ -65,6 +65,22 @@ export function Header() {
                 <ReceiptIcon />
                 <span className={styles.label}>Заказы</span>
               </NavLink>
+              {user.role === 'ADMIN' && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+                >
+                  <span className={styles.label}>Админка</span>
+                </NavLink>
+              )}
+              {user.role === 'RESTAURANT_OWNER' && (
+                <NavLink
+                  to="/cabinet"
+                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+                >
+                  <span className={styles.label}>Кабинет</span>
+                </NavLink>
+              )}
               <button
                 type="button"
                 className={styles.link}

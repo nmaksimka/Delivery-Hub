@@ -7,6 +7,7 @@ import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.MenuSection;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.MenuItemMapper;
+import com.deliveryhub.restaurant.outbox.CatalogChanges;
 import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import com.deliveryhub.restaurant.storage.ImageIntake;
@@ -48,6 +49,8 @@ class MenuItemServiceTest {
     private ImageIntake imageIntake;
     @Mock
     private CatalogCache catalogCache;
+    @Mock
+    private CatalogChanges catalogChanges;
 
     @InjectMocks
     private MenuItemService menuItemService;

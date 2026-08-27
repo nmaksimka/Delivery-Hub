@@ -5,6 +5,7 @@ import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.dto.RestaurantView;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
+import com.deliveryhub.restaurant.outbox.CatalogChanges;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import com.deliveryhub.restaurant.storage.ImageIntake;
 import com.deliveryhub.restaurant.storage.UnsupportedImageException;
@@ -45,6 +46,8 @@ class RestaurantServiceTest {
     private ImageIntake imageIntake;
     @Mock
     private CatalogCache catalogCache;
+    @Mock
+    private CatalogChanges catalogChanges;
 
     @InjectMocks
     private RestaurantService restaurantService;
@@ -256,10 +259,10 @@ class RestaurantServiceTest {
     }
 
     private static RestaurantView view() {
-        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true, null, null);
+        return new RestaurantView(1L, "Pizzeria", "Lenina 1", null, null, null, null, "restaurants/1/key", null, null, true, null, null, null, 0);
     }
 
     private static RestaurantDto dto() {
-        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true, null, null);
+        return new RestaurantDto(1L, "Pizzeria", "Lenina 1", null, null, null, null, null, null, true, null, null, null, 0);
     }
 }

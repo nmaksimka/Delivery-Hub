@@ -1,5 +1,6 @@
 package com.deliveryhub.user.service;
 
+import com.deliveryhub.user.dto.UserContactDto;
 import com.deliveryhub.user.dto.UserDto;
 import com.deliveryhub.user.entity.Role;
 import com.deliveryhub.user.entity.User;
@@ -38,6 +39,12 @@ public class UserRoles {
         return userRepository.findUserByEmail(normalized)
                 .map(userMapper::toDto)
                 .orElseThrow(() -> UserNotFoundException.byEmail(normalized));
+    }
+
+    public UserContactDto contactOf(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> new UserContactDto(user.getId(), user.getEmail(), user.getName()))
+                .orElseThrow(() -> UserNotFoundException.byId(userId));
     }
 
     @Transactional

@@ -38,6 +38,9 @@ resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry" }
 resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter" }
 resilience4j-micrometer = { module = "io.github.resilience4j:resilience4j-micrometer" }
 spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
+spring-boot-starter-elasticsearch = { module = "org.springframework.boot:spring-boot-starter-elasticsearch" }
+spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
+spring-boot-starter-thymeleaf = { module = "org.springframework.boot:spring-boot-starter-thymeleaf" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boot:spring-boot-starter-security-oauth2-resource-server" }
 spring-security-oauth2-jose = { module = "org.springframework.security:spring-security-oauth2-jose" }
@@ -72,6 +75,7 @@ aws-sdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 testcontainers-core = { module = "org.testcontainers:testcontainers" }
 testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka" }
+testcontainers-elasticsearch = { module = "org.testcontainers:testcontainers-elasticsearch" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 
 avro = { module = "org.apache.avro:avro", version.ref = "avro" }

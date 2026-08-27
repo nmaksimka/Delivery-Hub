@@ -8,6 +8,7 @@ import java.time.Duration;
 public record InternalServicesProperties(
         String usersBaseUrl,
         String deliveryBaseUrl,
+        String restaurantBaseUrl,
         Duration connectTimeout,
         Duration readTimeout) {
 }

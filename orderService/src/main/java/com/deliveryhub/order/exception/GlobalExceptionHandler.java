@@ -1,8 +1,10 @@
 package com.deliveryhub.order.exception;
 
+import com.deliveryhub.order.analytics.InvalidPeriodException;
 import com.deliveryhub.order.client.InvalidRestaurantRequestException;
 import com.deliveryhub.order.client.RestaurantServiceUnavailableException;
 import com.deliveryhub.order.idempotency.MissingIdempotencyKeyException;
+import com.deliveryhub.order.review.ReviewRejectedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.persistence.EntityNotFoundException;
@@ -45,6 +47,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, ex.getMessage(), codeOf(ex, ErrorCode.INVALID_STATUS_TRANSITION));
     }
 
+    @ExceptionHandler(ReviewRejectedException.class)
+    public ProblemDetail handleReviewRejected(ReviewRejectedException ex) {
+        HttpStatus status = switch (ex.code()) {
+            case REVIEW_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case COURIER_NOT_ASSIGNED -> HttpStatus.UNPROCESSABLE_CONTENT;
+            default -> HttpStatus.CONFLICT;
+        };
+        return problem(status, ex.getMessage(), ex.code());
+    }
+
     @ExceptionHandler(InvalidRestaurantRequestException.class)
     public ProblemDetail handleInvalidRestaurantRequest(InvalidRestaurantRequestException ex) {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
@@ -58,6 +70,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MissingIdempotencyKeyException.class)
     public ProblemDetail handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.code());
+    }
+
+    @ExceptionHandler(InvalidPeriodException.class)
+    public ProblemDetail handleInvalidPeriod(InvalidPeriodException ex) {
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), ErrorCode.INVALID_REQUEST);
     }
 
     @ExceptionHandler(ForbiddenException.class)

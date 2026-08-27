@@ -50,4 +50,8 @@ public interface CourierRepository extends JpaRepository<Courier, Long> {
             WHERE id = :courierId
             """)
     int moveTo(long courierId, double latitude, double longitude, Instant at);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Courier c SET c.ratingSum = c.ratingSum + :rating, c.ratingCount = c.ratingCount + 1 WHERE c.id = :courierId")
+    int addRating(long courierId, int rating);
 }

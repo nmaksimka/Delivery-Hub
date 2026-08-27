@@ -23,8 +23,8 @@ class GatewayRoutesTest {
         assertThat(routeIds).containsExactlyInAnyOrder(
                 "auth-login", "restaurant-service", "catalog-import", "restaurant-owners", "restaurant-cabinet",
                 "user-admin", "order-service", "cart", "promo-admin", "delivery-service", "courier-service",
-                "courier-admin", "payment-service", "user-service", "user-profile", "restaurant-docs", "order-docs",
-                "delivery-docs", "payment-docs", "user-docs", "delivery-tracking");
+                "courier-admin", "payment-service", "notification-service", "search-service", "user-service", "user-profile",
+                "restaurant-docs", "order-docs", "delivery-docs", "payment-docs", "notification-docs", "search-docs", "user-docs", "delivery-tracking", "cabinet-analytics", "admin-analytics", "cabinet-orders");
     }
 
     @Test
@@ -66,6 +66,16 @@ class GatewayRoutesTest {
         assertThat(routes).filteredOn(route -> List.of("courier-service", "courier-admin").contains(route.getId()))
                 .hasSize(2)
                 .allSatisfy(route -> assertThat(route.getUri().getHost()).isEqualTo("deliveryService"));
+    }
+
+    @Test
+    void notificationsAndTheirDocsGoToNotificationService() {
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+
+        assertThat(routes).filteredOn(route -> List.of("notification-service", "notification-docs")
+                        .contains(route.getId()))
+                .hasSize(2)
+                .allSatisfy(route -> assertThat(route.getUri().getHost()).isEqualTo("notificationService"));
     }
 
     @Test

@@ -16,6 +16,8 @@ function restaurant(overrides: Partial<Restaurant>): Restaurant {
     active: true,
     latitude: null,
     longitude: null,
+    rating: null,
+    ratingCount: 0,
     ...overrides,
   };
 }

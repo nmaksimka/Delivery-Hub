@@ -1,4 +1,8 @@
 spring:
+  kafka:
+    bootstrap-servers: kafka:9092
+    properties:
+      schema.registry.url: http://schema-registry:8081
   datasource:
     url: jdbc:postgresql://postgres-restaurant:5432/restaurant_db
   data:

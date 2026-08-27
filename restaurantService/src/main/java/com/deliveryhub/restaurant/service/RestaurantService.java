@@ -5,6 +5,7 @@ import com.deliveryhub.restaurant.dto.RestaurantOwnerDto;
 import com.deliveryhub.restaurant.dto.RestaurantRequest;
 import com.deliveryhub.restaurant.entity.Restaurant;
 import com.deliveryhub.restaurant.mapper.RestaurantMapper;
+import com.deliveryhub.restaurant.outbox.CatalogChanges;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import com.deliveryhub.restaurant.storage.ImageIntake;
 import jakarta.persistence.EntityNotFoundException;
@@ -27,13 +28,16 @@ public class RestaurantService {
     private final RestaurantMapper restaurantMapper;
     private final ImageIntake imageIntake;
     private final CatalogCache catalogCache;
+    private final CatalogChanges catalogChanges;
 
     public RestaurantService(RestaurantRepository restaurantRepository, RestaurantMapper restaurantMapper,
-                             ImageIntake imageIntake, CatalogCache catalogCache) {
+                             ImageIntake imageIntake, CatalogCache catalogCache,
+                             CatalogChanges catalogChanges) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantMapper = restaurantMapper;
         this.imageIntake = imageIntake;
         this.catalogCache = catalogCache;
+        this.catalogChanges = catalogChanges;
     }
 
     public List<RestaurantDto> getAllRestaurants(boolean activeOnly) {
@@ -52,7 +56,9 @@ public class RestaurantService {
             restaurant.locate(request.latitude(), request.longitude());
         }
         applyActivity(restaurant, request);
-        RestaurantDto created = restaurantMapper.toDto(restaurantRepository.save(restaurant));
+        Restaurant saved = restaurantRepository.save(restaurant);
+        catalogChanges.restaurantChanged(saved.getId());
+        RestaurantDto created = restaurantMapper.toDto(saved);
         catalogCache.evictRestaurants();
         return created;
     }
@@ -66,6 +72,7 @@ public class RestaurantService {
             restaurant.locate(request.latitude(), request.longitude());
         }
         applyActivity(restaurant, request);
+        catalogChanges.restaurantChanged(id);
         catalogCache.evictRestaurants();
         return restaurantMapper.toDto(restaurant);
     }
@@ -74,6 +81,7 @@ public class RestaurantService {
     public RestaurantDto changeWorkingHours(Long id, LocalTime openTime, LocalTime closeTime) {
         Restaurant restaurant = findByIdOrThrow(id);
         restaurant.changeWorkingHours(openTime, closeTime);
+        catalogChanges.restaurantChanged(id);
         catalogCache.evictRestaurants();
         return restaurantMapper.toDto(restaurant);
     }
@@ -114,6 +122,7 @@ public class RestaurantService {
         imageIntake.discardAfterCommit(restaurant.getImageKey());
         restaurant.getMenuItems().forEach(item -> imageIntake.discardAfterCommit(item.getImageKey()));
         restaurantRepository.delete(restaurant);
+        catalogChanges.restaurantRemoved(id, restaurant.getName());
         catalogCache.evictAll();
     }
 

@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { repeatOrder } from '../cart/repeatOrder';
 import { isFinalStatus } from '../lib/orderStatus';
+import { adminApi, type CourierInput, type ImportKind } from './admin';
+import { cabinetApi, type MenuItemInput } from './cabinet';
+import { analyticsApi, type AnalyticsPeriod } from './analytics';
 import { addressesApi, type AddressInput } from './addresses';
 import { cartApi, emptyCart, type Cart, type CartItemToAdd } from './cart';
 import { favoritesApi } from './favorites';
@@ -10,6 +13,7 @@ import { ApiError } from './http';
 import { createAttemptKeys } from './idempotency';
 import { ordersApi, type Order } from './orders';
 import { restaurantsApi } from './restaurants';
+import { reviewsApi, type ReviewInput } from './reviews';
 import { walletApi } from './wallet';
 
 const ordersPageSize = 10;
@@ -30,8 +34,14 @@ export const queryKeys = {
   userWallet: (userId: number) => ['wallet', userId] as const,
   addresses: ['addresses'] as const,
   userAddresses: (userId: number) => ['addresses', userId] as const,
+  reviews: ['reviews'] as const,
+  userReviews: (userId: number) => ['reviews', userId] as const,
   favorites: ['favorites'] as const,
   userFavorites: (userId: number) => ['favorites', userId] as const,
+  adminAnalytics: (period: AnalyticsPeriod, restaurantId?: number) =>
+    ['analytics', 'admin', period, restaurantId ?? null] as const,
+  cabinetAnalytics: (restaurantId: number, period: AnalyticsPeriod) =>
+    ['analytics', 'cabinet', restaurantId, period] as const,
 };
 
 export function useRestaurants(activeOnly = true) {
@@ -218,6 +228,24 @@ export function useCancelOrder() {
   });
 }
 
+export function useMyReviews() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.userReviews(userId ?? 0),
+    queryFn: ({ signal }) => reviewsApi.mine(signal),
+    enabled: userId !== null,
+  });
+}
+
+export function useSubmitReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, input }: { orderId: number; input: ReviewInput }) =>
+      reviewsApi.submit(orderId, input),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.reviews }),
+  });
+}
+
 export function useWallet() {
   const userId = useUserId();
   return useQuery({
@@ -300,5 +328,120 @@ export function useToggleFavorite() {
       queryClient.setQueryData(key, context?.previous);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.favorites }),
+  });
+}
+
+export function useAdminAnalytics(period: AnalyticsPeriod, restaurantId?: number) {
+  return useQuery({
+    queryKey: queryKeys.adminAnalytics(period, restaurantId),
+    queryFn: ({ signal }) => analyticsApi.admin(period, restaurantId, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCabinetAnalytics(restaurantId: number, period: AnalyticsPeriod) {
+  return useQuery({
+    queryKey: queryKeys.cabinetAnalytics(restaurantId, period),
+    queryFn: ({ signal }) => analyticsApi.cabinet(restaurantId, period, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+const cabinetKey = ['cabinet'] as const;
+const cabinetOrdersPageSize = 15;
+const couriersPageSize = 15;
+const importPollInterval = 2_000;
+
+export function useCabinetRestaurants() {
+  return useQuery({
+    queryKey: [...cabinetKey, 'restaurants'],
+    queryFn: ({ signal }) => cabinetApi.restaurants(signal),
+  });
+}
+
+export function useCabinetRestaurant(restaurantId: number) {
+  return useQuery({
+    queryKey: [...cabinetKey, 'restaurants', restaurantId],
+    queryFn: ({ signal }) => cabinetApi.restaurant(restaurantId, signal),
+  });
+}
+
+export function useCabinetMenu(restaurantId: number) {
+  return useQuery({
+    queryKey: [...cabinetKey, 'menu', restaurantId],
+    queryFn: ({ signal }) => cabinetApi.menu(restaurantId, signal),
+  });
+}
+
+type MenuChange =
+  | { kind: 'add'; input: MenuItemInput }
+  | { kind: 'update'; menuItemId: number; input: MenuItemInput }
+  | { kind: 'remove'; menuItemId: number }
+  | { kind: 'stop'; menuItemId: number }
+  | { kind: 'resume'; menuItemId: number };
+
+export function useChangeMenu(restaurantId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: MenuChange) => {
+      switch (change.kind) {
+        case 'add':
+          return cabinetApi.addMenuItem(restaurantId, change.input);
+        case 'update':
+          return cabinetApi.updateMenuItem(restaurantId, change.menuItemId, change.input);
+        case 'remove':
+          return cabinetApi.removeMenuItem(restaurantId, change.menuItemId);
+        case 'stop':
+          return cabinetApi.stopSelling(restaurantId, change.menuItemId);
+        case 'resume':
+          return cabinetApi.resumeSelling(restaurantId, change.menuItemId);
+      }
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...cabinetKey, 'menu', restaurantId] }),
+  });
+}
+
+export function useCabinetOrders(restaurantId: number, page: number) {
+  return useQuery({
+    queryKey: [...cabinetKey, 'orders', restaurantId, page],
+    queryFn: ({ signal }) =>
+      cabinetApi.orders({ restaurantId, page, size: cabinetOrdersPageSize, signal }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCouriers(page: number) {
+  return useQuery({
+    queryKey: ['admin', 'couriers', page],
+    queryFn: ({ signal }) => adminApi.couriers({ page, size: couriersPageSize, signal }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useRegisterCourier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CourierInput) => adminApi.registerCourier(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'couriers'] }),
+  });
+}
+
+export function useImportJobs() {
+  return useQuery({
+    queryKey: ['admin', 'imports'],
+    queryFn: ({ signal }) => adminApi.importJobs(signal),
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => job.status === 'RUNNING' || job.status === 'PENDING')
+        ? importPollInterval
+        : false,
+  });
+}
+
+export function useStartImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: ImportKind) => adminApi.startImport(kind),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'imports'] }),
   });
 }

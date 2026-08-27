@@ -14,7 +14,9 @@ public record CourierDto(
         CourierStatus status,
         Double latitude,
         Double longitude,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Double rating,
+        int ratingCount) {
 
     public static CourierDto of(Courier courier) {
         GeoPosition position = courier.getPosition();
@@ -22,6 +24,8 @@ public record CourierDto(
                 courier.getStatus(),
                 position == null ? null : position.latitude(),
                 position == null ? null : position.longitude(),
-                courier.getUpdatedAt());
+                courier.getUpdatedAt(),
+                courier.getRating(),
+                courier.getRatingCount());
     }
 }

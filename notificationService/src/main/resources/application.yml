@@ -1,0 +1,95 @@
+server:
+  port: 3337
+
+spring:
+  application:
+    name: notificationService
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  cloud:
+    config:
+      username: ${CONFIG_USER:config}
+      password: ${CONFIG_PASSWORD:local-dev-config-password}
+    inetutils:
+      ignored-interfaces:
+        - .*
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5337}/${DB_NAME:notification_db}
+    username: ${DB_USER:notification_user}
+    password: ${DB_PASSWORD:notification_pass}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  thymeleaf:
+    check-template-location: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: io.confluent.kafka.serializers.KafkaAvroDeserializer
+        specific.avro.reader: true
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8085}
+      avro.use.logical.type.converters: true
+
+app:
+  internal-token: ${INTERNAL_TOKEN:local-dev-internal-token}
+  users:
+    base-url: ${USER_SERVICE_URL:http://localhost:3334}
+    connect-timeout: 1s
+    read-timeout: 3s
+  mail:
+    from: ${MAIL_FROM:DeliveryHub <no-reply@deliveryhub.local>}
+    poll-interval: 2s
+    batch-size: 20
+    max-attempts: 5
+    retry-backoff: 10s
+    max-backoff: 10m
+  cleanup:
+    interval: 1h
+    processed-events-retention: 14d
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USER:eureka}:${EUREKA_PASSWORD:local-dev-eureka-password}@localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    mail:
+      enabled: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
