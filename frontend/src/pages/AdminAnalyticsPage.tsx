@@ -18,7 +18,6 @@ export function AdminAnalyticsPage() {
   return (
     <>
       <div className={styles.head}>
-        <h1 className={styles.title}>Аналитика</h1>
         <div className={styles.controls}>
           <PeriodChips days={days} onSelect={setDays} />
           <label className={styles.select}>
