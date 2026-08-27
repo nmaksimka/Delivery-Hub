@@ -57,6 +57,32 @@ class CatalogSearchIT {
     }
 
     @Test
+    void russianQueryFindsDishImportedInEnglish() throws Exception {
+        publish(snapshot(5L, "Meal Import", true, Instant.parse("2026-07-01T10:00:00Z"),
+                dish(51L, "Chicken Curry", "Spicy chicken with rice", true),
+                dish(52L, "Beef Stew", null, true),
+                dish(53L, "Tomato Soup", null, true)));
+
+        await().atMost(TIMEOUT).untilAsserted(() -> mvc.perform(get("/api/search").param("q", "курица"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].name", hasItem("Chicken Curry"))));
+
+        mvc.perform(get("/api/search").param("q", "говядина").param("kind", "DISH"))
+                .andExpect(jsonPath("$.items[0].name").value("Beef Stew"));
+        mvc.perform(get("/api/search").param("q", "томатный суп").param("kind", "DISH"))
+                .andExpect(jsonPath("$.items[0].name").value("Tomato Soup"));
+    }
+
+    @Test
+    void searchFindsDishByPrefix() throws Exception {
+        publish(snapshot(6L, "Пекарня", true, Instant.parse("2026-07-01T10:00:00Z"),
+                dish(61L, "Круассан миндальный", null, true)));
+
+        await().atMost(TIMEOUT).untilAsserted(() -> mvc.perform(get("/api/search").param("q", "круа"))
+                .andExpect(jsonPath("$.items[*].name", hasItem("Круассан миндальный"))));
+    }
+
+    @Test
     void suggestsByPrefix() throws Exception {
         publish(snapshot(2L, "Блинная на Ленина", true, Instant.parse("2026-07-01T10:00:00Z"),
                 dish(21L, "Блины с икрой", null, true),
