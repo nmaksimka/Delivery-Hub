@@ -4,13 +4,13 @@ import { trackingTopic, trackingUrl } from './stompTransport';
 describe('stompTransport helpers', () => {
   it('buildsSecureSocketUrlForHttpsOrigin', () => {
     expect(trackingUrl('https://hub.example', 'abc')).toBe(
-      'wss://hub.example/ws/tracking?access_token=abc',
+      'wss://hub.example/ws/tracking?ticket=abc',
     );
   });
 
   it('buildsPlainSocketUrlForHttpOriginKeepingPort', () => {
     expect(trackingUrl('http://localhost:5173', 'a b')).toBe(
-      'ws://localhost:5173/ws/tracking?access_token=a+b',
+      'ws://localhost:5173/ws/tracking?ticket=a+b',
     );
   });
 
