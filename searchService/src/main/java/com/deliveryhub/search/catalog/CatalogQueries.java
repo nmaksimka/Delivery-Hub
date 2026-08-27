@@ -17,12 +17,14 @@ public final class CatalogQueries {
 
     public static Query search(String text, SearchKind kind) {
         return Query.of(q -> q.bool(b -> b
-                .must(m -> m.multiMatch(mm -> mm
+                .should(s -> s.multiMatch(mm -> mm
                         .query(text)
                         .fields(SEARCH_FIELDS)
                         .type(TextQueryType.BestFields)
                         .fuzziness("AUTO")
                         .prefixLength(1)))
+                .should(s -> s.match(mt -> mt.field("name.autocomplete").query(text).operator(Operator.And)))
+                .minimumShouldMatch("1")
                 .filter(visible(kind))));
     }
 
