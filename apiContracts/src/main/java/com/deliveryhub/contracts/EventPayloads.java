@@ -35,7 +35,7 @@ public final class EventPayloads {
             Map.entry(Topics.PAYMENT_CAPTURED, PaymentCapturedEvent.getDecoder()),
             Map.entry(Topics.PAYMENT_RELEASED, PaymentReleasedEvent.getDecoder()),
             Map.entry(Topics.PAYMENT_REFUNDED, PaymentRefundedEvent.getDecoder()),
-            Map.entry(Topics.RESTAURANT_CATALOG_CHANGED, RestaurantCatalogChangedEvent.getDecoder())),
+            Map.entry(Topics.RESTAURANT_CATALOG_CHANGED, RestaurantCatalogChangedEvent.getDecoder()),
             Map.entry(Topics.REVIEW_SUBMITTED, ReviewSubmittedEvent.getDecoder()));
 
     private EventPayloads() {
