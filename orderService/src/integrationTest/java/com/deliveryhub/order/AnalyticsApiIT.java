@@ -122,6 +122,23 @@ class AnalyticsApiIT {
         assertThat(owner(OTHER_RESTAURANT)).hasStatus(403);
     }
 
+    @Test
+    void ownerListsOrdersOfOwnRestaurantNewestFirst() {
+        MvcTestResult result = mvc.get().uri("/api/cabinet/orders?restaurantId=" + RESTAURANT)
+                .header("X-User-Id", Long.toString(OWNER)).header("X-User-Role", "RESTAURANT_OWNER").exchange();
+
+        assertThat(result).hasStatus(200).bodyJson().extractingPath("$.totalElements").isEqualTo(5);
+        assertThat(result).bodyJson().extractingPath("$.content[0].createdAt").asString().startsWith("2026-03-04");
+    }
+
+    @Test
+    void foreignRestaurantOrdersAreForbidden() {
+        doThrow(new ForbiddenException("not yours")).when(ownership).requireOwner(OWNER, OTHER_RESTAURANT);
+
+        assertThat(mvc.get().uri("/api/cabinet/orders?restaurantId=" + OTHER_RESTAURANT)
+                .header("X-User-Id", Long.toString(OWNER)).exchange()).hasStatus(403);
+    }
+
     private MvcTestResult admin(String query) {
         return mvc.get().uri("/api/admin/analytics?" + query).header("X-User-Role", "ADMIN").exchange();
     }

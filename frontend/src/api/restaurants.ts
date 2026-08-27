@@ -11,7 +11,7 @@ const optionalCoordinate = z
   .nullish()
   .transform((value) => value ?? null);
 
-const restaurantSchema = z.object({
+export const restaurantSchema = z.object({
   id: z.number(),
   name: z.string(),
   address: optionalText,
@@ -44,7 +44,7 @@ const nutritionSchema = z.object({
   nutriScore: optionalText,
 });
 
-const menuItemSchema = z.object({
+export const menuItemSchema = z.object({
   id: z.number(),
   name: z.string(),
   description: optionalText,

@@ -1,0 +1,12 @@
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
+}
+
+.info {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}

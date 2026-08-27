@@ -67,10 +67,18 @@ export function Header() {
               </NavLink>
               {user.role === 'ADMIN' && (
                 <NavLink
-                  to="/admin/analytics"
+                  to="/admin"
                   className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
                 >
-                  <span className={styles.label}>Аналитика</span>
+                  <span className={styles.label}>Админка</span>
+                </NavLink>
+              )}
+              {user.role === 'RESTAURANT_OWNER' && (
+                <NavLink
+                  to="/cabinet"
+                  className={({ isActive }) => cx(styles.link, isActive && styles.linkActive)}
+                >
+                  <span className={styles.label}>Кабинет</span>
                 </NavLink>
               )}
               <button
