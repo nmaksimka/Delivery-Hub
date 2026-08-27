@@ -48,7 +48,6 @@ describe('analytics dashboard', () => {
         disconnect = vi.fn();
       },
     );
-
   });
 
   afterEach(() => {
