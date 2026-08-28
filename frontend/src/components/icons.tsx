@@ -158,3 +158,11 @@ export function HeartIcon({ filled, ...props }: IconProps & { filled?: boolean }
     </Icon>
   );
 }
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15L6 16zM10 21h4" />
+    </Icon>
+  );
+}
