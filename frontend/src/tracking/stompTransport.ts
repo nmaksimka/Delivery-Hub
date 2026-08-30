@@ -1,4 +1,6 @@
 import { Client } from '@stomp/stompjs';
+import { ApiError } from '../api/http';
+import { trackingApi } from '../api/tracking';
 import type { FailureKind, TransportFactory } from './connection';
 
 const unauthorizedPattern = /token|auth|forbidden|denied/i;
@@ -7,14 +9,14 @@ export function trackingTopic(orderId: number) {
   return `/topic/orders/${orderId}/tracking`;
 }
 
-export function trackingUrl(origin: string, accessToken: string) {
+export function trackingUrl(origin: string, ticket: string) {
   const url = new URL('/ws/tracking', origin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('access_token', accessToken);
+  url.searchParams.set('ticket', ticket);
   return url.toString();
 }
 
-export const createStompTransport: TransportFactory = ({ accessToken, orderId }) => {
+export const createStompTransport: TransportFactory = ({ orderId }) => {
   let client: Client | null = null;
   return {
     open(handlers) {
@@ -26,7 +28,15 @@ export const createStompTransport: TransportFactory = ({ accessToken, orderId })
         }
       };
       client = new Client({
-        brokerURL: trackingUrl(window.location.origin, accessToken),
+        beforeConnect: async (stomp) => {
+          try {
+            const { ticket } = await trackingApi.ticket();
+            stomp.brokerURL = trackingUrl(window.location.origin, ticket);
+          } catch (error) {
+            fail(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'dropped');
+            void stomp.deactivate();
+          }
+        },
         reconnectDelay: 0,
         heartbeatIncoming: 10000,
         heartbeatOutgoing: 10000,

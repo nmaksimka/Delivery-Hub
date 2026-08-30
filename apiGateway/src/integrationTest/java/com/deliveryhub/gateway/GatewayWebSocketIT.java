@@ -1,5 +1,6 @@
 package com.deliveryhub.gateway;
 
+import com.deliveryhub.gateway.ticket.TrackingTicketController;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -84,10 +85,33 @@ class GatewayWebSocketIT {
     }
 
     @Test
-    void tokenInQueryOpensSocketWithIdentityHeadersAndIsNotForwarded() {
-        String greeting = firstMessage("/ws/tracking?access_token=" + token(7L, "USER", 600), new HttpHeaders());
+    void ticketOpensSocketWithIdentityHeadersAndIsNotForwarded() {
+        String ticket = ticket(token(7L, "USER", 600));
 
-        assertThat(greeting).isEqualTo("/ws/tracking|7|USER|local-dev-internal-token");
+        assertThat(firstMessage("/ws/tracking?ticket=" + ticket, new HttpHeaders()))
+                .isEqualTo("/ws/tracking|7|USER|local-dev-internal-token");
+    }
+
+    @Test
+    void ticketWorksOnlyOnce() {
+        String ticket = ticket(token(7L, "USER", 600));
+        firstMessage("/ws/tracking?ticket=" + ticket, new HttpHeaders());
+
+        assertThatThrownBy(() -> firstMessage("/ws/tracking?ticket=" + ticket, new HttpHeaders()))
+                .hasStackTraceContaining("401");
+    }
+
+    @Test
+    void unknownTicketAndAccessTokenInQueryAreRejected() {
+        assertThatThrownBy(() -> firstMessage("/ws/tracking?ticket=nope", new HttpHeaders()))
+                .hasStackTraceContaining("401");
+        assertThatThrownBy(() -> firstMessage("/ws/tracking?access_token=" + token(7L, "USER", 600), new HttpHeaders()))
+                .hasStackTraceContaining("401");
+    }
+
+    @Test
+    void ticketRequiresAuthentication() {
+        http().post().uri("/api/tracking/ticket").exchange().expectStatus().isUnauthorized();
     }
 
     @Test
@@ -107,20 +131,23 @@ class GatewayWebSocketIT {
     }
 
     @Test
-    void socketWithExpiredOrForgedTokenIsRejectedAtHandshake() {
-        assertThatThrownBy(() -> firstMessage("/ws/tracking?access_token=" + token(7L, "USER", -600), new HttpHeaders()))
-                .hasStackTraceContaining("401");
-        assertThatThrownBy(() -> firstMessage("/ws/tracking?access_token=not-a-jwt", new HttpHeaders()))
-                .hasStackTraceContaining("401");
-    }
-
-    @Test
     void queryTokenIsIgnoredOutsideWebSockets() {
-        WebTestClient.bindToServer()
-                .baseUrl("http://localhost:" + port).build()
-                .get().uri("/api/orders?access_token=" + token(7L, "USER", 600))
+        http().get().uri("/api/orders?access_token=" + token(7L, "USER", 600))
                 .exchange()
                 .expectStatus().isUnauthorized();
+    }
+
+    private WebTestClient http() {
+        return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+    }
+
+    private String ticket(String accessToken) {
+        return http().post().uri("/api/tracking/ticket")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(TrackingTicketController.TicketResponse.class)
+                .returnResult().getResponseBody().ticket();
     }
 
     private String firstMessage(String path, HttpHeaders headers) {

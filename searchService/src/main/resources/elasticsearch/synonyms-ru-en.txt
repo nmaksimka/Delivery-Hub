@@ -1,0 +1,108 @@
+курица, курицу, курицей, куриный, куриная, куриное, куриные, цыпленок, цыпленка, chicken
+говядина, говядину, говяжий, говяжья, beef
+свинина, свинину, свиной, свиная, pork
+баранина, баранину, бараний, ягненок, ягнятина, lamb
+телятина, телятину, veal
+утка, утку, утиный, duck
+индейка, индейку, turkey
+гусь, goose
+кролик, rabbit
+рыба, рыбу, рыбный, fish
+лосось, лосося, семга, salmon
+тунец, тунца, tuna
+треска, треску, cod
+креветки, креветка, креветками, prawn, prawns, shrimp
+кальмар, кальмары, squid
+мидии, мидия, mussels
+краб, крабы, crab
+лобстер, омар, lobster
+морепродукты, seafood
+бекон, bacon
+ветчина, ветчину, ham
+колбаса, колбаски, сосиски, sausage, sausages
+фарш, mince
+яйцо, яйца, яичница, egg, eggs
+омлет, omelette
+сыр, сырный, cheese
+молоко, молочный, milk
+сливки, сливочный, cream
+масло, сливочное масло, butter
+йогурт, yogurt
+рис, рисом, rice
+паста, макароны, pasta
+спагетти, spaghetti
+лапша, noodles
+хлеб, bread
+булочка, булочки, bun, buns
+картофель, картошка, картошку, potato, potatoes
+картофель фри, фри, fries, chips
+томат, томаты, помидор, помидоры, томатный, tomato, tomatoes
+огурец, огурцы, cucumber
+лук, луковый, onion
+чеснок, чесночный, garlic
+морковь, морковка, carrot
+капуста, cabbage
+грибы, гриб, грибной, mushroom, mushrooms
+перец, pepper
+шпинат, spinach
+баклажан, eggplant, aubergine
+кабачок, цуккини, courgette, zucchini
+горох, горошек, peas
+фасоль, бобы, beans
+чечевица, lentils
+кукуруза, corn
+тыква, pumpkin
+салат, салатик, salad
+суп, супчик, soup
+бульон, broth
+рагу, тушеный, stew
+жаркое, roast
+жареный, жареная, fried
+запеченный, запеченная, baked
+гриль, grilled, grill
+острый, острая, spicy
+карри, curry
+соус, sauce
+пицца, pizza
+бургер, гамбургер, burger
+сэндвич, бутерброд, sandwich
+пирог, пирожок, pie
+торт, cake
+пирожное, кекс, cupcake
+блины, блинчики, pancakes, pancake
+десерт, сладкое, dessert
+мороженое, ice cream
+шоколад, шоколадный, chocolate
+печенье, cookies, biscuits
+мед, honey
+сахар, sugar
+яблоко, яблочный, apple
+банан, banana
+апельсин, апельсиновый, orange
+лимон, лимонный, lemon
+клубника, strawberry
+малина, raspberry
+вишня, cherry
+ягоды, berries
+орехи, орех, nuts
+миндаль, almond
+кокос, кокосовый, coconut
+сок, juice
+вода, water
+чай, tea
+кофе, coffee
+напиток, напитки, drink, drinks
+вино, wine
+пиво, beer
+завтрак, breakfast
+обед, lunch
+ужин, dinner
+закуска, закуски, starter, snack
+гарнир, side
+вегетарианский, вегетарианское, vegetarian
+веганский, веганское, vegan
+говяжий стейк, стейк, steak
+котлета, котлеты, cutlet, patty
+фрикадельки, meatballs
+шашлык, kebab
+пельмени, dumplings

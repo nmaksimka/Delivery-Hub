@@ -5,6 +5,7 @@ import { useCart } from '../cart/CartContext';
 import { cx } from '../lib/cx';
 import { formatPrice, plural } from '../lib/format';
 import styles from './Header.module.css';
+import { NotificationBell } from './NotificationBell';
 import { BagIcon, LogoutIcon, PinIcon, ReceiptIcon, UserIcon, WalletIcon } from './icons';
 
 export function Header() {
@@ -33,6 +34,7 @@ export function Header() {
         <nav className={styles.nav} aria-label="Основная навигация">
           {user ? (
             <>
+              <NotificationBell />
               <NavLink
                 to="/wallet"
                 aria-label={

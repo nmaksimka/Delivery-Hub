@@ -63,6 +63,22 @@ export const cabinetApi = {
       schema: menuItemSchema,
     });
   },
+  changeOrderStatus(orderId: number, status: 'IN_DELIVERY' | 'CANCELLED') {
+    return request(`/api/cabinet/orders/${orderId}/status`, {
+      method: 'PATCH',
+      body: { status },
+      schema: orderSchema,
+    });
+  },
+  uploadMenuItemImage(restaurantId: number, menuItemId: number, file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return request(`${base}/${restaurantId}/menu/${menuItemId}/image`, {
+      method: 'PUT',
+      body,
+      schema: menuItemSchema,
+    });
+  },
   orders(options: { restaurantId: number; page: number; size: number; signal?: AbortSignal }) {
     return request('/api/cabinet/orders', {
       query: { restaurantId: options.restaurantId, page: options.page, size: options.size },

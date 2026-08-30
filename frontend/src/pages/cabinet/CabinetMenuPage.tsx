@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useParams } from 'react-router';
 import type { MenuItemInput } from '../../api/cabinet';
 import { errorMessage } from '../../api/http';
-import { useCabinetMenu, useChangeMenu } from '../../api/queries';
+import { useCabinetMenu, useChangeMenu, useUploadMenuItemImage } from '../../api/queries';
 import type { MenuItem } from '../../api/restaurants';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
@@ -32,6 +32,7 @@ export function CabinetMenuPage() {
   const restaurantId = Number(useParams().restaurantId);
   const menu = useCabinetMenu(restaurantId);
   const change = useChangeMenu(restaurantId);
+  const uploadImage = useUploadMenuItemImage(restaurantId);
   const [draft, setDraft] = useState<Draft | null>(null);
 
   function edit(item: MenuItem) {
@@ -147,6 +148,12 @@ export function CabinetMenuPage() {
         </StateMessage>
       )}
 
+      {uploadImage.isError && (
+        <p className={styles.error} role="alert">
+          {errorMessage(uploadImage.error)}
+        </p>
+      )}
+
       {menu.data && (
         <ul className={styles.list}>
           {menu.data.map((item) => (
@@ -174,6 +181,23 @@ export function CabinetMenuPage() {
                 >
                   {item.available ? 'В стоп-лист' : 'Вернуть в продажу'}
                 </Button>
+                <label className={styles.upload}>
+                  {item.imageUrl ? 'Заменить фото' : 'Загрузить фото'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className={styles.fileInput}
+                    aria-label={`Фото блюда ${item.name}`}
+                    disabled={uploadImage.isPending}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (file) {
+                        uploadImage.mutate({ menuItemId: item.id, file });
+                      }
+                    }}
+                  />
+                </label>
                 <Button
                   variant="ghost"
                   size="small"

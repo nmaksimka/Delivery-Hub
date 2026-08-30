@@ -11,6 +11,7 @@ import { cartApi, emptyCart, type Cart, type CartItemToAdd } from './cart';
 import { favoritesApi } from './favorites';
 import { ApiError } from './http';
 import { createAttemptKeys } from './idempotency';
+import { notificationsApi, type NotificationPage } from './notifications';
 import { ordersApi, type Order } from './orders';
 import { restaurantsApi } from './restaurants';
 import { reviewsApi, type ReviewInput } from './reviews';
@@ -18,6 +19,7 @@ import { walletApi } from './wallet';
 
 const ordersPageSize = 10;
 const orderPollInterval = 2_000;
+const notificationPollInterval = 30_000;
 
 export const queryKeys = {
   restaurants: (activeOnly: boolean) => ['restaurants', { activeOnly }] as const,
@@ -36,6 +38,8 @@ export const queryKeys = {
   userAddresses: (userId: number) => ['addresses', userId] as const,
   reviews: ['reviews'] as const,
   userReviews: (userId: number) => ['reviews', userId] as const,
+  notifications: ['notifications'] as const,
+  userNotifications: (userId: number) => ['notifications', userId] as const,
   favorites: ['favorites'] as const,
   userFavorites: (userId: number) => ['favorites', userId] as const,
   adminAnalytics: (period: AnalyticsPeriod, restaurantId?: number) =>
@@ -411,6 +415,26 @@ export function useCabinetOrders(restaurantId: number, page: number) {
   });
 }
 
+export function useChangeCabinetOrderStatus(restaurantId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, status }: { orderId: number; status: 'IN_DELIVERY' | 'CANCELLED' }) =>
+      cabinetApi.changeOrderStatus(orderId, status),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: [...cabinetKey, 'orders', restaurantId] }),
+  });
+}
+
+export function useUploadMenuItemImage(restaurantId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ menuItemId, file }: { menuItemId: number; file: File }) =>
+      cabinetApi.uploadMenuItemImage(restaurantId, menuItemId, file),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...cabinetKey, 'menu', restaurantId] }),
+  });
+}
+
 export function useCouriers(page: number) {
   return useQuery({
     queryKey: ['admin', 'couriers', page],
@@ -443,5 +467,37 @@ export function useStartImport() {
   return useMutation({
     mutationFn: (kind: ImportKind) => adminApi.startImport(kind),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'imports'] }),
+  });
+}
+
+export function useNotifications() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: queryKeys.userNotifications(userId ?? 0),
+    queryFn: ({ signal }) => notificationsApi.recent(signal),
+    enabled: userId !== null,
+    refetchInterval: notificationPollInterval,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  const userId = useUserId();
+  const key = queryKeys.userNotifications(userId ?? 0);
+  return useMutation({
+    mutationFn: (id: string) => notificationsApi.markRead(id),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<NotificationPage>(key, (page) => {
+        if (!page) {
+          return page;
+        }
+        const wasUnread = page.items.some((item) => item.id === updated.id && !item.read);
+        return {
+          items: page.items.map((item) => (item.id === updated.id ? updated : item)),
+          unread: wasUnread ? Math.max(0, page.unread - 1) : page.unread,
+        };
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
   });
 }

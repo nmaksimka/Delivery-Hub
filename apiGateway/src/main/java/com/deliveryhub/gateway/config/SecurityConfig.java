@@ -3,6 +3,7 @@ package com.deliveryhub.gateway.config;
 import com.deliveryhub.gateway.security.IdentityHeadersFilter;
 import com.deliveryhub.gateway.security.ProblemResponses;
 import com.deliveryhub.gateway.security.RoleFromTokenConverter;
+import com.deliveryhub.gateway.ticket.WebSocketTickets;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +13,7 @@ import org.springframework.security.config.annotation.web.reactive.EnableWebFlux
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.web.server.authentication.ServerBearerTokenAuthenticationConverter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
@@ -31,11 +33,13 @@ public class SecurityConfig {
 
     private static final String AUTH_API = "/api/auth/";
     private static final String WEB_SOCKETS = "/ws/";
+    private static final String TICKET_PARAM = "ticket";
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http,
                                                             ReactiveJwtDecoder jwtDecoder,
                                                             JsonMapper jsonMapper,
+                                                            WebSocketTickets tickets,
                                                             @Value("${app.internal-token}") String internalToken) {
         ProblemResponses problems = new ProblemResponses(jsonMapper);
         ServerAuthenticationEntryPoint unauthorized = (exchange, ex) -> problems.write(
@@ -70,7 +74,7 @@ public class SecurityConfig {
 
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .bearerTokenConverter(bearerToken())
+                        .bearerTokenConverter(bearerToken(tickets))
                         .authenticationEntryPoint(unauthorized)
                         .jwt(jwt -> jwt
                                 .jwtDecoder(jwtDecoder)
@@ -83,16 +87,18 @@ public class SecurityConfig {
                 .build();
     }
 
-    private static ServerAuthenticationConverter bearerToken() {
+    private static ServerAuthenticationConverter bearerToken(WebSocketTickets tickets) {
         ServerBearerTokenAuthenticationConverter fromHeader = new ServerBearerTokenAuthenticationConverter();
-        ServerBearerTokenAuthenticationConverter fromHeaderOrQuery = new ServerBearerTokenAuthenticationConverter();
-        fromHeaderOrQuery.setAllowUriQueryParameter(true);
         return exchange -> {
             String path = exchange.getRequest().getPath().value();
             if (path.startsWith(AUTH_API)) {
                 return Mono.empty();
             }
-            return path.startsWith(WEB_SOCKETS) ? fromHeaderOrQuery.convert(exchange) : fromHeader.convert(exchange);
+            String ticket = exchange.getRequest().getQueryParams().getFirst(TICKET_PARAM);
+            if (path.startsWith(WEB_SOCKETS) && ticket != null) {
+                return tickets.redeem(ticket).map(BearerTokenAuthenticationToken::new);
+            }
+            return fromHeader.convert(exchange);
         };
     }
 
