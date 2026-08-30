@@ -24,6 +24,7 @@ import com.deliveryhub.order.entity.OrderStatus;
 import com.deliveryhub.order.exception.DeliveryFeeChangedException;
 import com.deliveryhub.order.exception.ErrorCode;
 import com.deliveryhub.order.exception.ForbiddenException;
+import com.deliveryhub.order.exception.InvalidStatusTransitionException;
 import com.deliveryhub.order.exception.ItemNotFoundException;
 import com.deliveryhub.order.exception.OrderRejectedException;
 import com.deliveryhub.order.inbox.ProcessedEvents;
@@ -204,6 +205,25 @@ public class OrderService {
             cancellation.cancel(order, CancellationReason.ADMIN);
         } else if (order.changeStatus(newStatus, clock.instant())) {
             log.info("Order {} status updated to {}", id, newStatus);
+        }
+        return orderMapper.toDto(order);
+    }
+
+    @Transactional(readOnly = true)
+    public Long restaurantIdOf(Long id) {
+        return findWithItemsOrThrow(id).getRestaurantId();
+    }
+
+    @Transactional
+    public OrderDto updateOrderStatusByOwner(Long id, OrderStatus newStatus) {
+        Order order = findWithItemsOrThrow(id);
+
+        if (newStatus == OrderStatus.IN_DELIVERY) {
+            order.changeStatus(newStatus, clock.instant());
+        } else if (newStatus == OrderStatus.CANCELLED && order.getStatus() != OrderStatus.IN_DELIVERY) {
+            cancellation.cancel(order, CancellationReason.RESTAURANT);
+        } else {
+            throw new InvalidStatusTransitionException(id, order.getStatus(), newStatus);
         }
         return orderMapper.toDto(order);
     }
