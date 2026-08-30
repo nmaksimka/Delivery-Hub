@@ -92,7 +92,7 @@ spring:
             - id: cabinet-orders
               uri: lb://orderService
               predicates:
-                - Path=/api/cabinet/orders
+                - Path=/api/cabinet/orders,/api/cabinet/orders/**
             - id: admin-analytics
               uri: lb://orderService
               predicates:
