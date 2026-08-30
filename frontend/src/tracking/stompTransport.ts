@@ -1,4 +1,5 @@
 import { Client } from '@stomp/stompjs';
+import { ApiError } from '../api/http';
 import { trackingApi } from '../api/tracking';
 import type { FailureKind, TransportFactory } from './connection';
 
@@ -31,8 +32,8 @@ export const createStompTransport: TransportFactory = ({ orderId }) => {
           try {
             const { ticket } = await trackingApi.ticket();
             stomp.brokerURL = trackingUrl(window.location.origin, ticket);
-          } catch {
-            fail('unauthorized');
+          } catch (error) {
+            fail(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'dropped');
             void stomp.deactivate();
           }
         },
