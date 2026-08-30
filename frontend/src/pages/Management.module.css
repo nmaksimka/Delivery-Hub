@@ -116,3 +116,30 @@
 .periodRow {
   margin-bottom: var(--space-5);
 }
+
+.upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease);
+}
+
+.upload:hover,
+.upload:focus-within {
+  border-color: var(--color-ink);
+}
+
+.fileInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}

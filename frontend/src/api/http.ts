@@ -123,9 +123,17 @@ function refreshSession(expired: Session): Promise<Session | null> {
   return pendingRefresh;
 }
 
+function serializeBody(body: unknown): BodyInit | undefined {
+  if (body === undefined || body instanceof FormData) {
+    return body;
+  }
+  return JSON.stringify(body);
+}
+
 async function send<T>(path: string, options: RequestOptions<T>, session: Session | null) {
   const headers = new Headers({ ...options.headers, Accept: 'application/json' });
-  if (options.body !== undefined) {
+  const multipart = options.body instanceof FormData;
+  if (options.body !== undefined && !multipart) {
     headers.set('Content-Type', 'application/json');
   }
   if (session) {
@@ -135,7 +143,7 @@ async function send<T>(path: string, options: RequestOptions<T>, session: Sessio
     return await fetch(buildUrl(path, options.query), {
       method: options.method ?? 'GET',
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: serializeBody(options.body),
       signal: options.signal,
     });
   } catch (error) {
