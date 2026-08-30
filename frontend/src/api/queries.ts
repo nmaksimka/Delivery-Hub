@@ -415,6 +415,26 @@ export function useCabinetOrders(restaurantId: number, page: number) {
   });
 }
 
+export function useChangeCabinetOrderStatus(restaurantId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, status }: { orderId: number; status: 'IN_DELIVERY' | 'CANCELLED' }) =>
+      cabinetApi.changeOrderStatus(orderId, status),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: [...cabinetKey, 'orders', restaurantId] }),
+  });
+}
+
+export function useUploadMenuItemImage(restaurantId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ menuItemId, file }: { menuItemId: number; file: File }) =>
+      cabinetApi.uploadMenuItemImage(restaurantId, menuItemId, file),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...cabinetKey, 'menu', restaurantId] }),
+  });
+}
+
 export function useCouriers(page: number) {
   return useQuery({
     queryKey: ['admin', 'couriers', page],

@@ -125,7 +125,8 @@ function refreshSession(expired: Session): Promise<Session | null> {
 
 async function send<T>(path: string, options: RequestOptions<T>, session: Session | null) {
   const headers = new Headers({ ...options.headers, Accept: 'application/json' });
-  if (options.body !== undefined) {
+  const multipart = options.body instanceof FormData;
+  if (options.body !== undefined && !multipart) {
     headers.set('Content-Type', 'application/json');
   }
   if (session) {
@@ -135,7 +136,7 @@ async function send<T>(path: string, options: RequestOptions<T>, session: Sessio
     return await fetch(buildUrl(path, options.query), {
       method: options.method ?? 'GET',
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: multipart || options.body === undefined ? options.body : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch (error) {
