@@ -18,3 +18,27 @@ spring:
           uri: http://userService:3334
           predicates:
             - Path=/api/auth/**
+        - id: restaurant-docs
+          uri: http://restaurantService:3331
+          predicates:
+            - Path=/docs/restaurants/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: order-docs
+          uri: http://orderService:3332
+          predicates:
+            - Path=/docs/orders/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: delivery-docs
+          uri: http://deliveryService:3333
+          predicates:
+            - Path=/docs/deliveries/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
+        - id: user-docs
+          uri: http://userService:3334
+          predicates:
+            - Path=/docs/users/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs

@@ -14,8 +14,8 @@ public class DeliveryStatusListener {
     private final OrderService orderService;
 
     @KafkaListener(topics = "delivery-status-updated", groupId = "order-service-group")
-    public void handleDeliveryStatusUpdated(DeliveryStatusUpdatedEvent updatedEvent) {
-        log.info("received status update for orderId: {}, new status: {}", updatedEvent.getOrderId(), updatedEvent.getStatus());
-        orderService.updateOrderStatus(updatedEvent.getOrderId(), updatedEvent.getStatus());
+    public void handleDeliveryStatusUpdated(DeliveryStatusUpdatedEvent event) {
+        log.info("Received delivery status update: orderId={}, status={}", event.getOrderId(), event.getStatus());
+        orderService.applyDeliveryStatus(event.getOrderId(), event.getStatus());
     }
 }

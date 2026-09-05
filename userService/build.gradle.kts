@@ -9,7 +9,7 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -22,31 +22,37 @@ dependencies {
     implementation(Dependencies.springBootStarterDataJpa)
     implementation(Dependencies.springBootStarterValidation)
     implementation(Dependencies.springBootStarterActuator)
+    implementation(Dependencies.springBootStarterSecurity)
 
-    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation(Dependencies.jjwtApi)
+    runtimeOnly(Dependencies.jjwtImpl)
+    runtimeOnly(Dependencies.jjwtJackson)
 
-    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
-
-    implementation(Dependencies.postgresql)
+    runtimeOnly(Dependencies.postgresql)
     implementation(Dependencies.flywayCore)
-    implementation(Dependencies.flywayPostgresql)
+    runtimeOnly(Dependencies.flywayPostgresql)
 
     implementation(Dependencies.springdocOpenapi)
-    implementation(Dependencies.micrometerPrometheus)
+    runtimeOnly(Dependencies.micrometerPrometheus)
 
     compileOnly(Dependencies.lombok)
     annotationProcessor(Dependencies.lombok)
 
     implementation(Dependencies.mapstruct)
     annotationProcessor(Dependencies.mapstructProcessor)
-
-    implementation(project(":apiContracts"))
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
     testImplementation(Dependencies.springBootStarterTest)
-    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation(Dependencies.mockitoJunitJupiter)
+    testImplementation(Dependencies.springSecurityTest)
+    testRuntimeOnly(Dependencies.jjwtImpl)
+    testRuntimeOnly(Dependencies.jjwtJackson)
     testImplementation(platform(Dependencies.testcontainersBom))
     testImplementation(Dependencies.testcontainersJunit)
     testImplementation(Dependencies.testcontainersPostgresql)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }

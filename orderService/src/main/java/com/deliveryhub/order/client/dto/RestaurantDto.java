@@ -1,6 +1,5 @@
 package com.deliveryhub.order.client.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data

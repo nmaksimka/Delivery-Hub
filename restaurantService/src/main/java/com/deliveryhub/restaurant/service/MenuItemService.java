@@ -1,6 +1,5 @@
 package com.deliveryhub.restaurant.service;
 
-
 import com.deliveryhub.restaurant.dto.MenuItemDto;
 import com.deliveryhub.restaurant.entity.MenuItem;
 import com.deliveryhub.restaurant.entity.Restaurant;
@@ -9,12 +8,13 @@ import com.deliveryhub.restaurant.repository.MenuItemRepository;
 import com.deliveryhub.restaurant.repository.RestaurantRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -24,47 +24,44 @@ public class MenuItemService {
     private final MenuItemMapper menuItemMapper;
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId, boolean availableOnly) {
-        List<MenuItem> menuItems = availableOnly ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
+        List<MenuItem> menuItems = availableOnly
+                ? menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurantId)
                 : menuItemRepository.findByRestaurantId(restaurantId);
 
-        return menuItems.stream().map(menuItemMapper::toDto).collect(Collectors.toList());
+        return menuItems.stream().map(menuItemMapper::toDto).toList();
     }
 
-    public MenuItemDto getMenuItemById(Long id) {
-        MenuItem item = menuItemRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("MenuItem with this id: " + id + " was not found"));
-
-        return menuItemMapper.toDto(item);
+    public MenuItemDto getMenuItemById(Long restaurantId, Long menuItemId) {
+        return menuItemMapper.toDto(findInRestaurantOrThrow(restaurantId, menuItemId));
     }
 
     @Transactional
     public MenuItemDto addMenuItemToRestaurant(Long restaurantId, MenuItemDto menuItemDto) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                .orElseThrow(() -> new EntityNotFoundException("Restaurant with Id: " + restaurantId + " was not found"));
-        MenuItem menuItem = menuItemMapper.toEntity(menuItemDto);
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Restaurant with ID: " + restaurantId + " was not found"));
 
+        MenuItem menuItem = menuItemMapper.toEntity(menuItemDto);
         restaurant.addMenuItem(menuItem);
 
-        MenuItem saved = menuItemRepository.save(menuItem);
-        return menuItemMapper.toDto(saved);
+        return menuItemMapper.toDto(menuItemRepository.save(menuItem));
     }
 
     @Transactional
-    public void removeMenuItem(Long id) {
-        if(!menuItemRepository.existsById(id)) {
-            throw new EntityNotFoundException("MenuItem with this id: " + id + " was not found");
-        }
-        menuItemRepository.deleteById(id);
+    public void removeMenuItem(Long restaurantId, Long menuItemId) {
+        menuItemRepository.delete(findInRestaurantOrThrow(restaurantId, menuItemId));
     }
 
     @Transactional
-    public MenuItemDto updateMenuItem(Long id, MenuItemDto newItemDto) {
-        MenuItem oldMenuItem = menuItemRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("MenuItem with this id: " + id + " was not found"));
+    public MenuItemDto updateMenuItem(Long restaurantId, Long menuItemId, MenuItemDto newItemDto) {
+        MenuItem menuItem = findInRestaurantOrThrow(restaurantId, menuItemId);
+        menuItemMapper.updateEntityFromDto(newItemDto, menuItem);
+        return menuItemMapper.toDto(menuItem);
+    }
 
-        menuItemMapper.updateEntityFromDto(newItemDto, oldMenuItem);
-        MenuItem updatedMenuItem = menuItemRepository.save(oldMenuItem);
-
-        return menuItemMapper.toDto(updatedMenuItem);
+    private MenuItem findInRestaurantOrThrow(Long restaurantId, Long menuItemId) {
+        return menuItemRepository.findByIdAndRestaurantId(menuItemId, restaurantId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Menu item with ID: " + menuItemId + " was not found in restaurant " + restaurantId));
     }
 }

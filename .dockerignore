@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.gradle
+**/.gradle
+build
+**/build
+**/bin
+**/out
+*.md
+.env
+prometheus
