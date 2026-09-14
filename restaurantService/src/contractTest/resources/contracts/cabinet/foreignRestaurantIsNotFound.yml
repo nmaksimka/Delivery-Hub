@@ -1,0 +1,9 @@
+name: foreignRestaurantIsNotFound
+request:
+  method: GET
+  url: /api/cabinet/restaurants/7
+  headers:
+    X-User-Id: "43"
+    X-User-Role: RESTAURANT_OWNER
+response:
+  status: 404
