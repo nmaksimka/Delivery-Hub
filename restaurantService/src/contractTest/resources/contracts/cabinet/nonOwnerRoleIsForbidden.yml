@@ -1,0 +1,9 @@
+name: nonOwnerRoleIsForbidden
+request:
+  method: GET
+  url: /api/cabinet/restaurants/7
+  headers:
+    X-User-Id: "42"
+    X-User-Role: USER
+response:
+  status: 403
