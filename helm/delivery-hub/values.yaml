@@ -1,0 +1,29 @@
+imageRegistry: ghcr.io/nmaksimka
+imageTag: latest
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+config:
+  SPRING_PROFILES_ACTIVE: docker
+  CONFIG_SERVER_URL: http://configserver:8888
+  CONFIG_USER: config
+  EUREKA_USER: eureka
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  STORAGE_BUCKET: images
+
+secrets:
+  CONFIG_PASSWORD: change-me-config-password
+  EUREKA_PASSWORD: change-me-eureka-password
+  INTERNAL_TOKEN: change-me-internal-token
+  REDIS_PASSWORD: change-me-redis-password
+  JWT_PRIVATE_KEY: ""
+  RESTAURANT_DB_PASSWORD: restaurant_pass
+  ORDER_DB_PASSWORD: order_pass
+  DELIVERY_DB_PASSWORD: delivery_pass
+  USER_DB_PASSWORD: user_pass
+  PAYMENT_DB_PASSWORD: payment_pass
+  NOTIFICATION_DB_PASSWORD: notification_pass
+  STORAGE_ACCESS_KEY: ""
+  STORAGE_SECRET_KEY: ""
+  GARAGE_RPC_SECRET: ""
+  GARAGE_ADMIN_TOKEN: ""
