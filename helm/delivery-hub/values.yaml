@@ -350,6 +350,25 @@ infra:
       limits:
         memory: 1536Mi
 
+  garage:
+    image: dxflrs/garage:v2.3.0
+    ports:
+      - {name: s3, port: 3900}
+      - {name: rpc, port: 3901}
+      - {name: admin, port: 3903}
+    secretEnv:
+      GARAGE_RPC_SECRET: GARAGE_RPC_SECRET
+      GARAGE_ADMIN_TOKEN: GARAGE_ADMIN_TOKEN
+    configMounts:
+      - {name: garage-config, mountPath: /etc/garage.toml, subPath: garage.toml, configMap: garage-files}
+    volumes:
+      - {name: meta, mountPath: /var/lib/garage/meta, size: 256Mi}
+      - {name: data, mountPath: /var/lib/garage/data, size: 2Gi}
+    readinessProbe:
+      tcpSocket:
+        port: admin
+      periodSeconds: 5
+
   mailpit:
     image: axllent/mailpit:v1.29.7
     ports:
@@ -365,3 +384,7 @@ infra:
         path: /readyz
         port: http
       periodSeconds: 5
+
+garage:
+  initImage: curlimages/curl:8.14.1
+  configMap: garage-files
