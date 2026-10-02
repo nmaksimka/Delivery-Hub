@@ -3,6 +3,8 @@ imageTag: latest
 imagePullPolicy: IfNotPresent
 imagePullSecrets: []
 
+waitImage: busybox:1.37.0
+
 config:
   SPRING_PROFILES_ACTIVE: docker
   CONFIG_SERVER_URL: http://configserver:8888
@@ -27,3 +29,156 @@ secrets:
   STORAGE_SECRET_KEY: ""
   GARAGE_RPC_SECRET: ""
   GARAGE_ADMIN_TOKEN: ""
+
+defaultResources:
+  requests:
+    cpu: 100m
+    memory: 384Mi
+  limits:
+    memory: 768Mi
+
+services:
+  discoveryserver:
+    image: discovery-server
+    ports:
+      - {name: http, port: 8761}
+    env:
+      EUREKA_HOSTNAME: discoveryserver
+      EUREKA_USER: eureka
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    secretEnv:
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+
+  configserver:
+    image: config-server
+    ports:
+      - {name: http, port: 8888}
+    env:
+      CONFIG_REPO_LOCATION: file:/config-repo
+      CONFIG_USER: config
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+    configMounts:
+      - {name: config-repo, mountPath: /config-repo, configMap: config-repo}
+
+  userservice:
+    image: user-service
+    platform: true
+    ports:
+      - {name: http, port: 3334}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: USER_DB_PASSWORD
+      JWT_PRIVATE_KEY: JWT_PRIVATE_KEY
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-user:5432]
+
+  restaurantservice:
+    image: restaurant-service
+    platform: true
+    ports:
+      - {name: http, port: 3331}
+      - {name: grpc, port: 9331}
+    healthPort: 3331
+    env:
+      STORAGE_ENDPOINT: http://garage:3900
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:3900
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+      DB_PASSWORD: RESTAURANT_DB_PASSWORD
+      STORAGE_ACCESS_KEY: STORAGE_ACCESS_KEY
+      STORAGE_SECRET_KEY: STORAGE_SECRET_KEY
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-restaurant:5432, kafka:9092, schema-registry:8081, redis:6379, garage:3900]
+
+  orderservice:
+    image: order-service
+    platform: true
+    ports:
+      - {name: http, port: 3332}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+      DB_PASSWORD: ORDER_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-order:5432, kafka:9092, schema-registry:8081, redis:6379, restaurantservice:3331]
+
+  deliveryservice:
+    image: delivery-service
+    platform: true
+    ports:
+      - {name: http, port: 3333}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: DELIVERY_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-delivery:5432, kafka:9092, schema-registry:8081]
+
+  paymentservice:
+    image: payment-service
+    platform: true
+    ports:
+      - {name: http, port: 3336}
+    env:
+      PAYMENT_PROVIDER: demo
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: PAYMENT_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-payment:5432, kafka:9092, schema-registry:8081]
+
+  notificationservice:
+    image: notification-service
+    platform: true
+    ports:
+      - {name: http, port: 3337}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: NOTIFICATION_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-notification:5432, kafka:9092, schema-registry:8081, mailpit:1025]
+
+  searchservice:
+    image: search-service
+    platform: true
+    ports:
+      - {name: http, port: 3338}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+    waitFor: [configserver:8888, discoveryserver:8761, elasticsearch:9200, kafka:9092, schema-registry:8081]
+
+  apigateway:
+    image: api-gateway
+    platform: true
+    ports:
+      - {name: http, port: 3335}
+      - {name: management, port: 9335}
+    healthPort: 9335
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, redis:6379, userservice:3334]
+
+  frontend:
+    image: frontend
+    springBoot: false
+    ports:
+      - {name: http, port: 80}
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
