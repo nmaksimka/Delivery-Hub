@@ -401,3 +401,10 @@ ingress:
   frontend:
     service: frontend
     port: 80
+
+networkPolicy:
+  enabled: true
+  restricted:
+    - service: restaurantservice
+      port: 9331
+      from: [orderservice]
