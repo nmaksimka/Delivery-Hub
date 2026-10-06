@@ -1,0 +1,106 @@
+{{- range $name, $c := .Values.infra }}
+{{- $ctx := dict "name" $name "c" $c "root" $ }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dh.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "dh.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dh.labels" $ctx | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      {{- if $c.fsGroup }}
+      securityContext:
+        fsGroup: {{ $c.fsGroup }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $c.image }}
+          imagePullPolicy: IfNotPresent
+          {{- with $c.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            {{- include "dh.ports" $ctx | nindent 12 }}
+          {{- $env := include "dh.env" $ctx }}
+          {{- if $env }}
+          env:
+            {{- $env | nindent 12 }}
+          {{- end }}
+          {{- with $c.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+          {{- with ($c.resources | default $.Values.infraResources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or $c.volumes $c.configMounts }}
+          volumeMounts:
+            {{- range $c.volumes }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+            {{- end }}
+            {{- range $c.configMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: true
+            {{- end }}
+          {{- end }}
+      {{- if $c.configMounts }}
+      volumes:
+        {{- range $c.configMounts }}
+        - name: {{ .name }}
+          configMap:
+            name: {{ .configMap }}
+        {{- end }}
+      {{- end }}
+  {{- if $c.volumes }}
+  volumeClaimTemplates:
+    {{- range $c.volumes }}
+    - metadata:
+        name: {{ .name }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $.Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .size }}
+    {{- end }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dh.labels" $ctx | nindent 4 }}
+spec:
+  {{- if $c.publishNotReady }}
+  publishNotReadyAddresses: true
+  {{- end }}
+  selector:
+    {{- include "dh.selector" $ctx | nindent 4 }}
+  ports:
+    {{- range $c.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .name }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,102 @@
+{{- range $name, $c := .Values.services }}
+{{- $ctx := dict "name" $name "c" $c "root" $ }}
+{{- $spring := ne (toString $c.springBoot) "false" }}
+{{- $healthPort := $c.healthPort | default (first $c.ports).port }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dh.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ $c.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "dh.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dh.labels" $ctx | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $c.waitFor }}
+      initContainers:
+        {{- include "dh.waitFor" $ctx | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $.Values.imageRegistry }}/delivery-hub-{{ $c.image }}:{{ $.Values.imageTag }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          ports:
+            {{- include "dh.ports" $ctx | nindent 12 }}
+          {{- if $c.platform }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "dh.configName" $ }}
+          {{- end }}
+          {{- $env := include "dh.env" $ctx }}
+          {{- if $env }}
+          env:
+            {{- $env | nindent 12 }}
+          {{- end }}
+          {{- if $c.configMounts }}
+          volumeMounts:
+            {{- range $c.configMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              readOnly: true
+            {{- end }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: {{ ternary "/actuator/health/readiness" "/healthz" $spring }}
+              port: {{ $healthPort }}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: {{ ternary "/actuator/health/readiness" "/healthz" $spring }}
+              port: {{ $healthPort }}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: {{ ternary "/actuator/health/liveness" "/healthz" $spring }}
+              port: {{ $healthPort }}
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 4
+          securityContext:
+            allowPrivilegeEscalation: false
+          resources:
+            {{- toYaml ($c.resources | default $.Values.defaultResources) | nindent 12 }}
+      {{- if $c.configMounts }}
+      volumes:
+        {{- range $c.configMounts }}
+        - name: {{ .name }}
+          configMap:
+            name: {{ .configMap }}
+        {{- end }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dh.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "dh.selector" $ctx | nindent 4 }}
+  ports:
+    {{- range $c.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .name }}
+    {{- end }}
+{{- end }}

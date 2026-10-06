@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: garage-init
+  labels:
+    {{- include "dh.labels" (dict "name" "garage-init" "root" .) | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "dh.selector" (dict "name" "garage-init" "root" .) | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      enableServiceLinks: false
+      containers:
+        - name: garage-init
+          image: {{ .Values.garage.initImage }}
+          command: [sh, /init.sh]
+          env:
+            - name: GARAGE_HOST
+              value: garage
+            - name: STORAGE_BUCKET
+              value: {{ .Values.config.STORAGE_BUCKET | quote }}
+            {{- range $key := list "STORAGE_ACCESS_KEY" "STORAGE_SECRET_KEY" "GARAGE_ADMIN_TOKEN" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dh.secretName" $ }}
+                  key: {{ $key }}
+            {{- end }}
+          volumeMounts:
+            - name: init
+              mountPath: /init.sh
+              subPath: init.sh
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: init
+          configMap:
+            name: {{ .Values.garage.configMap }}
