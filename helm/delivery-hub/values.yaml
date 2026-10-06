@@ -388,3 +388,16 @@ infra:
 garage:
   initImage: curlimages/curl:8.14.1
   configMap: garage-files
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""
+  annotations: {}
+  gateway:
+    service: apigateway
+    port: 3335
+    paths: [/api, /ws]
+  frontend:
+    service: frontend
+    port: 80
