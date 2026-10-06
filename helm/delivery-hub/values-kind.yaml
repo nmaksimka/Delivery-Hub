@@ -1,0 +1,25 @@
+imageTag: local
+imagePullPolicy: Never
+
+secrets:
+  CONFIG_PASSWORD: kind-config-password
+  EUREKA_PASSWORD: kind-eureka-password
+  INTERNAL_TOKEN: kind-internal-token
+  REDIS_PASSWORD: kind-redis-password
+  STORAGE_ACCESS_KEY: GKc4c62874e48997d5dcf3e82e
+  STORAGE_SECRET_KEY: b86cf22d0b66e5ff3c9826bf4cdf4d03de5f67de24c0434ea9984b6740008c67
+  GARAGE_RPC_SECRET: 689ecfd6f439cfe6f6210140105c507849f03b7d5b8ab884e414abab8722933b
+  GARAGE_ADMIN_TOKEN: kind-garage-admin-token
+
+defaultResources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 640Mi
+
+ingress:
+  host: localhost
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
