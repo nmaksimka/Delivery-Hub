@@ -61,6 +61,10 @@ public class User {
         return new User(normalizeEmail(email), passwordHash, name, phone, Role.USER, registeredAt);
     }
 
+    public static User admin(String email, String passwordHash, String name, Instant createdAt) {
+        return new User(normalizeEmail(email), passwordHash, name, null, Role.ADMIN, createdAt);
+    }
+
     public void changeRole(Role role, Instant changedAt) {
         this.role = Objects.requireNonNull(role, "role");
         this.updatedAt = Objects.requireNonNull(changedAt, "changedAt");

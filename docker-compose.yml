@@ -287,6 +287,7 @@ services:
       DB_PASSWORD: ${RESTAURANT_DB_PASSWORD:-restaurant_pass}
       STORAGE_ENDPOINT: http://garage:3900
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:3900}
+      BOOTSTRAP_IMPORT_MEALS: ${BOOTSTRAP_IMPORT_MEALS:-true}
     depends_on:
       garageInit:
         condition: service_completed_successfully
@@ -377,6 +378,8 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       DB_PASSWORD: ${USER_DB_PASSWORD:-user_pass}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:
       configServer:
         condition: service_healthy

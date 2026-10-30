@@ -41,3 +41,25 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Local artifacts ###
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.p12
+*.jks
+*.dump
+*.bak
+*.tmp
+*.orig
+*.rej
+logs/
+node_modules/
+.claude/
+.vscode/
+smoke*
+scratch*
+*.hprof
+HELP.md

@@ -3,3 +3,14 @@ dist
 coverage
 *.local
 *.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.vite
+playwright-report
+test-results
+.DS_Store
+.idea
+.vscode
