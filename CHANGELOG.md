@@ -10,7 +10,7 @@
 - Release-workflow: образы сервисов собираются и публикуются в GHCR по тегу `v*`.
 - Dependabot: Gradle, npm, GitHub Actions и Docker раз в неделю.
 - Helm-чарт `helm/delivery-hub`: десять сервисов и фронтенд, StatefulSet для Postgres, Kafka, Schema Registry, Redis, Elasticsearch и Mailpit, Garage с job инициализации бакета, Ingress, NetworkPolicy для gRPC-порта ресторанов, `values-kind` и инструкция запуска в kind.
-- Документация: архитектура сервисов (`docs/architecture.md`), ADR 0001–0015, запуск в Kubernetes (`docs/k8s.md`).
+- Документация: инструкция по запуску и запуск в Kubernetes (`docs/k8s.md`).
 - Тесты нагрузки и разрыва цепи для клиента Nominatim в userService.
 
 ### Изменено
