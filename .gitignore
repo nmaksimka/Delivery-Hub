@@ -105,3 +105,4 @@ test-results/
 *.swp
 Thumbs.db
 desktop.ini
+docs/adr/
