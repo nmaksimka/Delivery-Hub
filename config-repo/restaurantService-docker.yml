@@ -8,3 +8,7 @@ spring:
   data:
     redis:
       host: redis
+
+app:
+  bootstrap:
+    import-meals-on-empty: ${BOOTSTRAP_IMPORT_MEALS:true}

@@ -1,0 +1,21 @@
+name: ownerReadsOwnRestaurant
+request:
+  method: GET
+  url: /api/cabinet/restaurants/7
+  headers:
+    X-User-Id: "42"
+    X-User-Role: RESTAURANT_OWNER
+response:
+  status: 200
+  headers:
+    Content-Type: application/json
+  body:
+    id: 7
+    name: Томская пекарня
+    active: true
+  matchers:
+    body:
+      - path: $.id
+        type: by_type
+      - path: $.name
+        type: by_type

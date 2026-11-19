@@ -7,7 +7,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 @Configuration
-@EnableConfigurationProperties(ImportProperties.class)
+@EnableConfigurationProperties({ImportProperties.class, BootstrapProperties.class})
 public class ImportConfig {
 
     @Bean

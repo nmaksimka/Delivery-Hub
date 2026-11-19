@@ -41,3 +41,68 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Local artifacts ###
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.p12
+*.jks
+*.dump
+*.bak
+*.tmp
+*.orig
+*.rej
+logs/
+node_modules/
+.claude/
+.vscode/
+smoke*
+scratch*
+*.hprof
+HELP.md
+
+### Local configs and secrets ###
+*-local.yml
+*-local.yaml
+application-local.*
+values-local.yaml
+*.local.yaml
+kubeconfig*
+*.crt
+*.cer
+*.p8
+id_rsa*
+*.keystore
+secrets/
+
+### Notes, drafts and AI tooling ###
+CLAUDE.md
+AGENTS.md
+.cursor/
+.aider*
+.continue/
+HANDOFF*.md
+dh_*.md
+*.draft.md
+notes/
+docs/notes/
+docs/architecture.md
+docs/review*/
+review*.md
+конспект*
+Конспект*
+todo.md
+TODO.md
+
+### Local tools ###
+.worktrees/
+playwright-report/
+test-results/
+.playwright/
+*.swp
+Thumbs.db
+desktop.ini
+docs/adr/

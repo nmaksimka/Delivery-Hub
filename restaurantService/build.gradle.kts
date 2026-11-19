@@ -1,6 +1,7 @@
 plugins {
     id("deliveryhub.platform-client")
     id("deliveryhub.integration-test")
+    alias(libs.plugins.spring.cloud.contract)
 }
 
 dependencies {
@@ -33,5 +34,11 @@ dependencies {
 
     integrationTestImplementation(libs.testcontainers.kafka)
     testImplementation(libs.wiremock)
+    contractTestImplementation(libs.spring.cloud.starter.contract.verifier)
     testImplementation(libs.grpc.inprocess)
+}
+
+contracts {
+    baseClassForTests.set("com.deliveryhub.restaurant.contract.CabinetContractBase")
+    testMode.set(org.springframework.cloud.contract.verifier.config.TestMode.MOCKMVC)
 }

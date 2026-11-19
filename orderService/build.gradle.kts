@@ -3,6 +3,12 @@ plugins {
     id("deliveryhub.integration-test")
 }
 
+val restaurantStubs = findProject(":restaurantService")?.let { restaurant ->
+    fileTree(restaurant.layout.buildDirectory.dir("libs")) {
+        include("*-stubs.jar")
+    }.builtBy(":restaurantService:verifierStubsJar")
+}
+
 dependencies {
     implementation(project(":apiContracts"))
 
@@ -28,5 +34,7 @@ dependencies {
     integrationTestImplementation(libs.testcontainers.kafka)
     testImplementation(libs.grpc.inprocess)
     testImplementation(libs.wiremock)
+    testImplementation(libs.spring.cloud.starter.contract.stub.runner)
+    restaurantStubs?.let { testRuntimeOnly(it) }
     integrationTestImplementation(libs.grpc.inprocess)
 }

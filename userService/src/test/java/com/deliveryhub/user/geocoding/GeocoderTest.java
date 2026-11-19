@@ -3,6 +3,7 @@ package com.deliveryhub.user.geocoding;
 import com.deliveryhub.user.entity.GeoPoint;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import org.junit.jupiter.api.AfterAll;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
@@ -34,6 +36,9 @@ class GeocoderTest {
     private static final String USER_AGENT = "DeliveryHub/1.0 (portfolio demo)";
 
     private Geocoder geocoder;
+    private NominatimProperties properties;
+    private RestClient restClient;
+    private Clock clock;
 
     @BeforeAll
     static void start() {
@@ -48,15 +53,15 @@ class GeocoderTest {
     @BeforeEach
     void setUp() {
         NOMINATIM.resetAll();
-        NominatimProperties properties = new NominatimProperties(NOMINATIM.baseUrl(), USER_AGENT, "Томск", "ru",
+        properties = new NominatimProperties(NOMINATIM.baseUrl(), USER_AGENT, "Томск", "ru",
                 "84.80,56.62,85.20,56.36", Duration.ofSeconds(1), Duration.ofSeconds(1), 1, Duration.ofSeconds(1),
                 100, Duration.ofDays(7), Duration.ofDays(1), Duration.ofMinutes(10), 20);
-        RestClient restClient = RestClient.builder().baseUrl(NOMINATIM.baseUrl())
+        restClient = RestClient.builder().baseUrl(NOMINATIM.baseUrl())
                 .defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT).build();
         RateLimiter unlimited = RateLimiter.of("test", RateLimiterConfig.custom()
                 .limitForPeriod(1000).limitRefreshPeriod(Duration.ofSeconds(1)).build());
-        geocoder = new Geocoder(restClient, unlimited, CircuitBreaker.ofDefaults("test"), properties,
-                Clock.fixed(Instant.parse("2026-07-14T09:00:00Z"), ZoneOffset.UTC));
+        clock = Clock.fixed(Instant.parse("2026-07-14T09:00:00Z"), ZoneOffset.UTC);
+        geocoder = new Geocoder(restClient, unlimited, CircuitBreaker.ofDefaults("test"), properties, clock);
     }
 
     @Test
@@ -111,5 +116,41 @@ class GeocoderTest {
                 .willReturn(okJson("[{\"lat\": \"999\", \"lon\": \"84.95\"}]")));
 
         assertThat(geocoder.locate("Кривая", "1")).isEmpty();
+    }
+
+    @Test
+    void openCircuitStopsCallingNominatim() {
+        CircuitBreaker breaker = CircuitBreaker.of("test", CircuitBreakerConfig.custom()
+                .slidingWindowSize(3)
+                .minimumNumberOfCalls(3)
+                .failureRateThreshold(50)
+                .recordExceptions(HttpServerErrorException.class)
+                .build());
+        Geocoder guarded = new Geocoder(restClient, NominatimConfig.rateLimiter(properties), breaker, properties, clock);
+        NOMINATIM.stubFor(get(urlPathEqualTo("/search")).willReturn(aResponse().withStatus(500)));
+
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> guarded.locate("Ленина", "1")).isInstanceOf(GeocoderUnavailableException.class);
+        }
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        assertThatThrownBy(() -> guarded.locate("Ленина", "1")).isInstanceOf(GeocoderUnavailableException.class);
+        NOMINATIM.verify(3, getRequestedFor(urlPathEqualTo("/search")));
+    }
+
+    @Test
+    void requestsOverLimitAreRejectedWithoutReachingNominatim() {
+        RateLimiter onePerMinute = RateLimiter.of("test", RateLimiterConfig.custom()
+                .limitForPeriod(1)
+                .limitRefreshPeriod(Duration.ofMinutes(1))
+                .timeoutDuration(Duration.ZERO)
+                .build());
+        Geocoder limited = new Geocoder(restClient, onePerMinute, CircuitBreaker.ofDefaults("test"), properties, clock);
+        NOMINATIM.stubFor(get(urlPathEqualTo("/search")).willReturn(okJson("[{\"lat\": \"56.47\", \"lon\": \"84.95\"}]")));
+
+        limited.locate("Ленина", "1");
+
+        assertThatThrownBy(() -> limited.locate("Фрунзе", "2")).isInstanceOf(GeocoderUnavailableException.class);
+        NOMINATIM.verify(1, getRequestedFor(urlPathEqualTo("/search")));
     }
 }

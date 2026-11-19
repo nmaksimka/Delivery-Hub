@@ -1,0 +1,410 @@
+imageRegistry: ghcr.io/nmaksimka
+imageTag: latest
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+waitImage: busybox:1.37.0
+
+config:
+  SPRING_PROFILES_ACTIVE: docker
+  CONFIG_SERVER_URL: http://configserver:8888
+  CONFIG_USER: config
+  EUREKA_USER: eureka
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  STORAGE_BUCKET: images
+
+secrets:
+  CONFIG_PASSWORD: change-me-config-password
+  EUREKA_PASSWORD: change-me-eureka-password
+  INTERNAL_TOKEN: change-me-internal-token
+  REDIS_PASSWORD: change-me-redis-password
+  JWT_PRIVATE_KEY: ""
+  RESTAURANT_DB_PASSWORD: restaurant_pass
+  ORDER_DB_PASSWORD: order_pass
+  DELIVERY_DB_PASSWORD: delivery_pass
+  USER_DB_PASSWORD: user_pass
+  PAYMENT_DB_PASSWORD: payment_pass
+  NOTIFICATION_DB_PASSWORD: notification_pass
+  STORAGE_ACCESS_KEY: ""
+  STORAGE_SECRET_KEY: ""
+  GARAGE_RPC_SECRET: ""
+  GARAGE_ADMIN_TOKEN: ""
+
+defaultResources:
+  requests:
+    cpu: 100m
+    memory: 384Mi
+  limits:
+    memory: 768Mi
+
+services:
+  discoveryserver:
+    image: discovery-server
+    ports:
+      - {name: http, port: 8761}
+    env:
+      EUREKA_HOSTNAME: discoveryserver
+      EUREKA_USER: eureka
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    secretEnv:
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+
+  configserver:
+    image: config-server
+    ports:
+      - {name: http, port: 8888}
+    env:
+      CONFIG_REPO_LOCATION: file:/config-repo
+      CONFIG_USER: config
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+    configMounts:
+      - {name: config-repo, mountPath: /config-repo, configMap: config-repo}
+
+  userservice:
+    image: user-service
+    platform: true
+    ports:
+      - {name: http, port: 3334}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: USER_DB_PASSWORD
+      JWT_PRIVATE_KEY: JWT_PRIVATE_KEY
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-user:5432]
+
+  restaurantservice:
+    image: restaurant-service
+    platform: true
+    ports:
+      - {name: http, port: 3331}
+      - {name: grpc, port: 9331}
+    healthPort: 3331
+    env:
+      STORAGE_ENDPOINT: http://garage:3900
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:3900
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+      DB_PASSWORD: RESTAURANT_DB_PASSWORD
+      STORAGE_ACCESS_KEY: STORAGE_ACCESS_KEY
+      STORAGE_SECRET_KEY: STORAGE_SECRET_KEY
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-restaurant:5432, kafka:9092, schema-registry:8081, redis:6379, garage:3900]
+
+  orderservice:
+    image: order-service
+    platform: true
+    ports:
+      - {name: http, port: 3332}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+      DB_PASSWORD: ORDER_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-order:5432, kafka:9092, schema-registry:8081, redis:6379, restaurantservice:3331]
+
+  deliveryservice:
+    image: delivery-service
+    platform: true
+    ports:
+      - {name: http, port: 3333}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: DELIVERY_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-delivery:5432, kafka:9092, schema-registry:8081]
+
+  paymentservice:
+    image: payment-service
+    platform: true
+    ports:
+      - {name: http, port: 3336}
+    env:
+      PAYMENT_PROVIDER: demo
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: PAYMENT_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-payment:5432, kafka:9092, schema-registry:8081]
+
+  notificationservice:
+    image: notification-service
+    platform: true
+    ports:
+      - {name: http, port: 3337}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      DB_PASSWORD: NOTIFICATION_DB_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, postgres-notification:5432, kafka:9092, schema-registry:8081, mailpit:1025]
+
+  searchservice:
+    image: search-service
+    platform: true
+    ports:
+      - {name: http, port: 3338}
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+    waitFor: [configserver:8888, discoveryserver:8761, elasticsearch:9200, kafka:9092, schema-registry:8081]
+
+  apigateway:
+    image: api-gateway
+    platform: true
+    ports:
+      - {name: http, port: 3335}
+      - {name: management, port: 9335}
+    healthPort: 9335
+    secretEnv:
+      CONFIG_PASSWORD: CONFIG_PASSWORD
+      EUREKA_PASSWORD: EUREKA_PASSWORD
+      INTERNAL_TOKEN: INTERNAL_TOKEN
+      REDIS_PASSWORD: REDIS_PASSWORD
+    waitFor: [configserver:8888, discoveryserver:8761, redis:6379, userservice:3334]
+
+  frontend:
+    image: frontend
+    springBoot: false
+    ports:
+      - {name: http, port: 80}
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+storageClassName: ""
+
+infraResources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+infra:
+  postgres-restaurant: &postgres
+    image: postgres:17.9-alpine
+    ports:
+      - {name: postgres, port: 5432}
+    env:
+      POSTGRES_DB: restaurant_db
+      POSTGRES_USER: restaurant_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: RESTAURANT_DB_PASSWORD
+    volumes:
+      - {name: data, mountPath: /var/lib/postgresql/data, size: 1Gi}
+    readinessProbe:
+      exec:
+        command: [sh, -c, "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      periodSeconds: 5
+
+  postgres-order:
+    <<: *postgres
+    env:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: ORDER_DB_PASSWORD
+
+  postgres-delivery:
+    <<: *postgres
+    image: postgis/postgis:17-3.5-alpine@sha256:894f570c0cf0664ed5576a8fd5d5bfb8fb1b19d592885b686c3a88c8bd90c41f
+    env:
+      POSTGRES_DB: delivery_db
+      POSTGRES_USER: delivery_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: DELIVERY_DB_PASSWORD
+
+  postgres-user:
+    <<: *postgres
+    env:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: user_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: USER_DB_PASSWORD
+
+  postgres-payment:
+    <<: *postgres
+    env:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: PAYMENT_DB_PASSWORD
+
+  postgres-notification:
+    <<: *postgres
+    env:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secretEnv:
+      POSTGRES_PASSWORD: NOTIFICATION_DB_PASSWORD
+
+  kafka:
+    image: apache/kafka:4.1.2
+    publishNotReady: true
+    fsGroup: 1000
+    ports:
+      - {name: broker, port: 9092}
+      - {name: controller, port: 9093}
+    env:
+      CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - {name: data, mountPath: /var/lib/kafka/data, size: 2Gi}
+    readinessProbe:
+      tcpSocket:
+        port: broker
+      periodSeconds: 10
+      failureThreshold: 15
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:8.1.4
+    ports:
+      - {name: http, port: 8081}
+    env:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+    readinessProbe:
+      httpGet:
+        path: /subjects
+        port: http
+      periodSeconds: 10
+      failureThreshold: 15
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        memory: 768Mi
+
+  redis:
+    image: redis:8.6.3-alpine
+    ports:
+      - {name: redis, port: 6379}
+    command: [sh, -c, "exec redis-server --save '' --appendonly no --requirepass \"$REDIS_PASSWORD\""]
+    secretEnv:
+      REDIS_PASSWORD: REDIS_PASSWORD
+      REDISCLI_AUTH: REDIS_PASSWORD
+    readinessProbe:
+      exec:
+        command: [redis-cli, ping]
+      periodSeconds: 5
+
+  elasticsearch:
+    image: elasticsearch:9.2.8
+    fsGroup: 1000
+    ports:
+      - {name: http, port: 9200}
+    env:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - {name: data, mountPath: /usr/share/elasticsearch/data, size: 2Gi}
+    readinessProbe:
+      httpGet:
+        path: /_cluster/health?wait_for_status=yellow&timeout=5s
+        port: http
+      periodSeconds: 10
+      timeoutSeconds: 8
+      failureThreshold: 20
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 1536Mi
+
+  garage:
+    image: dxflrs/garage:v2.3.0
+    ports:
+      - {name: s3, port: 3900}
+      - {name: rpc, port: 3901}
+      - {name: admin, port: 3903}
+    secretEnv:
+      GARAGE_RPC_SECRET: GARAGE_RPC_SECRET
+      GARAGE_ADMIN_TOKEN: GARAGE_ADMIN_TOKEN
+    configMounts:
+      - {name: garage-config, mountPath: /etc/garage.toml, subPath: garage.toml, configMap: garage-files}
+    volumes:
+      - {name: meta, mountPath: /var/lib/garage/meta, size: 256Mi}
+      - {name: data, mountPath: /var/lib/garage/data, size: 2Gi}
+    readinessProbe:
+      tcpSocket:
+        port: admin
+      periodSeconds: 5
+
+  mailpit:
+    image: axllent/mailpit:v1.29.7
+    ports:
+      - {name: smtp, port: 1025}
+      - {name: http, port: 8025}
+    env:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_DISABLE_RDNS: "true"
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: http
+      periodSeconds: 5
+
+garage:
+  initImage: curlimages/curl:8.14.1
+  configMap: garage-files
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""
+  annotations: {}
+  gateway:
+    service: apigateway
+    port: 3335
+    paths: [/api, /ws]
+  frontend:
+    service: frontend
+    port: 80
+
+networkPolicy:
+  enabled: true
+  restricted:
+    - service: restaurantservice
+      port: 9331
+      from: [orderservice]
