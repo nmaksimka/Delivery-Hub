@@ -9,6 +9,8 @@
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 
+[![CI](https://github.com/nmaksimka/Delivery-Hub/actions/workflows/ci.yml/badge.svg)](https://github.com/nmaksimka/Delivery-Hub/actions/workflows/ci.yml)
+
 **Сервис доставки еды по Томску на микросервисах и событиях**
 
 [Возможности](#возможности) · [Архитектура](#архитектура) · [Запуск](#быстрый-старт) · [Технологии](#технологии)
