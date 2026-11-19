@@ -2,7 +2,7 @@
 
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 
-## [2.0.0]
+## [2.0.0] - 2026-11-20
 
 ### Добавлено
 - Контрактные тесты Spring Cloud Contract: контракты кабинета владельца в restaurantService и consumer-тест проверки владельца ресторана в orderService на стабах.
